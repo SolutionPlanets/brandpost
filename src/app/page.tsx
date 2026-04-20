@@ -11,6 +11,7 @@ export default function Home() {
           <span>BrandPost AI</span>
         </div>
         <div className={styles.navLinks}>
+          <Link href="/dashboard">Dashboard</Link>
           <Link href="/login">Login</Link>
           <Link href="/onboarding" className={styles.cta}>Get Started Free</Link>
         </div>

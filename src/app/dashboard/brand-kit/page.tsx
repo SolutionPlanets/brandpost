@@ -1,4 +1,4 @@
-import BrandKitForm from '@/components/BrandKitForm';
+import OnboardingWizard from '@/components/OnboardingWizard';
 
 export const metadata = {
   title: 'Brand Kit | BrandPost AI',
@@ -6,8 +6,6 @@ export const metadata = {
 
 export default function BrandKitPage() {
   return (
-    <div>
-      <BrandKitForm />
-    </div>
+    <OnboardingWizard />
   );
 }

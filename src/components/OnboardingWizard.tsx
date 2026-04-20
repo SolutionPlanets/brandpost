@@ -7,16 +7,18 @@ import {
   Palette, 
   MessageSquare, 
   Share2, 
-  FacebookIcon, 
-  InstagramIcon,
   ArrowRight,
   ArrowLeft,
   Check,
   X,
   Layout,
-  Instagram,
-  Facebook
+  Clock,
+  Sparkles,
+  Plus,
+  Wand2,
+  Calendar
 } from 'lucide-react';
+import { getPalette } from 'colorthief';
 import styles from './OnboardingWizard.module.css';
 
 const steps = [
@@ -26,12 +28,15 @@ const steps = [
   { title: 'Brand Voice', icon: MessageSquare },
   { title: 'Connect', icon: Share2 },
   { title: 'Select Post', icon: Layout },
+  { title: 'Schedule', icon: Clock },
 ];
 
 export default function OnboardingWizard() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dateTimePickerRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState({
     businessName: '',
@@ -45,8 +50,75 @@ export default function OnboardingWizard() {
     fontSize: '16px',
     selectedPost: 1,
     selectedPlatforms: [] as string[],
-    platforms: []
+    platforms: [],
+    scheduledTime: '',
   });
+
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  const formatDateTime = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const yy = String(date.getFullYear()).slice(-2);
+    
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    const hStr = String(hours).padStart(2, '0');
+
+    return `${dd}/${mm}/${yy} ${hStr}:${minutes} ${ampm}`;
+  };
+
+  const handleFinish = () => {
+    localStorage.setItem('brandpost_user_data', JSON.stringify(formData));
+    window.location.href = '/dashboard';
+  };
+
+  const analyzeLogoColors = async () => {
+    if (!formData.logo) {
+      alert('Please upload a logo first in the previous step!');
+      setCurrentStep(2);
+      return;
+    }
+
+    setIsAnalyzing(true);
+    
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.src = formData.logo;
+    
+    img.onload = async () => {
+      try {
+        const palette = await getPalette(img, { colorCount: 5 });
+        
+        if (palette && palette.length >= 2) {
+          const primaryHex = palette[0].hex();
+          const secondaryHex = palette[1].hex();
+          
+          setFormData(prev => ({
+            ...prev,
+            colors: {
+              primary: primaryHex,
+              secondary: secondaryHex,
+            }
+          }));
+        }
+      } catch (error) {
+        console.error('Error extracting colors:', error);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    };
+
+    img.onerror = () => {
+      console.error('Failed to load image for color analysis');
+      setIsAnalyzing(false);
+    };
+  };
 
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, steps.length));
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
@@ -176,19 +248,57 @@ export default function OnboardingWizard() {
           <div className={styles.stepContent}>
             <h2>Choose your colors</h2>
             <p>Select colors that represent your brand.</p>
+            
+            <button 
+              className={`${styles.aiColorBtn} ${isAnalyzing ? styles.analyzing : ''}`}
+              onClick={analyzeLogoColors}
+              disabled={isAnalyzing}
+            >
+              {isAnalyzing ? (
+                <>Analyzing logo...</>
+              ) : (
+                <>
+                  <Wand2 size={18} />
+                  Auto-detect from Logo
+                </>
+              )}
+            </button>
+
             <div className={styles.colorSelection}>
               <div className={styles.colorPicker}>
                 <label>Primary</label>
                 <div className={styles.colorInput}>
-                  <input type="color" value={formData.colors.primary} onChange={(e) => setFormData({...formData, colors: {...formData.colors, primary: e.target.value}})} />
-                  <span>{formData.colors.primary}</span>
+                  <input 
+                    type="text" 
+                    value={formData.colors.primary} 
+                    onChange={(e) => setFormData({...formData, colors: {...formData.colors, primary: e.target.value}})}
+                    className={styles.hexText}
+                  />
+                  <div className={styles.pickerWrapper}>
+                    <input 
+                      type="color" 
+                      value={formData.colors.primary} 
+                      onChange={(e) => setFormData({...formData, colors: {...formData.colors, primary: e.target.value}})} 
+                    />
+                  </div>
                 </div>
               </div>
               <div className={styles.colorPicker}>
                 <label>Secondary</label>
                 <div className={styles.colorInput}>
-                  <input type="color" value={formData.colors.secondary} onChange={(e) => setFormData({...formData, colors: {...formData.colors, secondary: e.target.value}})} />
-                  <span>{formData.colors.secondary}</span>
+                  <input 
+                    type="text" 
+                    value={formData.colors.secondary} 
+                    onChange={(e) => setFormData({...formData, colors: {...formData.colors, secondary: e.target.value}})}
+                    className={styles.hexText}
+                  />
+                  <div className={styles.pickerWrapper}>
+                    <input 
+                      type="color" 
+                      value={formData.colors.secondary} 
+                      onChange={(e) => setFormData({...formData, colors: {...formData.colors, secondary: e.target.value}})} 
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -240,7 +350,7 @@ export default function OnboardingWizard() {
             <div className={styles.socialGrid}>
               <div className={styles.socialCard}>
                 <div className={styles.socialInfo}>
-                  <FacebookIcon className={styles.facebookIcon} />
+                  <MessageSquare className={styles.facebookIcon} />
                   <div>
                     <h3>Facebook</h3>
                     <p>Connect pages</p>
@@ -250,7 +360,7 @@ export default function OnboardingWizard() {
               </div>
               <div className={styles.socialCard}>
                 <div className={styles.socialInfo}>
-                  <InstagramIcon className={styles.instagramIcon} />
+                  <Share2 className={styles.instagramIcon} />
                   <div>
                     <h3>Instagram</h3>
                     <p>Business account</p>
@@ -267,24 +377,41 @@ export default function OnboardingWizard() {
             <h2>Identify your best post</h2>
             <p>We've generated two options based on your brand. Select one to post.</p>
             
-            <div className={styles.postSelectionGrid}>
-              <div 
-                className={`${styles.postCard} ${formData.selectedPost === 1 ? styles.activePost : ''}`}
-                onClick={() => setFormData({ ...formData, selectedPost: 1 })}
-              >
-                <img src="/post1.png" alt="Generated Post 1" />
-                <div className={styles.postOverlay}>
-                  <div className={styles.radioCircle}></div>
+            <div className={styles.postSelectionContainer}>
+              <div className={styles.postOptionsList}>
+                <div 
+                  className={`${styles.postOptCard} ${formData.selectedPost === 1 ? styles.activePost : ''}`}
+                  onClick={() => setFormData({ ...formData, selectedPost: 1 })}
+                >
+                  <img src="/post1.png" alt="Option 1" />
+                  <div className={styles.optOverlay}>
+                    <div className={styles.radioCheck}>
+                      {formData.selectedPost === 1 && <Check size={14} />}
+                    </div>
+                  </div>
+                </div>
+                <div 
+                  className={`${styles.postOptCard} ${formData.selectedPost === 2 ? styles.activePost : ''}`}
+                  onClick={() => setFormData({ ...formData, selectedPost: 2 })}
+                >
+                  <img src="/post2.png" alt="Option 2" />
+                  <div className={styles.optOverlay}>
+                    <div className={styles.radioCheck}>
+                      {formData.selectedPost === 2 && <Check size={14} />}
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div 
-                className={`${styles.postCard} ${formData.selectedPost === 2 ? styles.activePost : ''}`}
-                onClick={() => setFormData({ ...formData, selectedPost: 2 })}
-              >
-                <img src="/post2.png" alt="Generated Post 2" />
-                <div className={styles.postOverlay}>
-                  <div className={styles.radioCircle}></div>
+              
+              <div className={styles.largePreviewPanel}>
+                <div className={styles.previewHeader}>
+                  <Sparkles size={16} /> Selected Preview
                 </div>
+                <img 
+                  src={formData.selectedPost === 1 ? "/post1.png" : "/post2.png"} 
+                  alt="Selected Full Preview" 
+                  className={styles.fullPostImage}
+                />
               </div>
             </div>
 
@@ -295,14 +422,74 @@ export default function OnboardingWizard() {
                   className={`${styles.platformChip} ${formData.selectedPlatforms.includes('instagram') ? styles.activeChip : ''}`}
                   onClick={() => togglePlatform('instagram')}
                 >
-                  <Instagram size={18} /> Instagram
+                  <Share2 size={18} /> Instagram
                 </button>
                 <button 
                   className={`${styles.platformChip} ${formData.selectedPlatforms.includes('facebook') ? styles.activeChip : ''}`}
                   onClick={() => togglePlatform('facebook')}
                 >
-                  <Facebook size={18} /> Facebook
+                  <MessageSquare size={18} /> Facebook
                 </button>
+              </div>
+            </div>
+          </div>
+        );
+      case 7:
+        return (
+          <div className={`${styles.stepContent} ${styles.successStep}`}>
+            <div className={styles.successIconWrapper}>
+              <div className={styles.sparkleBg}>
+                <Sparkles className={styles.sparkleIcon} />
+              </div>
+              <div className={styles.checkCircle}>
+                <Check size={40} />
+              </div>
+            </div>
+            
+            <h2 className={styles.successTitle}>Successfully image generated!</h2>
+            <p className={styles.successDesc}>Your post is ready to be shared. You can post it now or schedule it for later.</p>
+
+            <div className={styles.selectedImagePreview}>
+              <div className={styles.previewCard}>
+                <img src={formData.selectedPost === 1 ? "/post1.png" : "/post2.png"} alt="Selected Post" />
+              </div>
+            </div>
+
+            <div className={styles.schedulingBox}>
+              <div className={styles.scheduleHeader}>
+                <Clock size={20} />
+                <h3>Schedule Post (Optional)</h3>
+              </div>
+              <p>Choose a specific time to auto-post to your selected platforms.</p>
+              
+              <div className={styles.timePickerContainer}>
+                <div 
+                  className={styles.timeInputWrapper} 
+                  onClick={() => {
+                    try {
+                      if (dateTimePickerRef.current) {
+                        (dateTimePickerRef.current as any).showPicker();
+                      }
+                    } catch (e) {
+                      dateTimePickerRef.current?.click();
+                    }
+                  }}
+                >
+                  <div className={styles.formattedDateDisplay}>
+                    {formData.scheduledTime ? formatDateTime(formData.scheduledTime) : 'Select date and time'}
+                  </div>
+                  <input 
+                    type="datetime-local" 
+                    ref={dateTimePickerRef}
+                    className={styles.hiddenTimeInput}
+                    value={formData.scheduledTime}
+                    onChange={(e) => setFormData({...formData, scheduledTime: e.target.value})}
+                  />
+                  <Calendar size={18} className={styles.calendarIcon} />
+                </div>
+                <div className={styles.helperText}>
+                  {formData.scheduledTime ? `Will be posted on ${formatDateTime(formData.scheduledTime)}` : 'Leave empty to post immediately'}
+                </div>
               </div>
             </div>
           </div>
@@ -329,6 +516,17 @@ export default function OnboardingWizard() {
       <div className={styles.mainCard}>
         {renderStep()}
 
+        {zoomedImage && (
+          <div className={styles.modalOverlay} onClick={() => setZoomedImage(null)}>
+            <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+              <button className={styles.closeModal} onClick={() => setZoomedImage(null)}>
+                <X size={24} />
+              </button>
+              <img src={zoomedImage} alt="Fullscreen Preview" className={styles.fullImage} />
+            </div>
+          </div>
+        )}
+
         <div className={styles.footer}>
           <button 
             className={styles.backBtn} 
@@ -339,9 +537,9 @@ export default function OnboardingWizard() {
           </button>
           <button 
             className={styles.nextBtn} 
-            onClick={currentStep === steps.length ? () => window.location.href='/dashboard' : nextStep}
+            onClick={currentStep === steps.length ? handleFinish : nextStep}
           >
-            {currentStep === steps.length ? 'Get Started' : 'Next'} <ArrowRight size={18} />
+            {currentStep === 6 ? 'Next' : (currentStep === steps.length ? 'Finish' : 'Next')} <ArrowRight size={18} />
           </button>
         </div>
       </div>
