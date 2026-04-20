@@ -20,8 +20,7 @@ import {
   Flame,
   Leaf,
   ChevronRight,
-  Facebook,
-  Instagram,
+  Share2,
   ExternalLink,
 } from 'lucide-react';
 import styles from './DashboardHome.module.css';
@@ -61,6 +60,7 @@ const FESTIVE_EVENTS = [
   { id: 31, name: 'New Year Eve', date: '2026-12-31', icon: PartyPopper, color: '#6366f1' },
   { id: 32, name: 'Pongal', date: '2026-01-15', icon: Sun, color: '#f59e0b' },
   { id: 33, name: 'World Environment Day', date: '2026-06-05', icon: Leaf, color: '#16a34a' },
+  { id: 34, name: 'Mahavir JanmaKalyanak', date: '2026-03-31', icon: Sun, color: '#f59e0b' },
 ];
 
 // ── Mock recent posts ────────────────────────────────────────────────
@@ -250,8 +250,8 @@ export default function DashboardHome() {
                     <span className={styles.postTitle}>{post.title}</span>
                   </div>
                   <div className={styles.platformCell}>
-                    {(post.platform === 'facebook' || post.platform === 'both') && <Facebook size={16} className={styles.fbIcon} />}
-                    {(post.platform === 'instagram' || post.platform === 'both') && <Instagram size={16} className={styles.igIcon} />}
+                    {(post.platform === 'facebook' || post.platform === 'both') && <MessageSquare size={16} className={styles.fbIcon} />}
+                    {(post.platform === 'instagram' || post.platform === 'both') && <Share2 size={16} className={styles.igIcon} />}
                   </div>
                   <div>
                     <span className={`${styles.statusBadge} ${getStatusStyle(post.status)}`}>

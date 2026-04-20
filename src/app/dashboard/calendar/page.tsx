@@ -56,6 +56,7 @@ const FESTIVE_EVENTS = [
   { id: 33, name: 'Thanksgiving', date: '2026-11-26', icon: Leaf, color: '#f97316', category: 'global' },
   { id: 34, name: 'Christmas', date: '2026-12-25', icon: Gift, color: '#ef4444', category: 'global' },
   { id: 35, name: 'New Year Eve', date: '2026-12-31', icon: PartyPopper, color: '#6366f1', category: 'global' },
+  { id: 36, name: 'Mahavir JanmaKalyanak', date: '2026-03-31', icon: Sun, color: '#f59e0b', category: 'indian' },
 ];
 
 const MONTHS = [

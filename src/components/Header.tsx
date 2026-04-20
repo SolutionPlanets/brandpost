@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Bell, Search, User, MapPin, Mail, Hash, MessageSquare, Share2, ChevronDown } from 'lucide-react';
+import { createClient } from '@/utils/supabase/client';
 import styles from './Header.module.css';
 
 export default function Header() {
   const [userData, setUserData] = useState<any>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  const supabase = createClient();
 
   useEffect(() => {
     const savedData = localStorage.getItem('brandpost_user_data');
@@ -12,6 +14,18 @@ export default function Header() {
       setUserData(JSON.parse(savedData));
     }
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      localStorage.removeItem('brandpost_user_data');
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error during logout:', error);
+      // Fallback redirect even if signOut fails
+      window.location.href = '/';
+    }
+  };
 
   return (
     <header className={styles.header}>
@@ -77,7 +91,7 @@ export default function Header() {
               </div>
               
               <div className={styles.dropdownFooter}>
-                <button className={styles.logoutBtn}>Logout</button>
+                <button className={styles.logoutBtn} onClick={handleLogout}>Logout</button>
               </div>
             </div>
           )}

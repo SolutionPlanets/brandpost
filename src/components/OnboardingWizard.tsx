@@ -11,14 +11,10 @@ import {
   ArrowLeft,
   Check,
   X,
-  Layout,
-  Clock,
-  Sparkles,
-  Plus,
-  Wand2,
-  Calendar
+  Wand2
 } from 'lucide-react';
 import { getPalette } from 'colorthief';
+import { createClient } from '@/utils/supabase/client';
 import styles from './OnboardingWizard.module.css';
 
 const steps = [
@@ -27,8 +23,6 @@ const steps = [
   { title: 'Colors', icon: Palette },
   { title: 'Brand Voice', icon: MessageSquare },
   { title: 'Connect', icon: Share2 },
-  { title: 'Select Post', icon: Layout },
-  { title: 'Schedule', icon: Clock },
 ];
 
 export default function OnboardingWizard() {
@@ -36,7 +30,6 @@ export default function OnboardingWizard() {
   const [isDragging, setIsDragging] = useState(false);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const dateTimePickerRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState({
     businessName: '',
@@ -55,27 +48,112 @@ export default function OnboardingWizard() {
   });
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const supabase = createClient();
   
-  const formatDateTime = (dateStr: string) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    const dd = String(date.getDate()).padStart(2, '0');
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const yy = String(date.getFullYear()).slice(-2);
-    
-    let hours = date.getHours();
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12; // the hour '0' should be '12'
-    const hStr = String(hours).padStart(2, '0');
+  const handleFinish = async () => {
+    setIsSaving(true);
+    console.log('Starting save process...', formData);
+    try {
+      // 1. Get current user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError) {
+        console.error('Auth Error:', authError);
+      }
 
-    return `${dd}/${mm}/${yy} ${hStr}:${minutes} ${ampm}`;
-  };
+      if (!user) {
+        console.warn('No active user session found.');
+        alert('You are not logged in! Data will only be saved locally in your browser. Please login to save to the database.');
+        localStorage.setItem('brandpost_user_data', JSON.stringify(formData));
+        window.location.href = '/dashboard';
+        return;
+      }
 
-  const handleFinish = () => {
-    localStorage.setItem('brandpost_user_data', JSON.stringify(formData));
-    window.location.href = '/dashboard';
+      console.log('User authenticated:', user.id);
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', user.id)
+        .single();
+
+      if (userError && userError.code !== 'PGRST116') throw userError;
+
+      if (!userData) {
+        const { error: insertUserError } = await supabase.from('users').insert({
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || '',
+          plan_id: 'solo'
+        });
+        
+        if (insertUserError) {
+          console.error('User Insert Error:', insertUserError);
+          throw new Error(`User Creation Error: ${insertUserError.message}`);
+        }
+      }
+
+      // 3. Get or create Workspace
+      let { data: workspace, error: wsError } = await supabase
+        .from('workspaces')
+        .select('id')
+        .eq('owner_id', user.id)
+        .single();
+
+      if (wsError && wsError.code !== 'PGRST116') throw wsError;
+
+      if (!workspace) {
+        const { data: newWs, error: newWsError } = await supabase
+          .from('workspaces')
+          .insert({
+            owner_id: user.id,
+            name: `${formData.businessName || 'My Business'}'s Workspace`,
+            plan_id: 'solo'
+          })
+          .select()
+          .single();
+        
+        if (newWsError) throw newWsError;
+        workspace = newWs;
+      }
+
+      // 4. Create Brand Kit
+      const { error: bkError } = await supabase
+        .from('brand_kits')
+        .insert({
+          workspace_id: workspace.id,
+          name: formData.businessName || 'Main Brand',
+          primary_color: formData.colors.primary,
+          secondary_color: formData.colors.secondary,
+          tone: formData.tone.toLowerCase(),
+          brand_description: formData.description,
+          logo_url: formData.logo
+        });
+
+      if (bkError) {
+        console.error('Brand Kit Error:', bkError);
+        throw new Error(`Brand Kit Error: ${bkError.message}`);
+      }
+
+      console.log('Database save successful!');
+      alert('Data successfully saved to the database!');
+
+      // 5. Cleanup and redirect
+      // Exclude heavy logo base64 from localStorage to prevent QuotaExceededError
+      const { logo, ...dataToSave } = formData;
+      try {
+        localStorage.setItem('brandpost_user_data', JSON.stringify(dataToSave));
+      } catch (e) {
+        console.warn('Failed to save to localStorage (quota exceeded)', e);
+      }
+      
+      window.location.href = '/dashboard';
+    } catch (error: any) {
+      console.error('Error saving to database:', error);
+      alert(`Error: ${error.message || 'Something went wrong while saving'}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const analyzeLogoColors = async () => {
@@ -371,129 +449,6 @@ export default function OnboardingWizard() {
             </div>
           </div>
         );
-      case 6:
-        return (
-          <div className={styles.stepContent}>
-            <h2>Identify your best post</h2>
-            <p>We've generated two options based on your brand. Select one to post.</p>
-            
-            <div className={styles.postSelectionContainer}>
-              <div className={styles.postOptionsList}>
-                <div 
-                  className={`${styles.postOptCard} ${formData.selectedPost === 1 ? styles.activePost : ''}`}
-                  onClick={() => setFormData({ ...formData, selectedPost: 1 })}
-                >
-                  <img src="/post1.png" alt="Option 1" />
-                  <div className={styles.optOverlay}>
-                    <div className={styles.radioCheck}>
-                      {formData.selectedPost === 1 && <Check size={14} />}
-                    </div>
-                  </div>
-                </div>
-                <div 
-                  className={`${styles.postOptCard} ${formData.selectedPost === 2 ? styles.activePost : ''}`}
-                  onClick={() => setFormData({ ...formData, selectedPost: 2 })}
-                >
-                  <img src="/post2.png" alt="Option 2" />
-                  <div className={styles.optOverlay}>
-                    <div className={styles.radioCheck}>
-                      {formData.selectedPost === 2 && <Check size={14} />}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className={styles.largePreviewPanel}>
-                <div className={styles.previewHeader}>
-                  <Sparkles size={16} /> Selected Preview
-                </div>
-                <img 
-                  src={formData.selectedPost === 1 ? "/post1.png" : "/post2.png"} 
-                  alt="Selected Full Preview" 
-                  className={styles.fullPostImage}
-                />
-              </div>
-            </div>
-
-            <div className={styles.platformSelection}>
-              <h3>Post to:</h3>
-              <div className={styles.platformChips}>
-                <button 
-                  className={`${styles.platformChip} ${formData.selectedPlatforms.includes('instagram') ? styles.activeChip : ''}`}
-                  onClick={() => togglePlatform('instagram')}
-                >
-                  <Share2 size={18} /> Instagram
-                </button>
-                <button 
-                  className={`${styles.platformChip} ${formData.selectedPlatforms.includes('facebook') ? styles.activeChip : ''}`}
-                  onClick={() => togglePlatform('facebook')}
-                >
-                  <MessageSquare size={18} /> Facebook
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      case 7:
-        return (
-          <div className={`${styles.stepContent} ${styles.successStep}`}>
-            <div className={styles.successIconWrapper}>
-              <div className={styles.sparkleBg}>
-                <Sparkles className={styles.sparkleIcon} />
-              </div>
-              <div className={styles.checkCircle}>
-                <Check size={40} />
-              </div>
-            </div>
-            
-            <h2 className={styles.successTitle}>Successfully image generated!</h2>
-            <p className={styles.successDesc}>Your post is ready to be shared. You can post it now or schedule it for later.</p>
-
-            <div className={styles.selectedImagePreview}>
-              <div className={styles.previewCard}>
-                <img src={formData.selectedPost === 1 ? "/post1.png" : "/post2.png"} alt="Selected Post" />
-              </div>
-            </div>
-
-            <div className={styles.schedulingBox}>
-              <div className={styles.scheduleHeader}>
-                <Clock size={20} />
-                <h3>Schedule Post (Optional)</h3>
-              </div>
-              <p>Choose a specific time to auto-post to your selected platforms.</p>
-              
-              <div className={styles.timePickerContainer}>
-                <div 
-                  className={styles.timeInputWrapper} 
-                  onClick={() => {
-                    try {
-                      if (dateTimePickerRef.current) {
-                        (dateTimePickerRef.current as any).showPicker();
-                      }
-                    } catch (e) {
-                      dateTimePickerRef.current?.click();
-                    }
-                  }}
-                >
-                  <div className={styles.formattedDateDisplay}>
-                    {formData.scheduledTime ? formatDateTime(formData.scheduledTime) : 'Select date and time'}
-                  </div>
-                  <input 
-                    type="datetime-local" 
-                    ref={dateTimePickerRef}
-                    className={styles.hiddenTimeInput}
-                    value={formData.scheduledTime}
-                    onChange={(e) => setFormData({...formData, scheduledTime: e.target.value})}
-                  />
-                  <Calendar size={18} className={styles.calendarIcon} />
-                </div>
-                <div className={styles.helperText}>
-                  {formData.scheduledTime ? `Will be posted on ${formatDateTime(formData.scheduledTime)}` : 'Leave empty to post immediately'}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
       default:
         return null;
     }
@@ -538,8 +493,9 @@ export default function OnboardingWizard() {
           <button 
             className={styles.nextBtn} 
             onClick={currentStep === steps.length ? handleFinish : nextStep}
+            disabled={isSaving}
           >
-            {currentStep === 6 ? 'Next' : (currentStep === steps.length ? 'Finish' : 'Next')} <ArrowRight size={18} />
+            {isSaving ? 'Saving...' : (currentStep === steps.length ? 'Finish & Go to Dashboard' : 'Next')} <ArrowRight size={18} />
           </button>
         </div>
       </div>

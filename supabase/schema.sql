@@ -95,15 +95,97 @@ CREATE TRIGGER update_posts_updated_at BEFORE UPDATE ON posts FOR EACH ROW EXECU
 
 -- 3. ROW LEVEL SECURITY (RLS)
 -- As per Security Requirements (Source 275)
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
-ALTER TABLE brand_kits ENABLE ROW LEVEL SECURITY;
-ALTER TABLE social_connections ENABLE ROW LEVEL SECURITY;
-ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workspaces ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.brand_kits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.social_connections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
 
--- EXAMPLE POLICY (Workspaces): Users can only see workspaces they own
-CREATE POLICY "Users can view their own workspaces" ON workspaces
+-- Users Policies: Users can only manage their own profile
+CREATE POLICY "Users can view their own profile" ON public.users
+    FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Users can insert their own profile" ON public.users
+    FOR INSERT WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Users can update their own profile" ON public.users
+    FOR UPDATE USING (auth.uid() = id);
+
+-- Workspaces Policies: Users can only manage workspaces they own
+CREATE POLICY "Users can view their own workspaces" ON public.workspaces
     FOR SELECT USING (auth.uid() = owner_id);
 
-CREATE POLICY "Users can update their own workspaces" ON workspaces
+CREATE POLICY "Users can insert their own workspaces" ON public.workspaces
+    FOR INSERT WITH CHECK (auth.uid() = owner_id);
+
+CREATE POLICY "Users can update their own workspaces" ON public.workspaces
     FOR UPDATE USING (auth.uid() = owner_id);
+
+CREATE POLICY "Users can delete their own workspaces" ON public.workspaces
+    FOR DELETE USING (auth.uid() = owner_id);
+
+-- Brand Kits Policies: Users can manage brand kits via workspace ownership
+CREATE POLICY "Users can view brand kits in their workspaces" ON public.brand_kits
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.workspaces
+            WHERE workspaces.id = brand_kits.workspace_id
+            AND workspaces.owner_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can insert brand kits in their workspaces" ON public.brand_kits
+    FOR INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.workspaces
+            WHERE workspaces.id = brand_kits.workspace_id
+            AND workspaces.owner_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update brand kits in their workspaces" ON public.brand_kits
+    FOR UPDATE USING (
+        EXISTS (
+            SELECT 1 FROM public.workspaces
+            WHERE workspaces.id = brand_kits.workspace_id
+            AND workspaces.owner_id = auth.uid()
+        )
+    );
+
+-- Social Connections Policies
+CREATE POLICY "Users can view their social connections" ON public.social_connections
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.workspaces
+            WHERE workspaces.id = social_connections.workspace_id
+            AND workspaces.owner_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can manage their social connections" ON public.social_connections
+    FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM public.workspaces
+            WHERE workspaces.id = social_connections.workspace_id
+            AND workspaces.owner_id = auth.uid()
+        )
+    );
+
+-- Posts Policies
+CREATE POLICY "Users can view their own posts" ON public.posts
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.workspaces
+            WHERE workspaces.id = posts.workspace_id
+            AND workspaces.owner_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can manage their own posts" ON public.posts
+    FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM public.workspaces
+            WHERE workspaces.id = posts.workspace_id
+            AND workspaces.owner_id = auth.uid()
+        )
+    );
