@@ -3,8 +3,9 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, 
   Palette, 
-  FileText, 
-  Calendar, 
+  PenSquare,
+  Clock,
+  CalendarDays, 
   Settings, 
   LogOut,
   ChevronLeft,
@@ -19,9 +20,10 @@ interface SidebarProps {
 
 const menuItems = [
   { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
+  { name: 'Composer', icon: PenSquare, href: '/dashboard/composer' },
   { name: 'Brand Kit', icon: Palette, href: '/dashboard/brand-kit' },
-  { name: 'Posts', icon: FileText, href: '/dashboard/posts' },
-  { name: 'Calendar', icon: Calendar, href: '/dashboard/calendar' },
+  { name: 'Calendar', icon: CalendarDays, href: '/dashboard/calendar' },
+  { name: 'History', icon: Clock, href: '/dashboard/posts' },
   { name: 'Settings', icon: Settings, href: '/dashboard/settings' },
 ];
 

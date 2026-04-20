@@ -1,0 +1,856 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-height: calc(100vh - var(--header-height) - 4rem);
+}
+
+/* ── Header ──────────────────────────────────────────── */
+.composerHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.composerHeader h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.backLink:hover {
+  color: var(--primary);
+}
+
+/* ── Stepper ─────────────────────────────────────────── */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 1.25rem 1.5rem;
+  background-color: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+.stepperItem {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.stepCircle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  background-color: var(--background);
+  color: var(--text-muted);
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.stepActive {
+  background-color: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.15);
+}
+
+.stepDone {
+  background-color: #10b981;
+  color: white;
+  border-color: #10b981;
+}
+
+.stepLabel {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.stepLabelActive {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.stepLine {
+  width: 60px;
+  height: 2px;
+  background-color: var(--border);
+  margin: 0 0.75rem;
+  flex-shrink: 0;
+}
+
+.stepLineDone {
+  background-color: #10b981;
+}
+
+/* ── Composer Body ───────────────────────────────────── */
+.composerBody {
+  background-color: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  padding: 2rem;
+  flex: 1;
+}
+
+.stepContent {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.stepTitle {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.375rem;
+}
+
+.stepDesc {
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  margin-bottom: 2rem;
+}
+
+/* ── Step 1: Content Type Grid ───────────────────────── */
+.typeGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+}
+
+.typeCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2rem 1.25rem;
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--border);
+  background-color: var(--surface);
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+
+.typeCard:hover {
+  border-color: var(--type-color);
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.08);
+  transform: translateY(-4px);
+}
+
+.typeCardActive {
+  border-color: var(--type-color);
+  background-color: color-mix(in srgb, var(--type-color) 5%, white);
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.typeIconWrap {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  background-color: color-mix(in srgb, var(--type-color) 10%, white);
+  color: var(--type-color);
+}
+
+.typeCard h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.375rem;
+}
+
+.typeCard p {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.typeCheck {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--type-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Step 2: Form ────────────────────────────────────── */
+.formGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 720px;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 1.5rem;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.formGroup label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.required {
+  color: var(--error);
+}
+
+.formGroup input,
+.formGroup select,
+.formGroup textarea {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  background-color: var(--background);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.formGroup input:focus,
+.formGroup select:focus,
+.formGroup textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.formGroup textarea {
+  resize: vertical;
+}
+
+.charCount {
+  position: absolute;
+  right: 0;
+  top: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.platformSelector {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.platformBtn {
+  flex: 1;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  color: var(--text-muted);
+  background-color: var(--surface);
+  transition: all 0.2s ease;
+}
+
+.platformBtn:hover {
+  border-color: var(--primary);
+}
+
+.platformBtnActive {
+  border-color: var(--primary);
+  background-color: var(--primary-light);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* ── Step 3: Generating ──────────────────────────────── */
+.generatingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+.generatingAnimation {
+  margin-bottom: 2rem;
+}
+
+.generatingRing {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary-light), #ede9fe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.3); }
+  50% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(79, 70, 229, 0); }
+}
+
+.generatingIcon {
+  color: var(--primary);
+  animation: sparkle 1.5s ease-in-out infinite;
+}
+
+@keyframes sparkle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(10deg); }
+  75% { transform: rotate(-10deg); }
+}
+
+.generatingTitle {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}
+
+.generatingDesc {
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  margin-bottom: 2.5rem;
+  max-width: 450px;
+}
+
+.generatingSteps {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  text-align: left;
+}
+
+.genStep {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.genStepActive {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── Step 4: Preview Layout ──────────────────────────── */
+.previewLayout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.previewImageSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.previewImageFrame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background-color: var(--background);
+}
+
+.placeholderImage {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--text-muted);
+  background: linear-gradient(135deg, #eef2ff 0%, #f0fdf4 50%, #fef3c7 100%);
+}
+
+.placeholderImage span {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.imageSize {
+  font-size: 0.75rem !important;
+  color: var(--text-muted) !important;
+  opacity: 0.7;
+}
+
+.logoOverlay {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  opacity: 0.2;
+}
+
+.overlayLogo {
+  width: 48px;
+  height: 48px;
+  background-color: var(--primary);
+  color: white;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.5rem;
+}
+
+.imageOptions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.optionLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-right: 0.25rem;
+}
+
+.imageOptionBtn {
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  background-color: var(--surface);
+  color: var(--text);
+  transition: all 0.2s;
+}
+
+.imageOptionBtn:hover {
+  border-color: var(--primary);
+}
+
+.imageOptionActive {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  color: white;
+}
+
+.logoToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+
+.logoToggle:hover {
+  color: var(--primary);
+}
+
+.previewCaptionSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.captionVariants {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.variantTabs {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.variantTab {
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  background-color: var(--surface);
+  color: var(--text);
+  transition: all 0.2s;
+}
+
+.variantTab:hover {
+  border-color: var(--primary);
+}
+
+.variantTabActive {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  color: white;
+}
+
+.captionEditor {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.editorHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  background-color: var(--background);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.captionTextarea {
+  width: 100%;
+  padding: 1rem;
+  border: none;
+  outline: none;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  resize: vertical;
+  font-family: inherit;
+  color: var(--text);
+  background-color: var(--surface);
+}
+
+.previewMeta {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1rem;
+  background-color: var(--background);
+  border-radius: var(--radius);
+}
+
+.metaItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.metaLabel {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metaValue {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* ── Footer ──────────────────────────────────────────── */
+.composerFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  background-color: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+.footerRight {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.625rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text);
+  background-color: var(--surface);
+  transition: all 0.2s;
+}
+
+.backBtn:hover {
+  background-color: var(--background);
+}
+
+.nextBtn,
+.generateBtn,
+.scheduleBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.5rem;
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.nextBtn {
+  background-color: var(--primary);
+}
+
+.nextBtn:hover {
+  background-color: var(--primary-hover);
+}
+
+.nextBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.generateBtn {
+  background: linear-gradient(135deg, var(--primary), #7c3aed);
+  box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);
+}
+
+.generateBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
+}
+
+.generateBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.regenerateBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.625rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background-color: var(--surface);
+  transition: all 0.2s;
+}
+
+.regenerateBtn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.scheduleBtn {
+  background-color: #10b981;
+}
+
+.scheduleBtn:hover {
+  background-color: #059669;
+}
+
+/* ── Schedule Modal ──────────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal {
+  background-color: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: var(--shadow-lg);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.modalTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.25rem;
+}
+
+.modalDesc {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.scheduleModeToggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.modeBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background-color: var(--surface);
+  transition: all 0.2s;
+}
+
+.modeBtnActive {
+  border-color: var(--primary);
+  background-color: var(--primary-light);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.scheduleInputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.modalCancel {
+  padding: 0.625rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  background-color: var(--surface);
+  transition: all 0.2s;
+}
+
+.modalCancel:hover {
+  background-color: var(--background);
+}
+
+.modalConfirm {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: white;
+  background-color: var(--primary);
+  transition: all 0.2s;
+}
+
+.modalConfirm:hover {
+  background-color: var(--primary-hover);
+}
+
+/* ── Responsive ──────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .previewLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .typeGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+
+  .stepper {
+    overflow-x: auto;
+  }
+
+  .stepLine {
+    width: 30px;
+  }
+}
+
+@media (max-width: 480px) {
+  .typeGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .platformSelector {
+    flex-direction: column;
+  }
+}
