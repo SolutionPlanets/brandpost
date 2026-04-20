@@ -105,5 +105,39 @@ ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view their own workspaces" ON workspaces
     FOR SELECT USING (auth.uid() = owner_id);
 
-CREATE POLICY "Users can update their own workspaces" ON workspaces
-    FOR UPDATE USING (auth.uid() = owner_id);
+-- 4. NEW USER REGISTRATION TRIGGER
+-- This function runs whenever a new user signs up via Supabase Auth.
+-- It automatically creates a public user profile and a default workspace.
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+DECLARE
+    new_user_id uuid;
+BEGIN
+    -- 1. Create the public user profile
+    INSERT INTO public.users (id, email, full_name, plan_id, trial_ends_at)
+    VALUES (
+        new.id,
+        new.email,
+        new.raw_user_meta_data->>'full_name',
+        'solo',
+        now() + interval '14 days'
+    )
+    RETURNING id INTO new_user_id;
+
+    -- 2. Create the initial default workspace
+    INSERT INTO public.workspaces (owner_id, name, plan_id)
+    VALUES (
+        new_user_id,
+        'My Workspace',
+        'solo'
+    );
+
+    RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger the function every time a user is created in auth.users
+CREATE OR REPLACE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
