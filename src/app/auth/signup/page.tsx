@@ -23,6 +23,19 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
 
+    // Check if user already exists in our public records
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single();
+
+    if (existingUser) {
+      setError('An account with this email already exists. Please log in.');
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,

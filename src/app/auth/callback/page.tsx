@@ -13,15 +13,34 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      const { error } = await supabase.auth.getSession();
+      const { data: { session }, error } = await supabase.auth.getSession();
       
-      const next = searchParams.get('next') || '/dashboard';
+      const nextParam = searchParams.get('next');
       
-      if (error) {
-        console.error('Auth callback error:', error.message);
+      if (error || !session) {
+        console.error('Auth callback error:', error?.message);
         router.push('/auth/login?error=Authentication failed');
+        return;
+      }
+
+      // Check if user already has a workspace (meaning they finished onboarding)
+      const { data: workspace } = await supabase
+        .from('workspaces')
+        .select('id')
+        .eq('owner_id', session.user.id)
+        .single();
+
+      if (workspace) {
+        // User exists and is set up
+        if (nextParam === '/onboarding') {
+          // They clicked "Sign up" but already have an account
+          router.push('/auth/login?message=existing_user');
+        } else {
+          router.push('/dashboard');
+        }
       } else {
-        router.push(next);
+        // New user or incomplete onboarding
+        router.push('/onboarding');
       }
     };
 

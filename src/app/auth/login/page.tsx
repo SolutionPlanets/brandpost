@@ -17,6 +17,16 @@ export default function LoginPage() {
 
   const supabase = createClient();
 
+  useEffect(() => {
+    const message = searchParams.get('message');
+    const errorParam = searchParams.get('error');
+    if (message === 'existing_user') {
+      setError('Please login with your existing account');
+    } else if (errorParam) {
+      setError(errorParam);
+    }
+  }, [searchParams]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -28,7 +38,11 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setError(error.message);
+      if (error.message.includes('Invalid login credentials')) {
+        setError('This account does not exist or password is incorrect. Please check your email or sign up.');
+      } else {
+        setError(error.message);
+      }
       setLoading(false);
     } else {
       router.push('/dashboard');
