@@ -13,11 +13,13 @@ import {
   ArrowLeft,
   Check,
   X,
-  Layout,
   Instagram,
   Facebook
 } from 'lucide-react';
+import { createClient } from '@/utils/supabase/client';
 import styles from './OnboardingWizard.module.css';
+import { useRouter } from 'next/navigation';
+import { usePalette } from 'color-thief-react';
 
 const steps = [
   { title: 'Business Info', icon: Building2 },
@@ -25,14 +27,15 @@ const steps = [
   { title: 'Colors', icon: Palette },
   { title: 'Brand Voice', icon: MessageSquare },
   { title: 'Connect', icon: Share2 },
-  { title: 'Select Post', icon: Layout },
 ];
 
 export default function OnboardingWizard() {
+  const router = useRouter();
+  const supabase = createClient();
   const [currentStep, setCurrentStep] = useState(1);
+  const [loading, setLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
   const [formData, setFormData] = useState({
     businessName: '',
     address: '',
@@ -45,11 +48,94 @@ export default function OnboardingWizard() {
     fontSize: '16px',
     selectedPost: 1,
     selectedPlatforms: [] as string[],
-    platforms: []
+    platforms: [],
+    instagram: '',
+    facebook: ''
   });
 
-  const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, steps.length));
+  // For color extraction
+  const { data: palette } = usePalette(formData.logo || '', 5, 'hex', {
+    quality: 10,
+  });
+
+  const handleAutoDetect = () => {
+    if (palette && palette.length >= 2) {
+      setFormData({
+        ...formData,
+        colors: {
+          primary: palette[0],
+          secondary: palette[1]
+        }
+      });
+    }
+  };
+
+  const saveWorkspace = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('workspaces')
+      .update({ 
+        name: formData.businessName,
+        address: formData.address,
+        pincode: formData.pincode,
+        business_timing: formData.timing
+      })
+      .eq('owner_id', user.id);
+
+    if (error) console.error('Workspace update error:', error);
+  };
+
+  const saveBrandKit = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Get workspace ID
+    const { data: workspace } = await supabase
+      .from('workspaces')
+      .select('id')
+      .eq('owner_id', user.id)
+      .single();
+
+    if (!workspace) return;
+
+    // UPSERT brand kit
+    const { error } = await supabase
+      .from('brand_kits')
+      .upsert({
+        workspace_id: workspace.id,
+        name: formData.businessName,
+        logo_url: formData.logo,
+        primary_color: formData.colors.primary,
+        secondary_color: formData.colors.secondary,
+        brand_description: formData.description,
+        tone_of_voice: formData.tone,
+        instagram_handle: formData.instagram,
+        facebook_handle: formData.facebook
+      }, { onConflict: 'workspace_id' });
+
+    if (error) console.error('Brand kit upsert error:', error);
+  };
+
+  const nextStep = async () => {
+    setLoading(true);
+    if (currentStep === 1) await saveWorkspace();
+    if (currentStep === 4) await saveBrandKit();
+    
+    if (currentStep < steps.length) {
+      setCurrentStep(prev => prev + 1);
+    } else {
+      router.push('/dashboard');
+    }
+    setLoading(false);
+  };
+
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
+
+  const skipSocials = () => {
+    router.push('/dashboard');
+  };
 
   const togglePlatform = (platform: string) => {
     setFormData(prev => ({
@@ -176,6 +262,19 @@ export default function OnboardingWizard() {
           <div className={styles.stepContent}>
             <h2>Choose your colors</h2>
             <p>Select colors that represent your brand.</p>
+            
+            {formData.logo && (
+              <div className={styles.autoDetectContainer}>
+                <button 
+                  className={styles.autoDetectBtn}
+                  onClick={handleAutoDetect}
+                  type="button"
+                >
+                  <Palette size={18} /> Auto detect from Logo
+                </button>
+              </div>
+            )}
+
             <div className={styles.colorSelection}>
               <div className={styles.colorPicker}>
                 <label>Primary</label>
@@ -259,51 +358,35 @@ export default function OnboardingWizard() {
                 <button className={styles.connectBtn}>Connect</button>
               </div>
             </div>
-          </div>
-        );
-      case 6:
-        return (
-          <div className={styles.stepContent}>
-            <h2>Identify your best post</h2>
-            <p>We've generated two options based on your brand. Select one to post.</p>
-            
-            <div className={styles.postSelectionGrid}>
-              <div 
-                className={`${styles.postCard} ${formData.selectedPost === 1 ? styles.activePost : ''}`}
-                onClick={() => setFormData({ ...formData, selectedPost: 1 })}
-              >
-                <img src="/post1.png" alt="Generated Post 1" />
-                <div className={styles.postOverlay}>
-                  <div className={styles.radioCircle}></div>
+            <div className={styles.socialInputs}>
+              <div className={styles.inputGroup}>
+                <label>Instagram Handle</label>
+                <div className={styles.inputWithIcon}>
+                  <Instagram size={18} />
+                  <input 
+                    type="text" 
+                    placeholder="@yourbrand" 
+                    value={formData.instagram}
+                    onChange={(e) => setFormData({...formData, instagram: e.target.value})}
+                  />
                 </div>
               </div>
-              <div 
-                className={`${styles.postCard} ${formData.selectedPost === 2 ? styles.activePost : ''}`}
-                onClick={() => setFormData({ ...formData, selectedPost: 2 })}
-              >
-                <img src="/post2.png" alt="Generated Post 2" />
-                <div className={styles.postOverlay}>
-                  <div className={styles.radioCircle}></div>
+              <div className={styles.inputGroup}>
+                <label>Facebook Page URL</label>
+                <div className={styles.inputWithIcon}>
+                  <Facebook size={18} />
+                  <input 
+                    type="text" 
+                    placeholder="facebook.com/yourbrand" 
+                    value={formData.facebook}
+                    onChange={(e) => setFormData({...formData, facebook: e.target.value})}
+                  />
                 </div>
               </div>
             </div>
 
-            <div className={styles.platformSelection}>
-              <h3>Post to:</h3>
-              <div className={styles.platformChips}>
-                <button 
-                  className={`${styles.platformChip} ${formData.selectedPlatforms.includes('instagram') ? styles.activeChip : ''}`}
-                  onClick={() => togglePlatform('instagram')}
-                >
-                  <Instagram size={18} /> Instagram
-                </button>
-                <button 
-                  className={`${styles.platformChip} ${formData.selectedPlatforms.includes('facebook') ? styles.activeChip : ''}`}
-                  onClick={() => togglePlatform('facebook')}
-                >
-                  <Facebook size={18} /> Facebook
-                </button>
-              </div>
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <button className={styles.skipBtn} onClick={skipSocials}>Skip for now</button>
             </div>
           </div>
         );
@@ -339,9 +422,10 @@ export default function OnboardingWizard() {
           </button>
           <button 
             className={styles.nextBtn} 
-            onClick={currentStep === steps.length ? () => window.location.href='/dashboard' : nextStep}
+            onClick={nextStep}
+            disabled={loading}
           >
-            {currentStep === steps.length ? 'Get Started' : 'Next'} <ArrowRight size={18} />
+            {loading ? 'Saving...' : (currentStep === steps.length ? 'Get Started' : 'Next')} <ArrowRight size={18} />
           </button>
         </div>
       </div>

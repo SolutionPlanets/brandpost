@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS public.workspaces (
     owner_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     name text NOT NULL,
     plan_id text NOT NULL, -- Mirrors users.plan_id
+    address text,
+    pincode text,
+    business_timing text,
     posts_used_this_cycle integer DEFAULT 0,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now()
@@ -30,7 +33,7 @@ CREATE TABLE IF NOT EXISTS public.workspaces (
 -- Table: brand_kits (Source 53, 54)
 CREATE TABLE IF NOT EXISTS public.brand_kits (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-    workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
+    workspace_id uuid NOT NULL UNIQUE REFERENCES public.workspaces(id) ON DELETE CASCADE,
     name text NOT NULL, -- e.g. 'Main brand'
     logo_url text, -- Supabase Storage URL
     logo_dark_url text,
@@ -39,8 +42,10 @@ CREATE TABLE IF NOT EXISTS public.brand_kits (
     accent_color text, -- HEX
     heading_font text, -- Google Font name
     body_font text, -- Google Font name
-    tone text CHECK (tone IN ('professional', 'friendly', 'playful', 'authoritative')),
+    tone text,
     brand_description text, -- Max 300 chars as per PRD Section 5.1
+    instagram_handle text,
+    facebook_handle text,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now()
 );

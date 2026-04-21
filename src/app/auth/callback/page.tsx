@@ -23,23 +23,25 @@ export default function AuthCallback() {
         return;
       }
 
-      // Check if user already has a workspace (meaning they finished onboarding)
+      // Check if user has a brand kit (meaning they completed the core onboarding)
       const { data: workspace } = await supabase
         .from('workspaces')
-        .select('id')
+        .select(`
+          id,
+          brand_kits (
+            id
+          )
+        `)
         .eq('owner_id', session.user.id)
         .single();
 
-      if (workspace) {
-        // User exists and is set up
-        if (nextParam === '/onboarding') {
-          // They clicked "Sign up" but already have an account
-          router.push('/auth/login?message=existing_user');
-        } else {
-          router.push('/dashboard');
-        }
+      const hasBrandKit = workspace?.brand_kits && workspace.brand_kits.length > 0;
+
+      if (hasBrandKit) {
+        // Fully set up user
+        router.push('/dashboard');
       } else {
-        // New user or incomplete onboarding
+        // New user or incomplete onboarding (no brand kit yet)
         router.push('/onboarding');
       }
     };

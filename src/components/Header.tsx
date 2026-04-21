@@ -27,6 +27,8 @@ export default function Header() {
             full_name,
             workspaces (
               id,
+              address,
+              pincode,
               brand_kits (
                 name,
                 logo_url,
@@ -40,13 +42,14 @@ export default function Header() {
           .single();
 
         if (profile) {
-          const brandKit = profile.workspaces?.[0]?.brand_kits?.[0];
+          const workspace = profile.workspaces?.[0];
+          const brandKit = workspace?.brand_kits?.[0];
           setUserData({
-            businessName: brandKit?.name || profile.full_name || 'My Brand',
+            businessName: brandKit?.name || workspace?.name || profile.full_name || 'My Brand',
             email: user.email,
             logo: brandKit?.logo_url,
-            address: brandKit?.brand_description || 'Set your address',
-            pincode: 'Pincode', // Could add this to schema if needed
+            address: workspace?.address || 'Set your address',
+            pincode: workspace?.pincode || 'Pincode',
             instagram: brandKit?.instagram_handle || '@instagram',
             facebook: brandKit?.facebook_handle || 'facebook.com'
           });
