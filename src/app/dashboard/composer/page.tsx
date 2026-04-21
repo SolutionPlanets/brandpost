@@ -11,8 +11,8 @@ import {
   ArrowRight,
   ArrowLeft,
   Sparkles,
-  Facebook,
-  Instagram,
+  MessageSquare,
+  Share2,
   Check,
   Loader2,
   Eye,
@@ -113,6 +113,13 @@ export default function ComposerPage() {
     setStep(4);
   };
 
+  const formatDateToDDMMYY = (dateStr: string) => {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-');
+    if (!y || !m || !d) return dateStr;
+    return `${d}/${m}/${y.slice(-2)}`;
+  };
+
   useEffect(() => {
     if (generated && generated.captions.length > 0) {
       setEditedCaption(generated.captions[selectedCaption]);
@@ -207,8 +214,8 @@ export default function ComposerPage() {
                   className={`${styles.platformBtn} ${form.platform === p ? styles.platformBtnActive : ''}`}
                   onClick={() => setForm({ ...form, platform: p })}
                 >
-                  {p === 'facebook' && <><Facebook size={16} /> Facebook</>}
-                  {p === 'instagram' && <><Instagram size={16} /> Instagram</>}
+                  {p === 'facebook' && <><MessageSquare size={16} /> Facebook</>}
+                  {p === 'instagram' && <><Share2 size={16} /> Instagram</>}
                   {p === 'both' && <>Both</>}
                 </button>
               ))}
@@ -334,9 +341,9 @@ export default function ComposerPage() {
               <div className={styles.metaItem}>
                 <span className={styles.metaLabel}>Platform</span>
                 <span className={styles.metaValue}>
-                  {form.platform === 'facebook' && <><Facebook size={14} /> Facebook</>}
-                  {form.platform === 'instagram' && <><Instagram size={14} /> Instagram</>}
-                  {form.platform === 'both' && <><Facebook size={14} /> <Instagram size={14} /> Both</>}
+                  {form.platform === 'facebook' && <><MessageSquare size={14} /> Facebook</>}
+                  {form.platform === 'instagram' && <><Share2 size={14} /> Instagram</>}
+                  {form.platform === 'both' && <><MessageSquare size={14} /> <Share2 size={14} /> Both</>}
                 </span>
               </div>
               <div className={styles.metaItem}>
@@ -376,15 +383,27 @@ export default function ComposerPage() {
 
           {!isImmediate && (
             <div className={styles.scheduleInputs}>
-              <div className={styles.formGroup}>
-                <label htmlFor="scheduleDate">Date</label>
-                <input
-                  id="scheduleDate"
-                  type="date"
-                  value={scheduleDate}
-                  onChange={(e) => setScheduleDate(e.target.value)}
-                />
-              </div>
+                <label htmlFor="scheduleDate">Date (DD/MM/YY)</label>
+                <div className={styles.customDateWrapper}>
+                  <input
+                    id="scheduleDate"
+                    type="text"
+                    placeholder="DD/MM/YY"
+                    value={formatDateToDDMMYY(scheduleDate)}
+                    readOnly
+                    onClick={() => {
+                      const input = document.getElementById('hiddenDateInput');
+                      if (input) (input as any).showPicker();
+                    }}
+                  />
+                  <input
+                    id="hiddenDateInput"
+                    type="date"
+                    className={styles.hiddenNativeDate}
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                  />
+                </div>
               <div className={styles.formGroup}>
                 <label htmlFor="scheduleTime">Time</label>
                 <input

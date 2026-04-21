@@ -7,8 +7,8 @@ import {
   Filter,
   Plus,
   Image as ImageIcon,
-  Facebook,
-  Instagram,
+  MessageSquare,
+  Share2,
   MoreHorizontal,
   Eye,
   Edit3,
@@ -149,8 +149,8 @@ export default function PostsPage() {
                 </div>
               </div>
               <div className={styles.colPlatform}>
-                {(post.platform === 'facebook' || post.platform === 'both') && <Facebook size={16} className={styles.fbIcon} />}
-                {(post.platform === 'instagram' || post.platform === 'both') && <Instagram size={16} className={styles.igIcon} />}
+                {(post.platform === 'facebook' || post.platform === 'both') && <MessageSquare size={16} className={styles.fbIcon} />}
+                {(post.platform === 'instagram' || post.platform === 'both') && <Share2 size={16} className={styles.igIcon} />}
               </div>
               <div className={styles.colType}>
                 <span className={styles.typeBadge}>{post.contentType}</span>
