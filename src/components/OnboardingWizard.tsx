@@ -20,6 +20,32 @@ import { createClient } from '@/utils/supabase/client';
 import styles from './OnboardingWizard.module.css';
 import { useRouter } from 'next/navigation';
 import { usePalette } from 'color-thief-react';
+import Select from 'react-select';
+
+const fontOptions = [
+  { value: 'Roboto', label: 'Roboto' },
+  { value: 'Inter', label: 'Inter' },
+  { value: 'Open Sans', label: 'Open Sans' },
+  { value: 'Lato', label: 'Lato' },
+  { value: 'Poppins', label: 'Poppins' },
+  { value: 'Montserrat', label: 'Montserrat' },
+  { value: 'Oswald', label: 'Oswald' },
+  { value: 'Playfair Display', label: 'Playfair Display' },
+  { value: 'Raleway', label: 'Raleway' },
+  { value: 'Merriweather', label: 'Merriweather' },
+  { value: 'Lora', label: 'Lora' }
+];
+
+const customSelectStyles = {
+  option: (provided: any, state: any) => ({
+    ...provided,
+    fontFamily: state.data.value,
+  }),
+  singleValue: (provided: any, state: any) => ({
+    ...provided,
+    fontFamily: state.data.value,
+  })
+};
 
 const steps = [
   { title: 'Business Info', icon: Building2 },
@@ -35,6 +61,8 @@ export default function OnboardingWizard() {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     businessName: '',
@@ -42,10 +70,14 @@ export default function OnboardingWizard() {
     pincode: '',
     timing: '',
     logo: null as string | null,
-    colors: { primary: '#4f46e5', secondary: '#64748b' },
+    logoUrl: null as string | null,
+    logoFile: null as File | null,
+    colors: { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
     tone: 'Professional',
     description: '',
-    fontSize: '16px',
+    brandKitName: '',
+    headingFont: 'Inter',
+    bodyFont: 'Inter',
     selectedPost: 1,
     selectedPlatforms: [] as string[],
     platforms: [],
@@ -64,7 +96,8 @@ export default function OnboardingWizard() {
         ...formData,
         colors: {
           primary: palette[0],
-          secondary: palette[1]
+          secondary: palette[1],
+          accent: palette.length >= 3 ? palette[2] : formData.colors.accent
         }
       });
     }
@@ -77,7 +110,7 @@ export default function OnboardingWizard() {
     const { error } = await supabase
       .from('workspaces')
       .update({ 
-        name: formData.businessName,
+        business_name: formData.businessName,
         address: formData.address,
         pincode: formData.pincode,
         business_timing: formData.timing
@@ -105,12 +138,15 @@ export default function OnboardingWizard() {
       .from('brand_kits')
       .upsert({
         workspace_id: workspace.id,
-        name: formData.businessName,
-        logo_url: formData.logo,
+        brand_kit_name: formData.brandKitName || `${formData.businessName} Brand Kit`,
+        logo_url: formData.logoUrl || formData.logo,
         primary_color: formData.colors.primary,
         secondary_color: formData.colors.secondary,
+        accent_color: formData.colors.accent,
+        heading_font: formData.headingFont,
+        body_font: formData.bodyFont,
         brand_description: formData.description,
-        tone_of_voice: formData.tone,
+        tone: formData.tone,
         instagram_handle: formData.instagram,
         facebook_handle: formData.facebook
       }, { onConflict: 'workspace_id' });
@@ -119,8 +155,60 @@ export default function OnboardingWizard() {
   };
 
   const nextStep = async () => {
+    if (currentStep === 1 && !formData.businessName.trim()) {
+      setErrors({ businessName: 'Business Name is required' });
+      return;
+    }
+    
     setLoading(true);
+
     if (currentStep === 1) await saveWorkspace();
+
+    if (currentStep === 2) {
+      if (!formData.logoUrl && !formData.logo && !formData.logoFile) {
+        setErrors({ logo: 'Please upload a logo to continue' });
+        setLoading(false);
+        return;
+      }
+      
+      // Upload execution is conditionally deferred precisely to Step 2 validation checkpoint
+      if (formData.logoFile && !formData.logoUrl) {
+        setUploading(true);
+        try {
+          const fileExt = formData.logoFile.name.split('.').pop();
+          const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+          const filePath = `${fileName}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('BrandpostAI_logos')
+            .upload(filePath, formData.logoFile);
+
+          if (uploadError) {
+            console.error('Error uploading file:', uploadError);
+            setErrors({ logo: `Upload failed: ${uploadError.message}` });
+            setUploading(false);
+            setLoading(false);
+            return;
+          }
+
+          const { data } = supabase.storage
+            .from('BrandpostAI_logos')
+            .getPublicUrl(filePath);
+
+          setFormData(prev => ({ ...prev, logoUrl: data.publicUrl }));
+          setErrors(prev => ({ ...prev, logo: '' }));
+        } catch (err: any) {
+          console.error('Error in upload:', err);
+          setErrors({ logo: `Upload error: ${err?.message || 'Unknown error'}` });
+          setUploading(false);
+          setLoading(false);
+          return;
+        } finally {
+          setUploading(false);
+        }
+      }
+    }
+
     if (currentStep === 4) await saveBrandKit();
     
     if (currentStep < steps.length) {
@@ -150,7 +238,7 @@ export default function OnboardingWizard() {
     if (file && (file.type === 'image/png' || file.type === 'image/jpeg' || file.type === 'image/svg+xml')) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setFormData({ ...formData, logo: e.target?.result as string });
+        setFormData(prev => ({...prev, logo: e.target?.result as string, logoFile: file }));
       };
       reader.readAsDataURL(file);
     }
@@ -180,13 +268,18 @@ export default function OnboardingWizard() {
             <h2>Tell us about your business</h2>
             <p>We'll use this to personalize your content and profile.</p>
             <div className={styles.inputGroup}>
-              <label>Business Name</label>
+              <label>Business Name <span style={{color: 'red'}}>*</span></label>
               <input 
                 type="text" 
                 placeholder="e.g. Pixel Agency" 
                 value={formData.businessName}
-                onChange={(e) => setFormData({...formData, businessName: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, businessName: e.target.value});
+                  if (errors.businessName) setErrors({...errors, businessName: ''});
+                }}
+                style={errors.businessName ? { borderColor: 'red' } : {}}
               />
+              {errors.businessName && <span style={{color: 'red', fontSize: '12px', marginTop: '4px', display: 'block'}}>{errors.businessName}</span>}
             </div>
             <div className={styles.inputGroup}>
               <label>Address</label>
@@ -224,13 +317,14 @@ export default function OnboardingWizard() {
           <div className={styles.stepContent}>
             <h2>Upload your logo</h2>
             <p>This will be added to your generated posts.</p>
+            {errors.logo && <div style={{color: 'red', marginBottom: '10px', fontSize: '14px', fontWeight: 500}}>{errors.logo}</div>}
             
             {formData.logo ? (
               <div className={styles.previewContainer}>
                 <img src={formData.logo} alt="Logo Preview" className={styles.previewImage} />
                 <button 
                   className={styles.removeBtn}
-                  onClick={() => setFormData({ ...formData, logo: null })}
+                  onClick={() => setFormData({ ...formData, logo: null, logoUrl: null, logoFile: null })}
                 >
                   <X size={16} style={{ marginRight: '4px' }} /> Remove and try another
                 </button>
@@ -290,42 +384,70 @@ export default function OnboardingWizard() {
                   <span>{formData.colors.secondary}</span>
                 </div>
               </div>
+              <div className={styles.colorPicker}>
+                <label>Accent</label>
+                <div className={styles.colorInput}>
+                  <input type="color" value={formData.colors.accent} onChange={(e) => setFormData({...formData, colors: {...formData.colors, accent: e.target.value}})} />
+                  <span>{formData.colors.accent}</span>
+                </div>
+              </div>
             </div>
           </div>
         );
       case 4:
         return (
           <div className={styles.stepContent}>
+            <style dangerouslySetInnerHTML={{ __html: `@import url('https://fonts.googleapis.com/css2?family=Roboto&family=Inter&family=Open+Sans&family=Lato&family=Poppins&family=Montserrat&family=Oswald&family=Playfair+Display&family=Raleway&family=Merriweather&family=Lora&display=swap');` }} />
             <h2>Brand Voice</h2>
             <p>How should your brand speak to its audience?</p>
-            <div className={styles.inputGrid}>
+            
+            <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
+              <label>Brand Kit Name</label>
+              <input 
+                type="text" 
+                placeholder="e.g. Main Brand" 
+                value={formData.brandKitName}
+                onChange={(e) => setFormData({...formData, brandKitName: e.target.value})}
+              />
+            </div>
+
+            <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
+              <label>Tone</label>
+              <select value={formData.tone} onChange={(e) => setFormData({...formData, tone: e.target.value})}>
+                <option>Professional</option>
+                <option>Playful</option>
+                <option>Friendly</option>
+                <option>Authoritative</option>
+              </select>
+            </div>
+
+            <div className={styles.inputGrid} style={{ marginBottom: '15px' }}>
               <div className={styles.inputGroup}>
-                <label>Tone</label>
-                <select value={formData.tone} onChange={(e) => setFormData({...formData, tone: e.target.value})}>
-                  <option>Professional</option>
-                  <option>Playful</option>
-                  <option>Friendly</option>
-                  <option>Authoritative</option>
-                </select>
+                <label>Heading Font</label>
+                <Select 
+                  options={fontOptions}
+                  styles={customSelectStyles}
+                  value={fontOptions.find(opt => opt.value === formData.headingFont) || fontOptions[1]}
+                  onChange={(selected: any) => setFormData({...formData, headingFont: selected.value})}
+                />
               </div>
               <div className={styles.inputGroup}>
-                <label>Description Font Size</label>
-                <select value={formData.fontSize} onChange={(e) => setFormData({...formData, fontSize: e.target.value})}>
-                  <option value="12px">Small (12px)</option>
-                  <option value="14px">Normal (14px)</option>
-                  <option value="16px">Regular (16px)</option>
-                  <option value="18px">Medium (18px)</option>
-                  <option value="20px">Large (20px)</option>
-                </select>
+                <label>Body Font</label>
+                <Select 
+                  options={fontOptions}
+                  styles={customSelectStyles}
+                  value={fontOptions.find(opt => opt.value === formData.bodyFont) || fontOptions[1]}
+                  onChange={(selected: any) => setFormData({...formData, bodyFont: selected.value})}
+                />
               </div>
             </div>
+
             <div className={styles.inputGroup}>
               <label>Brief Description</label>
               <textarea 
                 className={styles.descriptionTextarea}
                 placeholder="Briefly describe what you do..."
                 value={formData.description}
-                style={{ fontSize: formData.fontSize }}
                 onChange={(e) => setFormData({...formData, description: e.target.value})}
               ></textarea>
             </div>
@@ -423,9 +545,9 @@ export default function OnboardingWizard() {
           <button 
             className={styles.nextBtn} 
             onClick={nextStep}
-            disabled={loading}
+            disabled={loading || uploading}
           >
-            {loading ? 'Saving...' : (currentStep === steps.length ? 'Get Started' : 'Next')} <ArrowRight size={18} />
+            {loading ? 'Saving...' : uploading ? 'Uploading...' : (currentStep === steps.length ? 'Get Started' : 'Next')} <ArrowRight size={18} />
           </button>
         </div>
       </div>

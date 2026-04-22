@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   User,
   Building2,
@@ -11,6 +11,8 @@ import {
   Save,
   Check,
 } from 'lucide-react';
+import { createClient } from '@/utils/supabase/client';
+import { useBrand } from '@/contexts/BrandContext';
 import styles from './Settings.module.css';
 
 type SettingsTab = 'profile' | 'workspace' | 'billing' | 'notifications';
@@ -25,10 +27,88 @@ const TABS = [
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [saved, setSaved] = useState(false);
+  const { businessName, setBusinessName } = useBrand();
+  const supabase = createClient();
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const [profileData, setProfileData] = useState({
+    fullName: '',
+    email: '',
+    timezone: 'Asia/Kolkata',
+  });
+
+  const [workspaceData, setWorkspaceData] = useState({
+    name: '',
+    platform: 'both',
+    tone: 'professional'
+  });
+
+  useEffect(() => {
+    async function fetchData() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setProfileData(prev => ({
+          ...prev,
+          email: user.email || '',
+          fullName: user.user_metadata?.full_name || 'User'
+        }));
+      }
+
+      const { data: workspace } = await supabase
+        .from('workspaces')
+        .select('*')
+        .eq('owner_id', user?.id)
+        .maybeSingle();
+
+      if (workspace) {
+        setWorkspaceData({
+          name: workspace.name === 'My Workspace' ? '' : (workspace.name || ''),
+          platform: 'both',
+          tone: 'professional'
+        });
+      }
+    }
+    fetchData();
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // 1. Update Profile Metadata (Optional but good)
+      await supabase.auth.updateUser({
+        data: { full_name: profileData.fullName }
+      });
+
+      // 2. Update Workspace Name
+      const { data: workspace } = await supabase
+        .from('workspaces')
+        .select('id')
+        .eq('owner_id', user.id)
+        .maybeSingle();
+
+      if (workspace) {
+        const { error: wsError } = await supabase
+          .from('workspaces')
+          .update({ name: businessName })
+          .eq('id', workspace.id);
+        
+        if (wsError) throw wsError;
+
+        // 3. Update Brand Kit Name (to match workspace)
+        const { error: bkError } = await supabase
+          .from('brand_kits')
+          .update({ name: businessName })
+          .eq('workspace_id', workspace.id);
+          
+        if (bkError) throw bkError;
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error: any) {
+      alert(`Error saving: ${error.message}`);
+    }
   };
 
   const renderProfile = () => (
@@ -38,19 +118,28 @@ export default function SettingsPage() {
       <div className={styles.formGrid}>
         <div className={styles.formGroup}>
           <label>Full Name</label>
-          <input type="text" defaultValue="Alex Johnson" />
+          <input 
+            type="text" 
+            value={profileData.fullName} 
+            onChange={(e) => setProfileData({...profileData, fullName: e.target.value})}
+            placeholder="Your Name"
+          />
         </div>
         <div className={styles.formGroup}>
           <label>Email</label>
-          <input type="email" defaultValue="alex@brandpost.ai" />
-        </div>
-        <div className={styles.formGroup}>
-          <label>Role</label>
-          <input type="text" defaultValue="Brand Manager" disabled />
+          <input 
+            type="email" 
+            value={profileData.email} 
+            onChange={(e) => setProfileData({...profileData, email: e.target.value})}
+            placeholder="email@example.com"
+          />
         </div>
         <div className={styles.formGroup}>
           <label>Timezone</label>
-          <select defaultValue="Asia/Kolkata">
+          <select 
+            value={profileData.timezone}
+            onChange={(e) => setProfileData({...profileData, timezone: e.target.value})}
+          >
             <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
             <option value="America/New_York">America/New_York (EST)</option>
             <option value="Europe/London">Europe/London (GMT)</option>
@@ -79,7 +168,12 @@ export default function SettingsPage() {
       <div className={styles.formGrid}>
         <div className={styles.formGroup}>
           <label>Workspace Name</label>
-          <input type="text" defaultValue="My Brand" />
+          <input 
+            type="text" 
+            value={businessName} 
+            onChange={(e) => setBusinessName(e.target.value)}
+            placeholder="e.g. My Workspace"
+          />
         </div>
         <div className={styles.formGroup}>
           <label>Default Platform</label>
@@ -100,28 +194,6 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className={styles.apiSection}>
-        <h3><Key size={16} /> API Keys</h3>
-        <p className={styles.apiDesc}>These keys are required for AI generation and social media publishing.</p>
-        <div className={styles.formGrid}>
-          <div className={styles.formGroup}>
-            <label>Claude API Key</label>
-            <input type="password" placeholder="sk-ant-..." defaultValue="" />
-          </div>
-          <div className={styles.formGroup}>
-            <label>OpenAI API Key (DALL·E)</label>
-            <input type="password" placeholder="sk-..." defaultValue="" />
-          </div>
-          <div className={styles.formGroup}>
-            <label>Meta App ID</label>
-            <input type="text" placeholder="Your Meta App ID" defaultValue="" />
-          </div>
-          <div className={styles.formGroup}>
-            <label>Meta App Secret</label>
-            <input type="password" placeholder="Your Meta App Secret" defaultValue="" />
-          </div>
-        </div>
-      </div>
     </div>
   );
 

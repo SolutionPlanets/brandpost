@@ -6,6 +6,6 @@ export const metadata = {
 
 export default function BrandKitPage() {
   return (
-    <OnboardingWizard />
+    <OnboardingWizard isDashboardMode={true} />
   );
 }

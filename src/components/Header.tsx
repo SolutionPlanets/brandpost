@@ -27,6 +27,7 @@ export default function Header() {
             full_name,
             workspaces (
               id,
+              business_name,
               address,
               pincode,
               brand_kits (
@@ -45,7 +46,7 @@ export default function Header() {
           const workspace = profile.workspaces?.[0];
           const brandKit = workspace?.brand_kits?.[0];
           setUserData({
-            businessName: brandKit?.name || workspace?.name || profile.full_name || 'My Brand',
+            businessName: brandKit?.name || workspace?.business_name || profile.full_name || 'My Brand',
             email: user.email,
             logo: brandKit?.logo_url,
             address: workspace?.address || 'Set your address',

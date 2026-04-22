@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 CREATE TABLE IF NOT EXISTS public.workspaces (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     owner_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-    name text NOT NULL,
+    business_name text NOT NULL,
     plan_id text NOT NULL, -- Mirrors users.plan_id
     address text,
     pincode text,
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS public.workspaces (
 CREATE TABLE IF NOT EXISTS public.brand_kits (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     workspace_id uuid NOT NULL UNIQUE REFERENCES public.workspaces(id) ON DELETE CASCADE,
-    name text NOT NULL, -- e.g. 'Main brand'
+    brand_kit_name text NOT NULL, -- e.g. 'Main brand'
     logo_url text, -- Supabase Storage URL
     logo_dark_url text,
     primary_color text, -- HEX
@@ -131,7 +131,7 @@ BEGIN
     RETURNING id INTO new_user_id;
 
     -- 2. Create the initial default workspace
-    INSERT INTO public.workspaces (owner_id, name, plan_id)
+    INSERT INTO public.workspaces (owner_id, business_name, plan_id)
     VALUES (
         new_user_id,
         'My Workspace',
@@ -146,3 +146,30 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- 5. STORAGE POLICIES
+-- NOTE: Please run this block below in your Supabase SQL Editor to fix the 400 RLS Upload Error.
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('BrandpostAI_logos', 'BrandpostAI_logos', true) 
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Allow authenticated uploads" 
+ON storage.objects 
+FOR INSERT TO authenticated 
+WITH CHECK (bucket_id = 'BrandpostAI_logos');
+
+CREATE POLICY "Allow public viewing of logos" 
+ON storage.objects 
+FOR SELECT TO public 
+USING (bucket_id = 'BrandpostAI_logos');
+
+CREATE POLICY "Allow authenticated updates" 
+ON storage.objects 
+FOR UPDATE TO authenticated 
+USING (auth.uid() = owner) 
+WITH CHECK (bucket_id = 'BrandpostAI_logos');
+
+CREATE POLICY "Allow authenticated deletes" 
+ON storage.objects 
+FOR DELETE TO authenticated 
+USING (auth.uid() = owner AND bucket_id = 'BrandpostAI_logos');
