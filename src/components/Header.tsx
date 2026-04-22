@@ -1,18 +1,45 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Bell, Search, User, MapPin, Mail, Hash, MessageSquare, Share2, ChevronDown } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
+import { useBrand } from '@/contexts/BrandContext';
 import styles from './Header.module.css';
 
 export default function Header() {
+  const { businessName, logo } = useBrand();
   const [userData, setUserData] = useState<any>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
   useEffect(() => {
-    const savedData = localStorage.getItem('brandpost_user_data');
-    if (savedData) {
-      setUserData(JSON.parse(savedData));
+    async function fetchUserData() {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const savedData = localStorage.getItem('brandpost_user_data');
+      const parsedData = savedData ? JSON.parse(savedData) : {};
+      
+      if (user) {
+        setUserData({
+          ...parsedData,
+          email: user.email
+        });
+      } else if (savedData) {
+        setUserData(parsedData);
+      }
     }
+
+    fetchUserData();
+
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -40,15 +67,14 @@ export default function Header() {
           <span className={styles.badge}></span>
         </button>
         
-        <div className={styles.profileContainer}>
+        <div className={styles.profileContainer} ref={dropdownRef}>
           <div className={styles.profile} onClick={() => setShowDropdown(!showDropdown)}>
             <div className={styles.userInfo}>
-              <span className={styles.userName}>{userData?.businessName || 'Alex Johnson'}</span>
-              <span className={styles.userRole}>Brand Manager</span>
+              <span className={styles.userName}>{businessName || 'Alex Johnson'}</span>
             </div>
             <div className={styles.avatar}>
-              {userData?.logo ? (
-                <img src={userData.logo} alt="Profile" className={styles.profileImg} />
+              {logo ? (
+                <img src={logo} alt="Profile" className={styles.profileImg} />
               ) : (
                 <User size={20} />
               )}
@@ -59,13 +85,13 @@ export default function Header() {
           {showDropdown && (
             <div className={styles.dropdown}>
               <div className={styles.dropdownHeader}>
-                {userData?.logo ? (
-                  <img src={userData.logo} alt="Logo" className={styles.dropdownLogo} />
+                {logo ? (
+                  <img src={logo} alt="Logo" className={styles.dropdownLogo} />
                 ) : (
                   <div className={styles.dropdownAvatar}><User /></div>
                 )}
                 <div>
-                  <h3>{userData?.businessName || 'Your Business'}</h3>
+                  <h3>{businessName || 'Your Business'}</h3>
                   <p>{userData?.email || 'business@example.com'}</p>
                 </div>
               </div>

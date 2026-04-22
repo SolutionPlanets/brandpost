@@ -1,23 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Upload, Plus, Check } from 'lucide-react';
+import { useBrand } from '@/contexts/BrandContext';
 import styles from './BrandKitForm.module.css';
 
 export default function BrandKitForm() {
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [colors, setColors] = useState({
-    primary: '#4f46e5',
-    secondary: '#64748b',
-    accent: '#06b6d4'
-  });
+  const { businessName, setBusinessName, logo, setLogo, colors: contextColors, setColors: setContextColors } = useBrand();
+  const [logoPreview, setLogoPreview] = useState<string | null>(logo);
+  const [colors, setColors] = useState(contextColors);
+
+  // Sync local state with context if context changes (e.g. on load)
+  useEffect(() => {
+    setLogoPreview(logo);
+    setColors(contextColors);
+  }, [logo, contextColors]);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setLogoPreview(reader.result as string);
+        const result = reader.result as string;
+        setLogoPreview(result);
+        setLogo(result);
       };
       reader.readAsDataURL(file);
     }
@@ -31,6 +37,17 @@ export default function BrandKitForm() {
       </header>
 
       <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Business Name</h2>
+          <input 
+            type="text" 
+            className={styles.input} 
+            value={businessName} 
+            onChange={(e) => setBusinessName(e.target.value)}
+            placeholder="e.g. Pixel Agency"
+          />
+        </section>
+
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Logo</h2>
           <div className={styles.uploadArea}>
@@ -64,7 +81,11 @@ export default function BrandKitForm() {
                 <input 
                   type="color" 
                   value={colors.primary} 
-                  onChange={(e) => setColors({...colors, primary: e.target.value})} 
+                  onChange={(e) => {
+                    const newColors = {...colors, primary: e.target.value};
+                    setColors(newColors);
+                    setContextColors(newColors);
+                  }} 
                 />
                 <span>{colors.primary}</span>
               </div>
@@ -75,7 +96,11 @@ export default function BrandKitForm() {
                 <input 
                   type="color" 
                   value={colors.secondary} 
-                  onChange={(e) => setColors({...colors, secondary: e.target.value})} 
+                  onChange={(e) => {
+                    const newColors = {...colors, secondary: e.target.value};
+                    setColors(newColors);
+                    setContextColors(newColors);
+                  }} 
                 />
                 <span>{colors.secondary}</span>
               </div>
@@ -86,7 +111,11 @@ export default function BrandKitForm() {
                 <input 
                   type="color" 
                   value={colors.accent} 
-                  onChange={(e) => setColors({...colors, accent: e.target.value})} 
+                  onChange={(e) => {
+                    const newColors = {...colors, accent: e.target.value};
+                    setColors(newColors);
+                    setContextColors(newColors);
+                  }} 
                 />
                 <span>{colors.accent}</span>
               </div>

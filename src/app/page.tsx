@@ -11,9 +11,8 @@ export default function Home() {
           <span>BrandPost AI</span>
         </div>
         <div className={styles.navLinks}>
-          <Link href="/dashboard">Dashboard</Link>
-          <Link href="/login">Login</Link>
-          <Link href="/onboarding" className={styles.cta}>Get Started Free</Link>
+          <Link href="/auth/login">Login</Link>
+          <Link href="/auth/login" className={styles.cta}>Get Started Free</Link>
         </div>
       </nav>
 
@@ -28,7 +27,7 @@ export default function Home() {
           let AI generate the content, and schedule everything in one click.
         </p>
         <div className={styles.heroActions}>
-          <Link href="/onboarding" className={styles.mainCta}>
+          <Link href="/auth/login" className={styles.mainCta}>
             Start Your Journey <ArrowRight size={20} />
           </Link>
           <button className={styles.secondaryCta}>Watch Demo</button>

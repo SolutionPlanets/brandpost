@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { 
   Building2, 
   Upload, 
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { getPalette } from 'colorthief';
 import { createClient } from '@/utils/supabase/client';
+import { useBrand } from '@/contexts/BrandContext';
 import styles from './OnboardingWizard.module.css';
 
 const steps = [
@@ -25,7 +26,8 @@ const steps = [
   { title: 'Connect', icon: Share2 },
 ];
 
-export default function OnboardingWizard() {
+export default function OnboardingWizard({ isDashboardMode = false }: { isDashboardMode?: boolean }) {
+  const { setBusinessName, setLogo } = useBrand();
   const [currentStep, setCurrentStep] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
@@ -47,110 +49,101 @@ export default function OnboardingWizard() {
     scheduledTime: '',
   });
 
+  // Sync with global BrandContext for real-time UI updates (e.g. Header)
+  useEffect(() => {
+    setBusinessName(formData.businessName);
+  }, [formData.businessName, setBusinessName]);
+
+  useEffect(() => {
+    setLogo(formData.logo);
+  }, [formData.logo, setLogo]);
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const supabase = createClient();
+
+  useEffect(() => {
+    async function fetchExistingData() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: workspace } = await supabase
+        .from('workspaces')
+        .select(`
+          id,
+          name,
+          brand_kits (*)
+        `)
+        .eq('owner_id', user.id)
+        .maybeSingle();
+
+      if (workspace) {
+        const brandKit = workspace.brand_kits?.[0];
+        const name = brandKit?.name || workspace.name || '';
+        setFormData(prev => ({
+          ...prev,
+          businessName: name === 'My Workspace' ? '' : name,
+          colors: {
+            primary: brandKit?.primary_color || prev.colors.primary,
+            secondary: brandKit?.secondary_color || prev.colors.secondary,
+          },
+          tone: brandKit?.tone ? brandKit.tone.charAt(0).toUpperCase() + brandKit.tone.slice(1) : prev.tone,
+          description: brandKit?.brand_description || prev.description,
+          logo: brandKit?.logo_url || prev.logo
+        }));
+      }
+    }
+    fetchExistingData();
+  }, []);
   
   const handleFinish = async () => {
     setIsSaving(true);
-    console.log('Starting save process...', formData);
     try {
-      // 1. Get current user
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError) {
-        console.error('Auth Error:', authError);
-      }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
 
-      if (!user) {
-        console.warn('No active user session found.');
-        alert('You are not logged in! Data will only be saved locally in your browser. Please login to save to the database.');
-        localStorage.setItem('brandpost_user_data', JSON.stringify(formData));
-        window.location.href = '/dashboard';
-        return;
-      }
-
-      console.log('User authenticated:', user.id);
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('id', user.id)
-        .single();
-
-      if (userError && userError.code !== 'PGRST116') throw userError;
-
+      // 1. Ensure user exists
+      const { data: userData } = await supabase.from('users').select('id').eq('id', user.id).maybeSingle();
       if (!userData) {
-        const { error: insertUserError } = await supabase.from('users').insert({
-          id: user.id,
-          email: user.email,
-          full_name: user.user_metadata?.full_name || '',
-          plan_id: 'solo'
-        });
-        
-        if (insertUserError) {
-          console.error('User Insert Error:', insertUserError);
-          throw new Error(`User Creation Error: ${insertUserError.message}`);
-        }
+        await supabase.from('users').insert({ id: user.id, email: user.email, plan_id: 'solo' });
       }
 
-      // 3. Get or create Workspace
-      let { data: workspace, error: wsError } = await supabase
-        .from('workspaces')
-        .select('id')
-        .eq('owner_id', user.id)
-        .single();
-
-      if (wsError && wsError.code !== 'PGRST116') throw wsError;
-
+      // 2. Ensure workspace exists
+      let { data: workspace } = await supabase.from('workspaces').select('id').eq('owner_id', user.id).maybeSingle();
       if (!workspace) {
-        const { data: newWs, error: newWsError } = await supabase
-          .from('workspaces')
-          .insert({
-            owner_id: user.id,
-            name: `${formData.businessName || 'My Business'}'s Workspace`,
-            plan_id: 'solo'
-          })
-          .select()
-          .single();
-        
-        if (newWsError) throw newWsError;
+        const { data: newWs } = await supabase.from('workspaces').insert({
+          owner_id: user.id,
+          name: formData.businessName || 'My Workspace',
+          plan_id: 'solo'
+        }).select().single();
         workspace = newWs;
       }
 
-      // 4. Create Brand Kit
-      const { error: bkError } = await supabase
-        .from('brand_kits')
-        .insert({
-          workspace_id: workspace.id,
-          name: formData.businessName || 'Main Brand',
-          primary_color: formData.colors.primary,
-          secondary_color: formData.colors.secondary,
-          tone: formData.tone.toLowerCase(),
-          brand_description: formData.description,
-          logo_url: formData.logo
-        });
+      // 3. Upsert Brand Kit
+      const brandKitData = {
+        workspace_id: workspace!.id,
+        name: formData.businessName || 'Main Brand',
+        primary_color: formData.colors.primary,
+        secondary_color: formData.colors.secondary,
+        tone: formData.tone.toLowerCase(),
+        brand_description: formData.description,
+        logo_url: formData.logo
+      };
 
-      if (bkError) {
-        console.error('Brand Kit Error:', bkError);
-        throw new Error(`Brand Kit Error: ${bkError.message}`);
+      const { data: existingBK } = await supabase.from('brand_kits').select('id').eq('workspace_id', workspace!.id).maybeSingle();
+
+      if (existingBK) {
+        await supabase.from('brand_kits').update(brandKitData).eq('id', existingBK.id);
+      } else {
+        await supabase.from('brand_kits').insert(brandKitData);
       }
 
-      console.log('Database save successful!');
-      alert('Data successfully saved to the database!');
-
-      // 5. Cleanup and redirect
-      // Exclude heavy logo base64 from localStorage to prevent QuotaExceededError
-      const { logo, ...dataToSave } = formData;
-      try {
-        localStorage.setItem('brandpost_user_data', JSON.stringify(dataToSave));
-      } catch (e) {
-        console.warn('Failed to save to localStorage (quota exceeded)', e);
+      alert('Changes saved successfully!');
+      if (!isDashboardMode) {
+        window.location.href = '/dashboard';
       }
-      
-      window.location.href = '/dashboard';
     } catch (error: any) {
-      console.error('Error saving to database:', error);
-      alert(`Error: ${error.message || 'Something went wrong while saving'}`);
+      alert(`Error: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -495,7 +488,11 @@ export default function OnboardingWizard() {
             onClick={currentStep === steps.length ? handleFinish : nextStep}
             disabled={isSaving}
           >
-            {isSaving ? 'Saving...' : (currentStep === steps.length ? 'Finish & Go to Dashboard' : 'Next')} <ArrowRight size={18} />
+            {isSaving ? 'Saving...' : (
+              currentStep === steps.length 
+                ? (isDashboardMode ? 'Save Changes' : 'Finish & Go to Dashboard') 
+                : 'Next'
+            )} <ArrowRight size={18} />
           </button>
         </div>
       </div>

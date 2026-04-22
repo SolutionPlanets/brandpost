@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { createClient } from '@/utils/supabase/client';
+import { useBrand } from '@/contexts/BrandContext';
 import {
   Plus,
   Sparkles,
@@ -109,10 +111,35 @@ function daysUntil(dateStr: string): number {
 
 // ── Component ────────────────────────────────────────────────────────
 export default function DashboardHome() {
+  const { businessName } = useBrand();
+  const [userData, setUserData] = useState<any>(null);
   const [usageUsed] = useState(18);
+  const supabase = createClient();
   const usageLimit = 50;
   const usagePercent = Math.round((usageUsed / usageLimit) * 100);
   const upcoming = getUpcomingEvents();
+
+  useEffect(() => {
+    async function fetchUserData() {
+      const savedData = localStorage.getItem('brandpost_user_data');
+      if (savedData) {
+        setUserData(JSON.parse(savedData));
+      } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: brandKit } = await supabase
+            .from('brand_kits')
+            .select('*')
+            .eq('workspaces.owner_id', user.id) // check schema: brand_kits link to workspaces
+            .limit(1)
+            .maybeSingle();
+          
+          if (brandKit) setUserData({ businessName: brandKit.name });
+        }
+      }
+    }
+    fetchUserData();
+  }, []);
 
   const stats = [
     { label: 'Total Posts', value: '24', icon: CalendarDays, color: '#4f46e5' },
@@ -126,7 +153,7 @@ export default function DashboardHome() {
       {/* ── Header ──────────────────────────────────────────── */}
       <header className={styles.header}>
         <div>
-          <h1 className={styles.title}>Welcome back, Alex!</h1>
+          <h1 className={styles.title}>Welcome back, {businessName || userData?.businessName || 'User'}!</h1>
           <p className={styles.subtitle}>Here&apos;s what&apos;s happening with your brand today.</p>
         </div>
         <Link href="/dashboard/composer" className={styles.createBtn}>
