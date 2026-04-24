@@ -12,14 +12,14 @@ export default function Home() {
         </div>
         <div className={styles.navLinks}>
           <Link href="/auth/login">Login</Link>
-          <Link href="/auth/login" className={styles.cta}>Get Started Free</Link>
+          <Link href="/auth/signup" className={styles.cta}>Get Started Free</Link>
         </div>
       </nav>
 
       <main className={styles.hero}>
         <div className={styles.badge}><Sparkles size={14} /> AI-Powered Content Creation</div>
         <h1 className={styles.heroTitle}>
-          Your Brand's Social Media,<br />
+          Your Brand&apos;s Social Media,<br />
           <span>Automated by AI.</span>
         </h1>
         <p className={styles.heroSubtitle}>
@@ -27,7 +27,7 @@ export default function Home() {
           let AI generate the content, and schedule everything in one click.
         </p>
         <div className={styles.heroActions}>
-          <Link href="/auth/login" className={styles.mainCta}>
+          <Link href="/auth/signup" className={styles.mainCta}>
             Start Your Journey <ArrowRight size={20} />
           </Link>
           <button className={styles.secondaryCta}>Watch Demo</button>

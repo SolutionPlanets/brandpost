@@ -18,7 +18,6 @@ export default function LoginPage() {
 
   const supabase = createClient();
 
-<<<<<<< Updated upstream
   useEffect(() => {
     const message = searchParams.get('message');
     const errorParam = searchParams.get('error');
@@ -29,8 +28,6 @@ export default function LoginPage() {
     }
   }, [searchParams]);
 
-=======
->>>>>>> Stashed changes
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -42,7 +39,6 @@ export default function LoginPage() {
     });
 
     if (error) {
-<<<<<<< Updated upstream
       if (error.message.includes('Invalid login credentials')) {
         setError('This account does not exist or password is incorrect. Please check your email or sign up.');
       } else {
@@ -50,42 +46,7 @@ export default function LoginPage() {
       }
       setLoading(false);
     } else {
-<<<<<<< Updated upstream
-      // Check if user has a brand kit (meaning they finished onboarding)
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: brandKit } = await supabase
-          .from('brand_kits')
-          .select(`
-            id,
-            workspaces!inner (
-              owner_id
-            )
-          `)
-          .eq('workspaces.owner_id', user.id)
-          .limit(1)
-          .maybeSingle();
-
-        if (brandKit) {
-          router.push('/dashboard');
-        } else {
-          router.push('/onboarding');
-        }
-      } else {
-        router.push('/dashboard');
-      }
-=======
       router.push('/dashboard');
-=======
-      setError(error.message);
-      setLoading(false);
-    } else {
-      router.push('/onboarding');
->>>>>>> Stashed changes
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
     }
   };
 

@@ -20,8 +20,11 @@ CREATE TABLE IF NOT EXISTS public.users (
 CREATE TABLE IF NOT EXISTS public.workspaces (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     owner_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-    name text NOT NULL,
+    business_name text NOT NULL,
     plan_id text NOT NULL, -- Mirrors users.plan_id
+    address text,
+    pincode text,
+    business_timing text,
     posts_used_this_cycle integer DEFAULT 0,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now()
@@ -30,8 +33,8 @@ CREATE TABLE IF NOT EXISTS public.workspaces (
 -- Table: brand_kits (Source 53, 54)
 CREATE TABLE IF NOT EXISTS public.brand_kits (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-    workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
-    name text NOT NULL, -- e.g. 'Main brand'
+    workspace_id uuid NOT NULL UNIQUE REFERENCES public.workspaces(id) ON DELETE CASCADE,
+    brand_kit_name text NOT NULL, -- e.g. 'Main brand'
     logo_url text, -- Supabase Storage URL
     logo_dark_url text,
     primary_color text, -- HEX
@@ -39,8 +42,10 @@ CREATE TABLE IF NOT EXISTS public.brand_kits (
     accent_color text, -- HEX
     heading_font text, -- Google Font name
     body_font text, -- Google Font name
-    tone text CHECK (tone IN ('professional', 'friendly', 'playful', 'authoritative')),
+    tone text,
     brand_description text, -- Max 300 chars as per PRD Section 5.1
+    instagram_handle text,
+    facebook_handle text,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now()
 );
@@ -95,97 +100,102 @@ CREATE TRIGGER update_posts_updated_at BEFORE UPDATE ON posts FOR EACH ROW EXECU
 
 -- 3. ROW LEVEL SECURITY (RLS)
 -- As per Security Requirements (Source 275)
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.workspaces ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.brand_kits ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.social_connections ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
+ALTER TABLE brand_kits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE social_connections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 
--- Users Policies: Users can only manage their own profile
-CREATE POLICY "Users can view their own profile" ON public.users
-    FOR SELECT USING (auth.uid() = id);
+-- Table: users: Users can only see and update their own profile
+CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid() = id);
 
-CREATE POLICY "Users can insert their own profile" ON public.users
-    FOR INSERT WITH CHECK (auth.uid() = id);
+-- Table: workspaces: Users can manage their own workspaces
+CREATE POLICY "Users can view own workspaces" ON workspaces FOR SELECT USING (auth.uid() = owner_id);
+CREATE POLICY "Users can update own workspaces" ON workspaces FOR UPDATE USING (auth.uid() = owner_id);
+CREATE POLICY "Users can insert own workspaces" ON workspaces FOR INSERT WITH CHECK (auth.uid() = owner_id);
 
-CREATE POLICY "Users can update their own profile" ON public.users
-    FOR UPDATE USING (auth.uid() = id);
+-- Table: brand_kits: Users can manage brand kits for their workspaces
+CREATE POLICY "Users can view own brand kits" ON brand_kits FOR SELECT USING (
+    workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())
+);
+CREATE POLICY "Users can update own brand kits" ON brand_kits FOR UPDATE USING (
+    workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())
+);
+CREATE POLICY "Users can insert own brand kits" ON brand_kits FOR INSERT WITH CHECK (
+    workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())
+);
 
--- Workspaces Policies: Users can only manage workspaces they own
-CREATE POLICY "Users can view their own workspaces" ON public.workspaces
-    FOR SELECT USING (auth.uid() = owner_id);
+-- Table: social_connections: Users can manage connections for their workspaces
+CREATE POLICY "Users can manage own social connections" ON social_connections FOR ALL USING (
+    workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())
+);
 
-CREATE POLICY "Users can insert their own workspaces" ON public.workspaces
-    FOR INSERT WITH CHECK (auth.uid() = owner_id);
+-- Table: posts: Users can manage posts for their workspaces
+CREATE POLICY "Users can manage own posts" ON posts FOR ALL USING (
+    workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())
+);
 
-CREATE POLICY "Users can update their own workspaces" ON public.workspaces
-    FOR UPDATE USING (auth.uid() = owner_id);
+-- 4. NEW USER REGISTRATION TRIGGER
+-- This function runs whenever a new user signs up via Supabase Auth.
+-- It automatically creates a public user profile and a default workspace.
 
-CREATE POLICY "Users can delete their own workspaces" ON public.workspaces
-    FOR DELETE USING (auth.uid() = owner_id);
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+DECLARE
+    new_user_id uuid;
+BEGIN
+    -- 1. Create the public user profile
+    INSERT INTO public.users (id, email, full_name, plan_id, trial_ends_at)
+    VALUES (
+        new.id,
+        new.email,
+        new.raw_user_meta_data->>'full_name',
+        'solo',
+        now() + interval '14 days'
+    )
+    RETURNING id INTO new_user_id;
 
--- Brand Kits Policies: Users can manage brand kits via workspace ownership
-CREATE POLICY "Users can view brand kits in their workspaces" ON public.brand_kits
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM public.workspaces
-            WHERE workspaces.id = brand_kits.workspace_id
-            AND workspaces.owner_id = auth.uid()
-        )
+    -- 2. Create the initial default workspace
+    INSERT INTO public.workspaces (owner_id, business_name, plan_id)
+    VALUES (
+        new_user_id,
+        'My Workspace',
+        'solo'
     );
 
-CREATE POLICY "Users can insert brand kits in their workspaces" ON public.brand_kits
-    FOR INSERT WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.workspaces
-            WHERE workspaces.id = brand_kits.workspace_id
-            AND workspaces.owner_id = auth.uid()
-        )
-    );
+    RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE POLICY "Users can update brand kits in their workspaces" ON public.brand_kits
-    FOR UPDATE USING (
-        EXISTS (
-            SELECT 1 FROM public.workspaces
-            WHERE workspaces.id = brand_kits.workspace_id
-            AND workspaces.owner_id = auth.uid()
-        )
-    );
+-- Trigger the function every time a user is created in auth.users
+CREATE OR REPLACE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
--- Social Connections Policies
-CREATE POLICY "Users can view their social connections" ON public.social_connections
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM public.workspaces
-            WHERE workspaces.id = social_connections.workspace_id
-            AND workspaces.owner_id = auth.uid()
-        )
-    );
+-- 5. STORAGE POLICIES
+-- NOTE: Please run this block below in your Supabase SQL Editor to fix the 400 RLS Upload Error.
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('BrandpostAI_logos', 'BrandpostAI_logos', true) 
+ON CONFLICT (id) DO NOTHING;
 
-CREATE POLICY "Users can manage their social connections" ON public.social_connections
-    FOR ALL USING (
-        EXISTS (
-            SELECT 1 FROM public.workspaces
-            WHERE workspaces.id = social_connections.workspace_id
-            AND workspaces.owner_id = auth.uid()
-        )
-    );
+CREATE POLICY "Allow authenticated uploads" 
+ON storage.objects 
+FOR INSERT TO authenticated 
+WITH CHECK (bucket_id = 'BrandpostAI_logos');
 
--- Posts Policies
-CREATE POLICY "Users can view their own posts" ON public.posts
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM public.workspaces
-            WHERE workspaces.id = posts.workspace_id
-            AND workspaces.owner_id = auth.uid()
-        )
-    );
+CREATE POLICY "Allow public viewing of logos" 
+ON storage.objects 
+FOR SELECT TO public 
+USING (bucket_id = 'BrandpostAI_logos');
 
-CREATE POLICY "Users can manage their own posts" ON public.posts
-    FOR ALL USING (
-        EXISTS (
-            SELECT 1 FROM public.workspaces
-            WHERE workspaces.id = posts.workspace_id
-            AND workspaces.owner_id = auth.uid()
-        )
-    );
+CREATE POLICY "Allow authenticated updates" 
+ON storage.objects 
+FOR UPDATE TO authenticated 
+USING (auth.uid() = owner) 
+WITH CHECK (bucket_id = 'BrandpostAI_logos');
+
+CREATE POLICY "Allow authenticated deletes" 
+ON storage.objects 
+FOR DELETE TO authenticated 
+USING (auth.uid() = owner AND bucket_id = 'BrandpostAI_logos');

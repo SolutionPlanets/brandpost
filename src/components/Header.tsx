@@ -1,66 +1,75 @@
-<<<<<<< Updated upstream
 import { useState, useEffect, useRef } from 'react';
-import { Bell, Search, User, MapPin, Mail, Hash, MessageSquare, Share2, ChevronDown } from 'lucide-react';
-=======
-import { useState, useEffect } from 'react';
-import { 
-  Bell, 
-  Search, 
-  User, 
-  MapPin, 
-  Hash, 
-  MessageSquare, 
-  Share2, 
-  ChevronDown,
-  Instagram,
-  Facebook,
-  LogOut
-} from 'lucide-react';
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
+import { Bell, Search, User, MapPin, Hash, MessageSquare, Share2, ChevronDown } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { useBrand } from '@/contexts/BrandContext';
 import styles from './Header.module.css';
+import { useBrand } from '@/contexts/BrandContext';
 
 export default function Header() {
-  const { businessName, logo } = useBrand();
-  const [userData, setUserData] = useState<any>(null);
+  const { businessName, ownerName, logo, refreshBrandData } = useBrand();
+  const [userData, setUserData] = useState<any>({
+    email: '',
+    address: 'Set your address',
+    pincode: 'Pincode',
+    instagram: '@instagram',
+    facebook: 'facebook.com'
+  });
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
   useEffect(() => {
-    async function fetchUserData() {
+    async function fetchDetails() {
       const { data: { user } } = await supabase.auth.getUser();
-      
-      const savedData = localStorage.getItem('brandpost_user_data');
-      const parsedData = savedData ? JSON.parse(savedData) : {};
-      
       if (user) {
-        setUserData({
-          ...parsedData,
-          email: user.email
-        });
-      } else if (savedData) {
-        setUserData(parsedData);
+        setUserData(prev => ({ ...prev, email: user.email }));
+        const { data: profile } = await supabase
+          .from('users')
+          .select(`
+            workspaces (
+              address,
+              pincode,
+              brand_kits (
+                instagram_handle,
+                facebook_handle
+              )
+            )
+          `)
+          .eq('id', user.id)
+          .single();
+
+        if (profile?.workspaces?.[0]) {
+          const workspace = profile.workspaces[0];
+          const brandKit = workspace.brand_kits?.[0];
+          setUserData(prev => ({
+            ...prev,
+            address: workspace.address || 'Set your address',
+            pincode: workspace.pincode || 'Pincode',
+            instagram: brandKit?.instagram_handle || '@instagram',
+            facebook: brandKit?.facebook_handle || 'facebook.com'
+          }));
+        }
       }
     }
+    fetchDetails();
+  }, [businessName]); // Refresh when context changes
 
-    fetchUserData();
-
+  // Close dropdown when clicking outside
+  useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
       }
     }
 
-    document.addEventListener("mousedown", handleClickOutside);
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [showDropdown]);
 
   const handleLogout = async () => {
     try {
@@ -69,7 +78,6 @@ export default function Header() {
       window.location.href = '/';
     } catch (error) {
       console.error('Error during logout:', error);
-      // Fallback redirect even if signOut fails
       window.location.href = '/';
     }
   };
@@ -90,7 +98,8 @@ export default function Header() {
         <div className={styles.profileContainer} ref={dropdownRef}>
           <div className={styles.profile} onClick={() => setShowDropdown(!showDropdown)}>
             <div className={styles.userInfo}>
-              <span className={styles.userName}>{businessName || 'Alex Johnson'}</span>
+              <span className={styles.userName}>{ownerName || businessName || 'My Brand'}</span>
+              <span className={styles.userRole}>{businessName}</span>
             </div>
             <div className={styles.avatar}>
               {logo ? (
@@ -111,44 +120,31 @@ export default function Header() {
                   <div className={styles.dropdownAvatar}><User /></div>
                 )}
                 <div>
-                  <h3>{businessName || 'Your Business'}</h3>
-                  <p>{userData?.email || 'business@example.com'}</p>
+                  <h3>{ownerName || businessName || 'My Brand'}</h3>
+                  <p className={styles.dropdownBizName}>{businessName}</p>
+                  <p>{userData.email}</p>
                 </div>
               </div>
               
               <div className={styles.dropdownContent}>
                 <div className={styles.detailItem}>
                   <MapPin size={16} />
-                  <span>{userData?.address || 'Set your address'}</span>
+                  <span>{userData.address}</span>
                 </div>
                 <div className={styles.detailItem}>
                   <Hash size={16} />
-                  <span>{userData?.pincode || 'Pincode'}</span>
+                  <span>{userData.pincode}</span>
                 </div>
                 <div className={styles.divider}></div>
                 <div className={styles.socialLink}>
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
                   <Share2 size={16} />
-                  <span>{userData?.instagram || '@instagram'}</span>
+                  <span>{userData.instagram}</span>
                 </div>
                 <div className={styles.socialLink}>
                   <MessageSquare size={16} />
-                  <span>{userData?.facebook || 'facebook.com'}</span>
-=======
-                  <Instagram size={16} />
-                  <span>{userData.instagram}</span>
-                </div>
-                <div className={styles.socialLink}>
-=======
-                  <Instagram size={16} />
-                  <span>{userData.instagram}</span>
-                </div>
-                <div className={styles.socialLink}>
->>>>>>> Stashed changes
-                  <Facebook size={16} />
                   <span>{userData.facebook}</span>
->>>>>>> Stashed changes
                 </div>
               </div>
               

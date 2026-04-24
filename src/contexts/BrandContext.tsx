@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 
 interface BrandContextType {
+  fullName: string;
+  ownerName: string;
   businessName: string;
   logo: string | null;
   colors: {
@@ -20,6 +22,8 @@ interface BrandContextType {
 const BrandContext = createContext<BrandContextType | undefined>(undefined);
 
 export function BrandProvider({ children }: { children: React.ReactNode }) {
+  const [fullName, setFullName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [logo, setLogo] = useState<string | null>(null);
   const [colors, setColors] = useState({
@@ -34,21 +38,37 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // Fetch user's full_name from the users table
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('full_name')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (userProfile?.full_name) {
+      setFullName(userProfile.full_name);
+    }
+
+    // Fetch workspace and brand kit
     const { data: workspace } = await supabase
       .from('workspaces')
       .select(`
         id,
-        name,
+        business_name,
+        owner_name,
         brand_kits (*)
       `)
       .eq('owner_id', user.id)
       .maybeSingle();
 
     if (workspace) {
-      const brandKit = workspace.brand_kits?.[0];
-      let name = brandKit?.name || workspace.name || '';
-      if (name === 'My Workspace') name = '';
-      setBusinessName(name);
+      const bKits = workspace.brand_kits;
+      const brandKit = bKits ? (Array.isArray(bKits) ? bKits[0] : bKits) : undefined;
+      const bName = workspace.business_name && workspace.business_name !== 'My Workspace' 
+        ? workspace.business_name 
+        : '';
+      setBusinessName(bName);
+      setOwnerName(workspace.owner_name || '');
       setLogo(brandKit?.logo_url || null);
       if (brandKit?.primary_color) {
         setColors({
@@ -60,10 +80,10 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
 
       // Sync with localStorage for legacy components
       localStorage.setItem('brandpost_user_data', JSON.stringify({
-        businessName: name,
+        fullName: userProfile?.full_name || '',
+        ownerName: workspace.owner_name || '',
+        businessName: bName,
         logo: brandKit?.logo_url || null,
-        address: brandKit?.address || '',
-        pincode: brandKit?.pincode || '',
       }));
     }
   };
@@ -78,12 +98,16 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     const parsedData = savedData ? JSON.parse(savedData) : {};
     localStorage.setItem('brandpost_user_data', JSON.stringify({
       ...parsedData,
+      fullName,
+      ownerName,
       businessName,
       logo
     }));
-  }, [businessName, logo]);
+  }, [fullName, ownerName, businessName, logo]);
 
   const value = React.useMemo(() => ({
+    fullName,
+    ownerName,
     businessName,
     logo,
     colors,
@@ -91,7 +115,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     setLogo,
     setColors,
     refreshBrandData
-  }), [businessName, logo, colors]);
+  }), [fullName, ownerName, businessName, logo, colors]);
 
   return (
     <BrandContext.Provider value={value}>
@@ -107,3 +131,4 @@ export function useBrand() {
   }
   return context;
 }
+
