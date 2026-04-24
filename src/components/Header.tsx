@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { Bell, Search, User, MapPin, Hash, MessageSquare, Share2, ChevronDown } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import styles from './Header.module.css';
+import { useBrand } from '@/contexts/BrandContext';
 
 export default function Header() {
+  const { businessName, logo, refreshBrandData } = useBrand();
   const [userData, setUserData] = useState<any>({
-    businessName: 'Loading...',
     email: '',
-    logo: null,
     address: 'Set your address',
     pincode: 'Pincode',
     instagram: '@instagram',
@@ -17,23 +17,17 @@ export default function Header() {
   const supabase = createClient();
 
   useEffect(() => {
-    async function fetchUserData() {
+    async function fetchDetails() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // Fetch profile and brand kit from DB
-        const { data: profile, error } = await supabase
+        setUserData(prev => ({ ...prev, email: user.email }));
+        const { data: profile } = await supabase
           .from('users')
           .select(`
-            full_name,
             workspaces (
-              id,
-              business_name,
               address,
               pincode,
               brand_kits (
-                name,
-                logo_url,
-                brand_description,
                 instagram_handle,
                 facebook_handle
               )
@@ -42,27 +36,21 @@ export default function Header() {
           .eq('id', user.id)
           .single();
 
-        if (profile) {
-          const workspace = profile.workspaces?.[0];
-          const brandKit = workspace?.brand_kits?.[0];
-          setUserData({
-            businessName: brandKit?.name || workspace?.business_name || profile.full_name || 'My Brand',
-            email: user.email,
-            logo: brandKit?.logo_url,
-            address: workspace?.address || 'Set your address',
-            pincode: workspace?.pincode || 'Pincode',
+        if (profile?.workspaces?.[0]) {
+          const workspace = profile.workspaces[0];
+          const brandKit = workspace.brand_kits?.[0];
+          setUserData(prev => ({
+            ...prev,
+            address: workspace.address || 'Set your address',
+            pincode: workspace.pincode || 'Pincode',
             instagram: brandKit?.instagram_handle || '@instagram',
             facebook: brandKit?.facebook_handle || 'facebook.com'
-          });
-        } else {
-          // Fallback to local storage if DB is empty (only for fresh onboarding)
-          const savedData = localStorage.getItem('brandpost_user_data');
-          if (savedData) setUserData({ ...userData, ...JSON.parse(savedData) });
+          }));
         }
       }
     }
-    fetchUserData();
-  }, []);
+    fetchDetails();
+  }, [businessName]); // Refresh when context changes
 
   const handleLogout = async () => {
     try {
@@ -91,12 +79,12 @@ export default function Header() {
         <div className={styles.profileContainer}>
           <div className={styles.profile} onClick={() => setShowDropdown(!showDropdown)}>
             <div className={styles.userInfo}>
-              <span className={styles.userName}>{userData.businessName}</span>
+              <span className={styles.userName}>{businessName || 'My Brand'}</span>
               <span className={styles.userRole}>Brand Manager</span>
             </div>
             <div className={styles.avatar}>
-              {userData.logo ? (
-                <img src={userData.logo} alt="Profile" className={styles.profileImg} />
+              {logo ? (
+                <img src={logo} alt="Profile" className={styles.profileImg} />
               ) : (
                 <User size={20} />
               )}
@@ -107,13 +95,13 @@ export default function Header() {
           {showDropdown && (
             <div className={styles.dropdown}>
               <div className={styles.dropdownHeader}>
-                {userData.logo ? (
-                  <img src={userData.logo} alt="Logo" className={styles.dropdownLogo} />
+                {logo ? (
+                  <img src={logo} alt="Logo" className={styles.dropdownLogo} />
                 ) : (
                   <div className={styles.dropdownAvatar}><User /></div>
                 )}
                 <div>
-                  <h3>{userData.businessName}</h3>
+                  <h3>{businessName || 'My Brand'}</h3>
                   <p>{userData.email}</p>
                 </div>
               </div>

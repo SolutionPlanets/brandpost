@@ -67,6 +67,9 @@ export default function SignupPage() {
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
+        queryParams: {
+          prompt: 'select_account',
+        },
       },
     });
 

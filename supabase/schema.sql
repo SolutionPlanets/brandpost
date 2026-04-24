@@ -106,9 +106,35 @@ ALTER TABLE brand_kits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE social_connections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 
--- EXAMPLE POLICY (Workspaces): Users can only see workspaces they own
-CREATE POLICY "Users can view their own workspaces" ON workspaces
-    FOR SELECT USING (auth.uid() = owner_id);
+-- Table: users: Users can only see and update their own profile
+CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid() = id);
+
+-- Table: workspaces: Users can manage their own workspaces
+CREATE POLICY "Users can view own workspaces" ON workspaces FOR SELECT USING (auth.uid() = owner_id);
+CREATE POLICY "Users can update own workspaces" ON workspaces FOR UPDATE USING (auth.uid() = owner_id);
+CREATE POLICY "Users can insert own workspaces" ON workspaces FOR INSERT WITH CHECK (auth.uid() = owner_id);
+
+-- Table: brand_kits: Users can manage brand kits for their workspaces
+CREATE POLICY "Users can view own brand kits" ON brand_kits FOR SELECT USING (
+    workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())
+);
+CREATE POLICY "Users can update own brand kits" ON brand_kits FOR UPDATE USING (
+    workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())
+);
+CREATE POLICY "Users can insert own brand kits" ON brand_kits FOR INSERT WITH CHECK (
+    workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())
+);
+
+-- Table: social_connections: Users can manage connections for their workspaces
+CREATE POLICY "Users can manage own social connections" ON social_connections FOR ALL USING (
+    workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())
+);
+
+-- Table: posts: Users can manage posts for their workspaces
+CREATE POLICY "Users can manage own posts" ON posts FOR ALL USING (
+    workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())
+);
 
 -- 4. NEW USER REGISTRATION TRIGGER
 -- This function runs whenever a new user signs up via Supabase Auth.

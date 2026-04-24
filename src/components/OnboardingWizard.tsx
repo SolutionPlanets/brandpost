@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { 
   Building2, 
   Upload, 
@@ -14,7 +14,8 @@ import {
   Check,
   X,
   Instagram,
-  Facebook
+  Facebook,
+  Loader2
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import styles from './OnboardingWizard.module.css';
@@ -60,6 +61,7 @@ export default function OnboardingWizard() {
   const supabase = createClient();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -73,7 +75,7 @@ export default function OnboardingWizard() {
     logoUrl: null as string | null,
     logoFile: null as File | null,
     colors: { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
-    tone: 'Professional',
+    tone: 'professional',
     description: '',
     brandKitName: '',
     headingFont: 'Inter',
@@ -84,6 +86,49 @@ export default function OnboardingWizard() {
     instagram: '',
     facebook: ''
   });
+
+  useEffect(() => {
+    async function fetchExistingData() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setIsRefreshing(false);
+        return;
+      }
+
+      const { data: workspace } = await supabase
+        .from('workspaces')
+        .select('*, brand_kits(*)')
+        .eq('owner_id', user.id)
+        .maybeSingle();
+
+      if (workspace) {
+        const brandKit = workspace.brand_kits?.[0];
+        setFormData(prev => ({
+          ...prev,
+          businessName: workspace.business_name || '',
+          address: workspace.address || '',
+          pincode: workspace.pincode || '',
+          timing: workspace.business_timing || '',
+          logo: brandKit?.logo_url || null,
+          logoUrl: brandKit?.logo_url || null,
+          colors: brandKit ? {
+            primary: brandKit.primary_color || prev.colors.primary,
+            secondary: brandKit.secondary_color || prev.colors.secondary,
+            accent: brandKit.accent_color || prev.colors.accent,
+          } : prev.colors,
+          tone: brandKit?.tone ? brandKit.tone.toLowerCase() : 'professional',
+          description: brandKit?.brand_description || '',
+          brandKitName: brandKit?.brand_kit_name || '',
+          headingFont: brandKit?.heading_font || 'Inter',
+          bodyFont: brandKit?.body_font || 'Inter',
+          instagram: brandKit?.instagram_handle || '',
+          facebook: brandKit?.facebook_handle || '',
+        }));
+      }
+      setIsRefreshing(false);
+    }
+    fetchExistingData();
+  }, []);
 
   // For color extraction
   const { data: palette } = usePalette(formData.logo || '', 5, 'hex', {
@@ -117,29 +162,50 @@ export default function OnboardingWizard() {
       })
       .eq('owner_id', user.id);
 
-    if (error) console.error('Workspace update error:', error);
+    if (error) {
+      console.error('Workspace update error:', JSON.stringify(error, null, 2));
+    }
   };
 
-  const saveBrandKit = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+  const saveBrandKit = async (logoUrlOverride?: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.warn('saveBrandKit: No user session found');
+        return;
+      }
 
-    // Get workspace ID
-    const { data: workspace } = await supabase
-      .from('workspaces')
-      .select('id')
-      .eq('owner_id', user.id)
-      .single();
+      // Get workspace ID - using maybeSingle to avoid errors if multiple found (though trigger should prevent)
+      const { data: workspace, error: wsError } = await supabase
+        .from('workspaces')
+        .select('id')
+        .eq('owner_id', user.id)
+        .maybeSingle();
 
-    if (!workspace) return;
+      if (wsError) {
+        console.error('saveBrandKit: Error fetching workspace:', wsError);
+        return;
+      }
 
-    // UPSERT brand kit
-    const { error } = await supabase
-      .from('brand_kits')
-      .upsert({
+      if (!workspace) {
+        console.warn('saveBrandKit: No workspace found for user', user.id);
+        return;
+      }
+
+      console.log('saveBrandKit: Saving for workspace', workspace.id);
+
+      // Fetch existing brand kit to append 'id' if it exists. 
+      // This bypasses the need for the ON CONFLICT specifying 'workspace_id' which throws 42P10.
+      const { data: existingBrandKit } = await supabase
+        .from('brand_kits')
+        .select('id')
+        .eq('workspace_id', workspace.id)
+        .maybeSingle();
+
+      const payload: Record<string, any> = {
         workspace_id: workspace.id,
         brand_kit_name: formData.brandKitName || `${formData.businessName} Brand Kit`,
-        logo_url: formData.logoUrl || formData.logo,
+        logo_url: logoUrlOverride || formData.logoUrl || null,
         primary_color: formData.colors.primary,
         secondary_color: formData.colors.secondary,
         accent_color: formData.colors.accent,
@@ -147,11 +213,64 @@ export default function OnboardingWizard() {
         body_font: formData.bodyFont,
         brand_description: formData.description,
         tone: formData.tone,
-        instagram_handle: formData.instagram,
-        facebook_handle: formData.facebook
-      }, { onConflict: 'workspace_id' });
+      };
 
-    if (error) console.error('Brand kit upsert error:', error);
+      if (existingBrandKit?.id) {
+        payload.id = existingBrandKit.id; // Append primary key for seamless UPSERT fallback
+      }
+
+      const { error, data } = await supabase
+        .from('brand_kits')
+        .upsert(payload)
+        .select();
+
+      if (error) {
+        console.error('Brand kit upsert error:', JSON.stringify(error, null, 2));
+      } else {
+        console.log('Brand kit saved successfully:', data);
+      }
+    } catch (err) {
+      console.error('Fatal error in saveBrandKit:', err);
+    }
+  };
+
+  const submitAllData = async () => {
+    setLoading(true);
+    try {
+      await saveWorkspace();
+      
+      let finalLogoUrl = formData.logoUrl;
+      if (formData.logoFile && !finalLogoUrl) {
+        setUploading(true);
+        const fileExt = formData.logoFile.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('BrandpostAI_logos')
+          .upload(fileName, formData.logoFile);
+
+        if (uploadError) {
+          console.error('Error uploading file:', uploadError);
+          setErrors({ logo: `Upload failed: ${uploadError.message}` });
+          setUploading(false);
+          setLoading(false);
+          return;
+        }
+
+        const { data } = supabase.storage
+          .from('BrandpostAI_logos')
+          .getPublicUrl(fileName);
+
+        finalLogoUrl = data.publicUrl;
+        setUploading(false);
+      }
+      
+      await saveBrandKit(finalLogoUrl || undefined);
+      router.push('/dashboard');
+    } catch (err: any) {
+      console.error('Final submit error:', err);
+      setLoading(false);
+    }
   };
 
   const nextStep = async () => {
@@ -160,69 +279,24 @@ export default function OnboardingWizard() {
       return;
     }
     
-    setLoading(true);
-
-    if (currentStep === 1) await saveWorkspace();
-
     if (currentStep === 2) {
       if (!formData.logoUrl && !formData.logo && !formData.logoFile) {
         setErrors({ logo: 'Please upload a logo to continue' });
-        setLoading(false);
         return;
-      }
-      
-      // Upload execution is conditionally deferred precisely to Step 2 validation checkpoint
-      if (formData.logoFile && !formData.logoUrl) {
-        setUploading(true);
-        try {
-          const fileExt = formData.logoFile.name.split('.').pop();
-          const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-          const filePath = `${fileName}`;
-          
-          const { error: uploadError } = await supabase.storage
-            .from('BrandpostAI_logos')
-            .upload(filePath, formData.logoFile);
-
-          if (uploadError) {
-            console.error('Error uploading file:', uploadError);
-            setErrors({ logo: `Upload failed: ${uploadError.message}` });
-            setUploading(false);
-            setLoading(false);
-            return;
-          }
-
-          const { data } = supabase.storage
-            .from('BrandpostAI_logos')
-            .getPublicUrl(filePath);
-
-          setFormData(prev => ({ ...prev, logoUrl: data.publicUrl }));
-          setErrors(prev => ({ ...prev, logo: '' }));
-        } catch (err: any) {
-          console.error('Error in upload:', err);
-          setErrors({ logo: `Upload error: ${err?.message || 'Unknown error'}` });
-          setUploading(false);
-          setLoading(false);
-          return;
-        } finally {
-          setUploading(false);
-        }
       }
     }
 
-    if (currentStep === 4) await saveBrandKit();
-    
     if (currentStep < steps.length) {
       setCurrentStep(prev => prev + 1);
     } else {
-      router.push('/dashboard');
+      await submitAllData();
     }
-    setLoading(false);
   };
 
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
 
-  const skipSocials = () => {
-    router.push('/dashboard');
+  const skipSocials = async () => {
+    await submitAllData();
   };
 
   const togglePlatform = (platform: string) => {
@@ -414,10 +488,10 @@ export default function OnboardingWizard() {
             <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
               <label>Tone</label>
               <select value={formData.tone} onChange={(e) => setFormData({...formData, tone: e.target.value})}>
-                <option>Professional</option>
-                <option>Playful</option>
-                <option>Friendly</option>
-                <option>Authoritative</option>
+                <option value="professional">Professional</option>
+                <option value="playful">Playful</option>
+                <option value="friendly">Friendly</option>
+                <option value="authoritative">Authoritative</option>
               </select>
             </div>
 
@@ -516,6 +590,14 @@ export default function OnboardingWizard() {
         return null;
     }
   };
+
+  if (isRefreshing) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
+        <Loader2 size={32} className="animate-spin" style={{ color: 'var(--primary)' }} />
+      </div>
+    );
+  }
 
   return (
     <div className={styles.wizard}>

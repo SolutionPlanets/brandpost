@@ -6,6 +6,8 @@ import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import styles from './DashboardLayout.module.css';
 
+import { BrandProvider } from '@/contexts/BrandContext';
+
 export default function DashboardLayout({
   children,
 }: {
@@ -14,15 +16,17 @@ export default function DashboardLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
-    <div className={styles.container}>
-      <Sidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
-      
-      <main className={`${styles.main} ${sidebarCollapsed ? styles.expanded : ''}`}>
-        <Header />
-        <div className={styles.content}>
-          {children}
-        </div>
-      </main>
-    </div>
+    <BrandProvider>
+      <div className={styles.container}>
+        <Sidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
+        
+        <main className={`${styles.main} ${sidebarCollapsed ? styles.expanded : ''}`}>
+          <Header />
+          <div className={styles.content}>
+            {children}
+          </div>
+        </main>
+      </div>
+    </BrandProvider>
   );
 }
