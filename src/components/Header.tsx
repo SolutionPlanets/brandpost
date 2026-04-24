@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Bell, Search, User, MapPin, Hash, MessageSquare, Share2, ChevronDown } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import styles from './Header.module.css';
 import { useBrand } from '@/contexts/BrandContext';
 
 export default function Header() {
-  const { businessName, logo, refreshBrandData } = useBrand();
+  const { businessName, ownerName, logo, refreshBrandData } = useBrand();
   const [userData, setUserData] = useState<any>({
     email: '',
     address: 'Set your address',
@@ -14,6 +14,7 @@ export default function Header() {
     facebook: 'facebook.com'
   });
   const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -52,6 +53,23 @@ export default function Header() {
     fetchDetails();
   }, [businessName]); // Refresh when context changes
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDropdown]);
+
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
@@ -76,11 +94,11 @@ export default function Header() {
           <span className={styles.badge}></span>
         </button>
         
-        <div className={styles.profileContainer}>
+        <div className={styles.profileContainer} ref={dropdownRef}>
           <div className={styles.profile} onClick={() => setShowDropdown(!showDropdown)}>
             <div className={styles.userInfo}>
-              <span className={styles.userName}>{businessName || 'My Brand'}</span>
-              <span className={styles.userRole}>Brand Manager</span>
+              <span className={styles.userName}>{ownerName || businessName || 'My Brand'}</span>
+              <span className={styles.userRole}>{businessName}</span>
             </div>
             <div className={styles.avatar}>
               {logo ? (
@@ -101,7 +119,8 @@ export default function Header() {
                   <div className={styles.dropdownAvatar}><User /></div>
                 )}
                 <div>
-                  <h3>{businessName || 'My Brand'}</h3>
+                  <h3>{ownerName || businessName || 'My Brand'}</h3>
+                  <p className={styles.dropdownBizName}>{businessName}</p>
                   <p>{userData.email}</p>
                 </div>
               </div>

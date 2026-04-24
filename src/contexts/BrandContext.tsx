@@ -5,6 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 
 interface BrandContextType {
   fullName: string;
+  ownerName: string;
   businessName: string;
   logo: string | null;
   colors: {
@@ -22,6 +23,7 @@ const BrandContext = createContext<BrandContextType | undefined>(undefined);
 
 export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [fullName, setFullName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [logo, setLogo] = useState<string | null>(null);
   const [colors, setColors] = useState({
@@ -53,6 +55,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       .select(`
         id,
         business_name,
+        owner_name,
         brand_kits (*)
       `)
       .eq('owner_id', user.id)
@@ -65,6 +68,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         ? workspace.business_name 
         : '';
       setBusinessName(bName);
+      setOwnerName(workspace.owner_name || '');
       setLogo(brandKit?.logo_url || null);
       if (brandKit?.primary_color) {
         setColors({
@@ -77,6 +81,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       // Sync with localStorage for legacy components
       localStorage.setItem('brandpost_user_data', JSON.stringify({
         fullName: userProfile?.full_name || '',
+        ownerName: workspace.owner_name || '',
         businessName: bName,
         logo: brandKit?.logo_url || null,
       }));
@@ -94,13 +99,15 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('brandpost_user_data', JSON.stringify({
       ...parsedData,
       fullName,
+      ownerName,
       businessName,
       logo
     }));
-  }, [fullName, businessName, logo]);
+  }, [fullName, ownerName, businessName, logo]);
 
   const value = React.useMemo(() => ({
     fullName,
+    ownerName,
     businessName,
     logo,
     colors,
@@ -108,7 +115,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     setLogo,
     setColors,
     refreshBrandData
-  }), [fullName, businessName, logo, colors]);
+  }), [fullName, ownerName, businessName, logo, colors]);
 
   return (
     <BrandContext.Provider value={value}>

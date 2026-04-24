@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { 
-  Building2, 
-  Upload, 
-  Palette, 
-  MessageSquare, 
-  Share2, 
-  FacebookIcon, 
+import {
+  Building2,
+  Upload,
+  Palette,
+  MessageSquare,
+  Share2,
+  FacebookIcon,
   InstagramIcon,
   ArrowRight,
   ArrowLeft,
@@ -15,7 +15,8 @@ import {
   X,
   Instagram,
   Facebook,
-  Loader2
+  Loader2,
+  Sparkles
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import styles from './OnboardingWizard.module.css';
@@ -56,17 +57,28 @@ const steps = [
   { title: 'Connect', icon: Share2 },
 ];
 
+const HOURS = [
+  '12 AM', '1 AM', '2 AM', '3 AM', '4 AM', '5 AM', '6 AM', '7 AM', '8 AM', '9 AM', '10 AM', '11 AM',
+  '12 PM', '1 PM', '2 PM', '3 PM', '4 PM', '5 PM', '6 PM', '7 PM', '8 PM', '9 PM', '10 PM', '11 PM'
+];
+
 export default function OnboardingWizard() {
   const router = useRouter();
   const supabase = createClient();
   const [currentStep, setCurrentStep] = useState(1);
+  const [isOpenOpen, setIsOpenOpen] = useState(false);
+  const [isOpenClose, setIsOpenClose] = useState(false);
+  const dropdownOpenRef = useRef<HTMLDivElement>(null);
+  const dropdownCloseRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
+    ownerName: '',
     businessName: '',
     address: '',
     pincode: '',
@@ -105,6 +117,7 @@ export default function OnboardingWizard() {
         const brandKit = workspace.brand_kits?.[0];
         setFormData(prev => ({
           ...prev,
+          ownerName: workspace.owner_name || '',
           businessName: workspace.business_name || '',
           address: workspace.address || '',
           pincode: workspace.pincode || '',
@@ -124,6 +137,9 @@ export default function OnboardingWizard() {
           instagram: brandKit?.instagram_handle || '',
           facebook: brandKit?.facebook_handle || '',
         }));
+        if (workspace.business_name) {
+          setIsEditMode(true);
+        }
       }
       setIsRefreshing(false);
     }
@@ -148,14 +164,28 @@ export default function OnboardingWizard() {
     }
   };
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownOpenRef.current && !dropdownOpenRef.current.contains(event.target as Node)) {
+        setIsOpenOpen(false);
+      }
+      if (dropdownCloseRef.current && !dropdownCloseRef.current.contains(event.target as Node)) {
+        setIsOpenClose(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const saveWorkspace = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const { error } = await supabase
       .from('workspaces')
-      .update({ 
+      .update({
         business_name: formData.businessName,
+        owner_name: formData.ownerName,
         address: formData.address,
         pincode: formData.pincode,
         business_timing: formData.timing
@@ -238,13 +268,13 @@ export default function OnboardingWizard() {
     setLoading(true);
     try {
       await saveWorkspace();
-      
+
       let finalLogoUrl = formData.logoUrl;
       if (formData.logoFile && !finalLogoUrl) {
         setUploading(true);
         const fileExt = formData.logoFile.name.split('.').pop();
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        
+
         const { error: uploadError } = await supabase.storage
           .from('BrandpostAI_logos')
           .upload(fileName, formData.logoFile);
@@ -264,7 +294,7 @@ export default function OnboardingWizard() {
         finalLogoUrl = data.publicUrl;
         setUploading(false);
       }
-      
+
       await saveBrandKit(finalLogoUrl || undefined);
       router.push('/dashboard');
     } catch (err: any) {
@@ -274,11 +304,17 @@ export default function OnboardingWizard() {
   };
 
   const nextStep = async () => {
-    if (currentStep === 1 && !formData.businessName.trim()) {
-      setErrors({ businessName: 'Business Name is required' });
-      return;
+    if (currentStep === 1) {
+      const newErrors: Record<string, string> = {};
+      if (!formData.businessName.trim()) newErrors.businessName = 'Business Name is required';
+      if (!formData.ownerName.trim()) newErrors.ownerName = 'Owner Name is required';
+
+      if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors);
+        return;
+      }
     }
-    
+
     if (currentStep === 2) {
       if (!formData.logoUrl && !formData.logo && !formData.logoFile) {
         setErrors({ logo: 'Please upload a logo to continue' });
@@ -312,7 +348,7 @@ export default function OnboardingWizard() {
     if (file && (file.type === 'image/png' || file.type === 'image/jpeg' || file.type === 'image/svg+xml')) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setFormData(prev => ({...prev, logo: e.target?.result as string, logoFile: file }));
+        setFormData(prev => ({ ...prev, logo: e.target?.result as string, logoFile: file }));
       };
       reader.readAsDataURL(file);
     }
@@ -335,53 +371,172 @@ export default function OnboardingWizard() {
   };
 
   const renderStep = () => {
-    switch(currentStep) {
+    switch (currentStep) {
       case 1:
         return (
           <div className={styles.stepContent}>
             <h2>Tell us about your business</h2>
             <p>We'll use this to personalize your content and profile.</p>
-            <div className={styles.inputGroup}>
-              <label>Business Name <span style={{color: 'red'}}>*</span></label>
-              <input 
-                type="text" 
-                placeholder="e.g. Pixel Agency" 
-                value={formData.businessName}
-                onChange={(e) => {
-                  setFormData({...formData, businessName: e.target.value});
-                  if (errors.businessName) setErrors({...errors, businessName: ''});
-                }}
-                style={errors.businessName ? { borderColor: 'red' } : {}}
-              />
-              {errors.businessName && <span style={{color: 'red', fontSize: '12px', marginTop: '4px', display: 'block'}}>{errors.businessName}</span>}
+            <div className={styles.inputGrid}>
+              <div className={styles.inputGroup}>
+                <label>Business Name <span style={{ color: 'red' }}>*</span></label>
+                <input
+                  type="text"
+                  placeholder="e.g. Pixel Agency"
+                  value={formData.businessName}
+                  onChange={(e) => {
+                    setFormData({ ...formData, businessName: e.target.value });
+                    if (errors.businessName) setErrors({ ...errors, businessName: '' });
+                  }}
+                  style={errors.businessName ? { borderColor: 'red' } : {}}
+                />
+                {errors.businessName && <span style={{ color: 'red', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.businessName}</span>}
+              </div>
+              <div className={styles.inputGroup}>
+                <label>Business Owner Name <span style={{ color: 'red' }}>*</span></label>
+                <input
+                  type="text"
+                  placeholder="e.g. Chirag Mutha"
+                  value={formData.ownerName}
+                  onChange={(e) => {
+                    setFormData({ ...formData, ownerName: e.target.value });
+                    if (errors.ownerName) setErrors({ ...errors, ownerName: '' });
+                  }}
+                  style={errors.ownerName ? { borderColor: 'red' } : {}}
+                />
+                {errors.ownerName && <span style={{ color: 'red', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.ownerName}</span>}
+              </div>
             </div>
             <div className={styles.inputGroup}>
               <label>Address</label>
-              <input 
-                type="text" 
-                placeholder="Shop/Office location" 
+              <input
+                type="text"
+                placeholder="Shop/Office location"
                 value={formData.address}
-                onChange={(e) => setFormData({...formData, address: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               />
             </div>
             <div className={styles.inputGrid}>
               <div className={styles.inputGroup}>
                 <label>Pincode</label>
-                <input 
-                  type="text" 
-                  placeholder="6-digit code" 
+                <input
+                  type="text"
+                  placeholder="6-digit code"
                   value={formData.pincode}
-                  onChange={(e) => setFormData({...formData, pincode: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
                 />
               </div>
               <div className={styles.inputGroup}>
                 <label>Business Timing</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. 9 AM - 8 PM" 
-                  value={formData.timing}
-                  onChange={(e) => setFormData({...formData, timing: e.target.value})}
-                />
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', position: 'relative' }}>
+                  {/* Open Time Custom Dropdown */}
+                  <div style={{ flex: 1, position: 'relative' }} ref={dropdownOpenRef}>
+                    <div 
+                      onClick={() => setIsOpenOpen(!isOpenOpen)}
+                      style={{ 
+                        height: '40px', 
+                        padding: '0 0.75rem', 
+                        fontSize: '1rem', 
+                        border: '1px solid var(--border)', 
+                        borderRadius: 'var(--radius-md)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        background: 'white'
+                      }}
+                    >
+                      <span>{formData.timing.split(' - ')[0] || 'Open'}</span>
+                      <span style={{ fontSize: '0.8rem' }}>▼</span>
+                    </div>
+                    {isOpenOpen && (
+                      <div style={{ 
+                        position: 'absolute', 
+                        top: '44px', 
+                        left: 0, 
+                        right: 0, 
+                        maxHeight: '200px', 
+                        overflowY: 'auto', 
+                        background: 'white', 
+                        border: '1px solid var(--border)', 
+                        borderRadius: 'var(--radius-md)',
+                        zIndex: 100,
+                        boxShadow: 'var(--shadow-lg)'
+                      }}>
+                        {HOURS.map(h => (
+                          <div 
+                            key={`open-${h}`}
+                            onClick={() => {
+                              const end = formData.timing.split(' - ')[1] || '6 PM';
+                              setFormData({...formData, timing: `${h} - ${end}`});
+                              setIsOpenOpen(false);
+                            }}
+                            style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}
+                            onMouseOver={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            {h}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>to</span>
+
+                  {/* Close Time Custom Dropdown */}
+                  <div style={{ flex: 1, position: 'relative' }} ref={dropdownCloseRef}>
+                    <div 
+                      onClick={() => setIsOpenClose(!isOpenClose)}
+                      style={{ 
+                        height: '40px', 
+                        padding: '0 0.75rem', 
+                        fontSize: '1rem', 
+                        border: '1px solid var(--border)', 
+                        borderRadius: 'var(--radius-md)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        background: 'white'
+                      }}
+                    >
+                      <span>{formData.timing.split(' - ')[1] || 'Close'}</span>
+                      <span style={{ fontSize: '0.8rem' }}>▼</span>
+                    </div>
+                    {isOpenClose && (
+                      <div style={{ 
+                        position: 'absolute', 
+                        top: '44px', 
+                        left: 0, 
+                        right: 0, 
+                        maxHeight: '200px', 
+                        overflowY: 'auto', 
+                        background: 'white', 
+                        border: '1px solid var(--border)', 
+                        borderRadius: 'var(--radius-md)',
+                        zIndex: 100,
+                        boxShadow: 'var(--shadow-lg)'
+                      }}>
+                        {HOURS.map(h => (
+                          <div 
+                            key={`close-${h}`}
+                            onClick={() => {
+                              const start = formData.timing.split(' - ')[0] || '9 AM';
+                              setFormData({...formData, timing: `${start} - ${h}`});
+                              setIsOpenClose(false);
+                            }}
+                            style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}
+                            onMouseOver={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            {h}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -391,12 +546,12 @@ export default function OnboardingWizard() {
           <div className={styles.stepContent}>
             <h2>Upload your logo</h2>
             <p>This will be added to your generated posts.</p>
-            {errors.logo && <div style={{color: 'red', marginBottom: '10px', fontSize: '14px', fontWeight: 500}}>{errors.logo}</div>}
-            
+            {errors.logo && <div style={{ color: 'red', marginBottom: '10px', fontSize: '14px', fontWeight: 500 }}>{errors.logo}</div>}
+
             {formData.logo ? (
               <div className={styles.previewContainer}>
                 <img src={formData.logo} alt="Logo Preview" className={styles.previewImage} />
-                <button 
+                <button
                   className={styles.removeBtn}
                   onClick={() => setFormData({ ...formData, logo: null, logoUrl: null, logoFile: null })}
                 >
@@ -404,15 +559,15 @@ export default function OnboardingWizard() {
                 </button>
               </div>
             ) : (
-              <div 
+              <div
                 className={`${styles.uploadBox} ${isDragging ? styles.dragging : ''}`}
                 onDragOver={onDragOver}
                 onDragLeave={onDragLeave}
                 onDrop={onDrop}
                 onClick={() => fileInputRef.current?.click()}
               >
-                <input 
-                  type="file" 
+                <input
+                  type="file"
                   ref={fileInputRef}
                   onChange={(e) => e.target.files && handleFile(e.target.files[0])}
                   accept="image/png, image/jpeg, image/svg+xml"
@@ -430,15 +585,15 @@ export default function OnboardingWizard() {
           <div className={styles.stepContent}>
             <h2>Choose your colors</h2>
             <p>Select colors that represent your brand.</p>
-            
+
             {formData.logo && (
               <div className={styles.autoDetectContainer}>
-                <button 
-                  className={styles.autoDetectBtn}
+                <button
+                  className={styles.aiColorBtn}
                   onClick={handleAutoDetect}
                   type="button"
                 >
-                  <Palette size={18} /> Auto detect from Logo
+                  <Sparkles size={20} /> Auto-detect from Logo
                 </button>
               </div>
             )}
@@ -447,22 +602,57 @@ export default function OnboardingWizard() {
               <div className={styles.colorPicker}>
                 <label>Primary</label>
                 <div className={styles.colorInput}>
-                  <input type="color" value={formData.colors.primary} onChange={(e) => setFormData({...formData, colors: {...formData.colors, primary: e.target.value}})} />
-                  <span>{formData.colors.primary}</span>
+                  <input
+                    type="text"
+                    className={styles.hexText}
+                    value={formData.colors.primary}
+                    onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, primary: e.target.value } })}
+                  />
+                  <div className={styles.pickerWrapper} style={{ backgroundColor: formData.colors.primary }}>
+                    <input
+                      type="color"
+                      value={formData.colors.primary}
+                      onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, primary: e.target.value } })}
+                    />
+                  </div>
                 </div>
               </div>
+
               <div className={styles.colorPicker}>
                 <label>Secondary</label>
                 <div className={styles.colorInput}>
-                  <input type="color" value={formData.colors.secondary} onChange={(e) => setFormData({...formData, colors: {...formData.colors, secondary: e.target.value}})} />
-                  <span>{formData.colors.secondary}</span>
+                  <input
+                    type="text"
+                    className={styles.hexText}
+                    value={formData.colors.secondary}
+                    onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, secondary: e.target.value } })}
+                  />
+                  <div className={styles.pickerWrapper} style={{ backgroundColor: formData.colors.secondary }}>
+                    <input
+                      type="color"
+                      value={formData.colors.secondary}
+                      onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, secondary: e.target.value } })}
+                    />
+                  </div>
                 </div>
               </div>
+
               <div className={styles.colorPicker}>
                 <label>Accent</label>
                 <div className={styles.colorInput}>
-                  <input type="color" value={formData.colors.accent} onChange={(e) => setFormData({...formData, colors: {...formData.colors, accent: e.target.value}})} />
-                  <span>{formData.colors.accent}</span>
+                  <input
+                    type="text"
+                    className={styles.hexText}
+                    value={formData.colors.accent}
+                    onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, accent: e.target.value } })}
+                  />
+                  <div className={styles.pickerWrapper} style={{ backgroundColor: formData.colors.accent }}>
+                    <input
+                      type="color"
+                      value={formData.colors.accent}
+                      onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, accent: e.target.value } })}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -474,20 +664,20 @@ export default function OnboardingWizard() {
             <style dangerouslySetInnerHTML={{ __html: `@import url('https://fonts.googleapis.com/css2?family=Roboto&family=Inter&family=Open+Sans&family=Lato&family=Poppins&family=Montserrat&family=Oswald&family=Playfair+Display&family=Raleway&family=Merriweather&family=Lora&display=swap');` }} />
             <h2>Brand Voice</h2>
             <p>How should your brand speak to its audience?</p>
-            
+
             <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
               <label>Brand Kit Name</label>
-              <input 
-                type="text" 
-                placeholder="e.g. Main Brand" 
+              <input
+                type="text"
+                placeholder="e.g. Main Brand"
                 value={formData.brandKitName}
-                onChange={(e) => setFormData({...formData, brandKitName: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, brandKitName: e.target.value })}
               />
             </div>
 
             <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
               <label>Tone</label>
-              <select value={formData.tone} onChange={(e) => setFormData({...formData, tone: e.target.value})}>
+              <select value={formData.tone} onChange={(e) => setFormData({ ...formData, tone: e.target.value })}>
                 <option value="professional">Professional</option>
                 <option value="playful">Playful</option>
                 <option value="friendly">Friendly</option>
@@ -498,31 +688,31 @@ export default function OnboardingWizard() {
             <div className={styles.inputGrid} style={{ marginBottom: '15px' }}>
               <div className={styles.inputGroup}>
                 <label>Heading Font</label>
-                <Select 
+                <Select
                   options={fontOptions}
                   styles={customSelectStyles}
                   value={fontOptions.find(opt => opt.value === formData.headingFont) || fontOptions[1]}
-                  onChange={(selected: any) => setFormData({...formData, headingFont: selected.value})}
+                  onChange={(selected: any) => setFormData({ ...formData, headingFont: selected.value })}
                 />
               </div>
               <div className={styles.inputGroup}>
                 <label>Body Font</label>
-                <Select 
+                <Select
                   options={fontOptions}
                   styles={customSelectStyles}
                   value={fontOptions.find(opt => opt.value === formData.bodyFont) || fontOptions[1]}
-                  onChange={(selected: any) => setFormData({...formData, bodyFont: selected.value})}
+                  onChange={(selected: any) => setFormData({ ...formData, bodyFont: selected.value })}
                 />
               </div>
             </div>
 
             <div className={styles.inputGroup}>
               <label>Brief Description</label>
-              <textarea 
+              <textarea
                 className={styles.descriptionTextarea}
                 placeholder="Briefly describe what you do..."
                 value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               ></textarea>
             </div>
           </div>
@@ -554,36 +744,7 @@ export default function OnboardingWizard() {
                 <button className={styles.connectBtn}>Connect</button>
               </div>
             </div>
-            <div className={styles.socialInputs}>
-              <div className={styles.inputGroup}>
-                <label>Instagram Handle</label>
-                <div className={styles.inputWithIcon}>
-                  <Instagram size={18} />
-                  <input 
-                    type="text" 
-                    placeholder="@yourbrand" 
-                    value={formData.instagram}
-                    onChange={(e) => setFormData({...formData, instagram: e.target.value})}
-                  />
-                </div>
-              </div>
-              <div className={styles.inputGroup}>
-                <label>Facebook Page URL</label>
-                <div className={styles.inputWithIcon}>
-                  <Facebook size={18} />
-                  <input 
-                    type="text" 
-                    placeholder="facebook.com/yourbrand" 
-                    value={formData.facebook}
-                    onChange={(e) => setFormData({...formData, facebook: e.target.value})}
-                  />
-                </div>
-              </div>
-            </div>
 
-            <div style={{ marginTop: '20px', textAlign: 'center' }}>
-              <button className={styles.skipBtn} onClick={skipSocials}>Skip for now</button>
-            </div>
           </div>
         );
       default:
@@ -617,19 +778,19 @@ export default function OnboardingWizard() {
         {renderStep()}
 
         <div className={styles.footer}>
-          <button 
-            className={styles.backBtn} 
+          <button
+            className={styles.backBtn}
             onClick={prevStep}
             disabled={currentStep === 1}
           >
             <ArrowLeft size={18} /> Back
           </button>
-          <button 
-            className={styles.nextBtn} 
+          <button
+            className={styles.nextBtn}
             onClick={nextStep}
             disabled={loading || uploading}
           >
-            {loading ? 'Saving...' : uploading ? 'Uploading...' : (currentStep === steps.length ? 'Get Started' : 'Next')} <ArrowRight size={18} />
+            {loading ? 'Saving...' : uploading ? 'Uploading...' : (currentStep === steps.length ? (isEditMode ? 'Changes Done' : 'Get Started') : 'Next')} <ArrowRight size={18} />
           </button>
         </div>
       </div>

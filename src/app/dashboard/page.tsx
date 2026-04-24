@@ -111,7 +111,7 @@ function daysUntil(dateStr: string): number {
 
 // ── Component ────────────────────────────────────────────────────────
 export default function DashboardHome() {
-  const { fullName, businessName } = useBrand();
+  const { fullName, ownerName, businessName } = useBrand();
   const [userData, setUserData] = useState<any>(null);
   const [usageUsed] = useState(18);
   const supabase = createClient();
@@ -138,7 +138,7 @@ export default function DashboardHome() {
       {/* ── Header ──────────────────────────────────────────── */}
       <header className={styles.header}>
         <div>
-          <h1 className={styles.title}>Welcome back, {fullName || userData?.fullName || 'User'}!</h1>
+          <h1 className={styles.title}>Welcome back, {ownerName || fullName || userData?.fullName || 'User'}!</h1>
           <p className={styles.subtitle}>Here&apos;s what&apos;s happening with your brand today.</p>
         </div>
         <Link href="/dashboard/composer" className={styles.createBtn}>

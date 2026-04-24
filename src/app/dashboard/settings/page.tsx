@@ -27,7 +27,7 @@ const TABS = [
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [saved, setSaved] = useState(false);
-  const { businessName, setBusinessName } = useBrand();
+  const { businessName, setBusinessName, ownerName, refreshBrandData } = useBrand();
   const supabase = createClient();
 
   const [profileData, setProfileData] = useState({
@@ -60,8 +60,12 @@ export default function SettingsPage() {
         .maybeSingle();
 
       if (workspace) {
+        setProfileData(prev => ({
+          ...prev,
+          fullName: workspace.owner_name || prev.fullName
+        }));
         setWorkspaceData({
-          name: workspace.name === 'My Workspace' ? '' : (workspace.name || ''),
+          name: workspace.business_name === 'My Workspace' ? '' : (workspace.business_name || ''),
           platform: 'both',
           tone: 'professional'
         });
@@ -90,7 +94,10 @@ export default function SettingsPage() {
       if (workspace) {
         const { error: wsError } = await supabase
           .from('workspaces')
-          .update({ name: businessName })
+          .update({ 
+            business_name: businessName,
+            owner_name: profileData.fullName
+          })
           .eq('id', workspace.id);
         
         if (wsError) throw wsError;
@@ -102,6 +109,9 @@ export default function SettingsPage() {
           .eq('workspace_id', workspace.id);
           
         if (bkError) throw bkError;
+        
+        // Refresh global context
+        await refreshBrandData();
       }
 
       setSaved(true);
@@ -134,18 +144,7 @@ export default function SettingsPage() {
             placeholder="email@example.com"
           />
         </div>
-        <div className={styles.formGroup}>
-          <label>Timezone</label>
-          <select 
-            value={profileData.timezone}
-            onChange={(e) => setProfileData({...profileData, timezone: e.target.value})}
-          >
-            <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
-            <option value="America/New_York">America/New_York (EST)</option>
-            <option value="Europe/London">Europe/London (GMT)</option>
-            <option value="Asia/Dubai">Asia/Dubai (GST)</option>
-          </select>
-        </div>
+
       </div>
 
       <div className={styles.dangerZone}>
