@@ -87,8 +87,15 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .stepContent h2 {
@@ -265,8 +272,13 @@
   margin: 0;
 }
 
-.facebookIcon { color: #1877f2; }
-.instagramIcon { color: #e4405f; }
+.facebookIcon {
+  color: #1877f2;
+}
+
+.instagramIcon {
+  color: #e4405f;
+}
 
 .connectBtn {
   background-color: var(--background);
@@ -726,13 +738,17 @@
   .socialGrid {
     grid-template-columns: 1fr;
   }
-  
+
   .stepTitle {
     display: none;
   }
+<<<<<<< Updated upstream
 
   .postSelectionGrid {
     flex-direction: column;
     align-items: center;
   }
 }
+=======
+}
+>>>>>>> Stashed changes

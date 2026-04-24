@@ -1,5 +1,22 @@
+<<<<<<< Updated upstream
 import { useState, useEffect, useRef } from 'react';
 import { Bell, Search, User, MapPin, Mail, Hash, MessageSquare, Share2, ChevronDown } from 'lucide-react';
+=======
+import { useState, useEffect } from 'react';
+import { 
+  Bell, 
+  Search, 
+  User, 
+  MapPin, 
+  Hash, 
+  MessageSquare, 
+  Share2, 
+  ChevronDown,
+  Instagram,
+  Facebook,
+  LogOut
+} from 'lucide-react';
+>>>>>>> Stashed changes
 import { createClient } from '@/utils/supabase/client';
 import { useBrand } from '@/contexts/BrandContext';
 import styles from './Header.module.css';
@@ -107,17 +124,29 @@ export default function Header() {
                 </div>
                 <div className={styles.divider}></div>
                 <div className={styles.socialLink}>
+<<<<<<< Updated upstream
                   <Share2 size={16} />
                   <span>{userData?.instagram || '@instagram'}</span>
                 </div>
                 <div className={styles.socialLink}>
                   <MessageSquare size={16} />
                   <span>{userData?.facebook || 'facebook.com'}</span>
+=======
+                  <Instagram size={16} />
+                  <span>{userData.instagram}</span>
+                </div>
+                <div className={styles.socialLink}>
+                  <Facebook size={16} />
+                  <span>{userData.facebook}</span>
+>>>>>>> Stashed changes
                 </div>
               </div>
               
               <div className={styles.dropdownFooter}>
-                <button className={styles.logoutBtn} onClick={handleLogout}>Logout</button>
+                <button className={styles.logoutBtn} onClick={handleLogout}>
+                  <LogOut size={16} />
+                  <span>Logout</span>
+                </button>
               </div>
             </div>
           )}

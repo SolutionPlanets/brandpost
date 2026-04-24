@@ -1,5 +1,6 @@
 import { createBrowserClient, type SupabaseClient } from '@supabase/ssr';
 
+<<<<<<< Updated upstream
 let client: SupabaseClient | undefined;
 
 export function createClient() {
@@ -11,4 +12,11 @@ export function createClient() {
   );
 
   return client;
+=======
+export function createClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+  );
+>>>>>>> Stashed changes
 }

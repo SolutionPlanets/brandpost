@@ -23,7 +23,7 @@ export default function Home() {
           <span>Automated by AI.</span>
         </h1>
         <p className={styles.heroSubtitle}>
-          Create consistent, professional brand posts in seconds. Connect your brand kit, 
+          Create consistent, professional brand posts in seconds. Connect your brand kit,
           let AI generate the content, and schedule everything in one click.
         </p>
         <div className={styles.heroActions}>
