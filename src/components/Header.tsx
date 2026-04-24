@@ -16,6 +16,9 @@ import {
   Facebook,
   LogOut
 } from 'lucide-react';
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 import { createClient } from '@/utils/supabase/client';
 import { useBrand } from '@/contexts/BrandContext';
@@ -125,6 +128,7 @@ export default function Header() {
                 <div className={styles.divider}></div>
                 <div className={styles.socialLink}>
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                   <Share2 size={16} />
                   <span>{userData?.instagram || '@instagram'}</span>
                 </div>
@@ -136,6 +140,12 @@ export default function Header() {
                   <span>{userData.instagram}</span>
                 </div>
                 <div className={styles.socialLink}>
+=======
+                  <Instagram size={16} />
+                  <span>{userData.instagram}</span>
+                </div>
+                <div className={styles.socialLink}>
+>>>>>>> Stashed changes
                   <Facebook size={16} />
                   <span>{userData.facebook}</span>
 >>>>>>> Stashed changes

@@ -82,6 +82,9 @@ export default function LoginPage() {
     } else {
       router.push('/onboarding');
 >>>>>>> Stashed changes
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
     }
   };

@@ -1,6 +1,7 @@
 'use client';
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 import { useState, useEffect } from 'react';
 import { Upload, Plus, Check } from 'lucide-react';
 import { useBrand } from '@/contexts/BrandContext';
@@ -24,6 +25,15 @@ import { createClient } from '../utils/supabase/client';
 import styles from './BrandKitForm.module.css';
 
 export default function BrandKitForm() {
+=======
+import { useState, useRef, useEffect } from 'react';
+import { Upload, Plus, Check, X, Wand2, Loader2, Building2 } from 'lucide-react';
+import { getPalette } from 'colorthief';
+import { createClient } from '../utils/supabase/client';
+import styles from './BrandKitForm.module.css';
+
+export default function BrandKitForm() {
+>>>>>>> Stashed changes
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -82,15 +92,64 @@ export default function BrandKitForm() {
     }
   };
 
+  const supabase = createClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetchBrandKit();
+  }, []);
+
+  const fetchBrandKit = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: brandKit, error } = await supabase
+        .from('brand_kits')
+        .select(`
+          *,
+          workspaces!inner (owner_id)
+        `)
+        .eq('workspaces.owner_id', user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (brandKit) {
+        setFormData({
+          businessName: brandKit.name || '',
+          logo: brandKit.logo_url || null,
+          colors: {
+            primary: brandKit.primary_color || '#4f46e5',
+            secondary: brandKit.secondary_color || '#64748b',
+            accent: brandKit.accent_color || '#06b6d4'
+          },
+          headingFont: brandKit.heading_font || 'Inter',
+          bodyFont: brandKit.body_font || 'Inter',
+          tone: brandKit.tone ? brandKit.tone.charAt(0).toUpperCase() + brandKit.tone.slice(1) : 'Professional',
+          description: brandKit.brand_description || '',
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching brand kit:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && (file.type === 'image/png' || file.type === 'image/jpeg' || file.type === 'image/svg+xml')) {
       const reader = new FileReader();
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
       reader.onloadend = () => {
         const result = reader.result as string;
         setLogoPreview(result);
         setLogo(result);
+=======
+      reader.onload = (event) => {
+        setFormData({ ...formData, logo: event.target?.result as string });
+>>>>>>> Stashed changes
 =======
       reader.onload = (event) => {
         setFormData({ ...formData, logo: event.target?.result as string });
@@ -212,6 +271,7 @@ export default function BrandKitForm() {
           </div>
         </div>
 
+<<<<<<< Updated upstream
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Business Name</h2>
           <input 
@@ -223,6 +283,8 @@ export default function BrandKitForm() {
           />
         </section>
 
+=======
+>>>>>>> Stashed changes
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Logo</h2>
           <div className={styles.uploadArea}>
@@ -274,12 +336,17 @@ export default function BrandKitForm() {
                 <input 
                   type="color" 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                   value={colors.primary} 
                   onChange={(e) => {
                     const newColors = {...colors, primary: e.target.value};
                     setColors(newColors);
                     setContextColors(newColors);
                   }} 
+=======
+                  value={formData.colors.primary} 
+                  onChange={(e) => setFormData({...formData, colors: {...formData.colors, primary: e.target.value}})} 
+>>>>>>> Stashed changes
 =======
                   value={formData.colors.primary} 
                   onChange={(e) => setFormData({...formData, colors: {...formData.colors, primary: e.target.value}})} 
@@ -294,12 +361,17 @@ export default function BrandKitForm() {
                 <input 
                   type="color" 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                   value={colors.secondary} 
                   onChange={(e) => {
                     const newColors = {...colors, secondary: e.target.value};
                     setColors(newColors);
                     setContextColors(newColors);
                   }} 
+=======
+                  value={formData.colors.secondary} 
+                  onChange={(e) => setFormData({...formData, colors: {...formData.colors, secondary: e.target.value}})} 
+>>>>>>> Stashed changes
 =======
                   value={formData.colors.secondary} 
                   onChange={(e) => setFormData({...formData, colors: {...formData.colors, secondary: e.target.value}})} 
@@ -314,12 +386,17 @@ export default function BrandKitForm() {
                 <input 
                   type="color" 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                   value={colors.accent} 
                   onChange={(e) => {
                     const newColors = {...colors, accent: e.target.value};
                     setColors(newColors);
                     setContextColors(newColors);
                   }} 
+=======
+                  value={formData.colors.accent} 
+                  onChange={(e) => setFormData({...formData, colors: {...formData.colors, accent: e.target.value}})} 
+>>>>>>> Stashed changes
 =======
                   value={formData.colors.accent} 
                   onChange={(e) => setFormData({...formData, colors: {...formData.colors, accent: e.target.value}})} 

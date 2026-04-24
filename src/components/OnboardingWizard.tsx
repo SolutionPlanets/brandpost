@@ -1,6 +1,7 @@
 'use client';
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 import { useState, useRef, useEffect } from 'react';
 import { 
   Building2, 
@@ -9,6 +10,8 @@ import {
   MessageSquare, 
   Share2, 
 =======
+=======
+>>>>>>> Stashed changes
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '../utils/supabase/client';
@@ -32,6 +35,9 @@ import {
   Instagram,
   Facebook,
   Loader2
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 } from 'lucide-react';
 import { getPalette } from 'colorthief';
@@ -52,7 +58,12 @@ export default function OnboardingWizard({ isDashboardMode = false }: { isDashbo
   const [currentStep, setCurrentStep] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+=======
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+>>>>>>> Stashed changes
 =======
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -470,6 +481,7 @@ export default function OnboardingWizard({ isDashboardMode = false }: { isDashbo
                 <label>Primary</label>
                 <div className={styles.colorInput}>
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                   <input 
                     type="text" 
                     value={formData.colors.primary} 
@@ -484,6 +496,8 @@ export default function OnboardingWizard({ isDashboardMode = false }: { isDashbo
                     />
                   </div>
 =======
+=======
+>>>>>>> Stashed changes
                   <input type="color" value={formData.colors.primary} onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, primary: e.target.value } })} />
                   <span>{formData.colors.primary}</span>
 >>>>>>> Stashed changes
@@ -492,6 +506,7 @@ export default function OnboardingWizard({ isDashboardMode = false }: { isDashbo
               <div className={styles.colorPicker}>
                 <label>Secondary</label>
                 <div className={styles.colorInput}>
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
                   <input 
                     type="text" 
@@ -507,6 +522,8 @@ export default function OnboardingWizard({ isDashboardMode = false }: { isDashbo
                     />
                   </div>
 =======
+=======
+>>>>>>> Stashed changes
                   <input type="color" value={formData.colors.secondary} onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, secondary: e.target.value } })} />
                   <span>{formData.colors.secondary}</span>
 >>>>>>> Stashed changes
@@ -669,6 +686,7 @@ export default function OnboardingWizard({ isDashboardMode = false }: { isDashbo
             className={styles.backBtn}
             onClick={prevStep}
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             disabled={currentStep === 1}
           >
             <ArrowLeft size={18} /> Back
@@ -693,6 +711,17 @@ export default function OnboardingWizard({ isDashboardMode = false }: { isDashbo
             onClick={currentStep === steps.length ? handleFinish : nextStep}
             disabled={isSaving}
           >
+=======
+            disabled={currentStep === 1 || isSaving}
+          >
+            <ArrowLeft size={18} /> Back
+          </button>
+          <button
+            className={styles.nextBtn}
+            onClick={currentStep === steps.length ? handleFinish : nextStep}
+            disabled={isSaving}
+          >
+>>>>>>> Stashed changes
             {isSaving ? (
               <>
                 <Loader2 size={18} className="animate-spin" /> Saving...
@@ -702,6 +731,9 @@ export default function OnboardingWizard({ isDashboardMode = false }: { isDashbo
                 {currentStep === steps.length ? 'Get Started' : 'Next'} <ArrowRight size={18} />
               </>
             )}
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
           </button>
         </div>
