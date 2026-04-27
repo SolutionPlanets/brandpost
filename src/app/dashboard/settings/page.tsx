@@ -201,37 +201,16 @@ export default function SettingsPage() {
       <h2 className={styles.sectionTitle}>Billing & Plan</h2>
       <p className={styles.sectionDesc}>Manage your subscription and payment details.</p>
 
-      <div className={styles.planCard}>
-        <div className={styles.planInfo}>
-          <div className={styles.planBadge}>Current Plan</div>
-          <h3 className={styles.planName}>Solo Plan</h3>
-          <p className={styles.planPrice}>Free <span>during trial</span></p>
-          <p className={styles.planTrial}>Trial ends: May 4, 2026</p>
-        </div>
-        <div className={styles.planFeatures}>
-          <div className={styles.planFeature}><Check size={14} /> 50 AI posts/month</div>
-          <div className={styles.planFeature}><Check size={14} /> 1 Workspace</div>
-          <div className={styles.planFeature}><Check size={14} /> 1 Brand Kit</div>
-          <div className={styles.planFeature}><Check size={14} /> Facebook & Instagram</div>
-        </div>
-      </div>
 
-      <div className={styles.upgradeGrid}>
-        {[
-          { name: 'SMB', price: '₹1,999/mo', posts: '200 posts/mo', kits: '3 Brand Kits' },
-          { name: 'Agency', price: '₹4,999/mo', posts: '500 posts/mo', kits: '10 Brand Kits' },
-          { name: 'Franchise', price: 'Custom', posts: 'Unlimited posts', kits: 'Unlimited Kits' },
-        ].map((plan) => (
-          <div key={plan.name} className={styles.upgradePlan}>
-            <h4>{plan.name}</h4>
-            <p className={styles.upgradePlanPrice}>{plan.price}</p>
-            <ul>
-              <li>{plan.posts}</li>
-              <li>{plan.kits}</li>
-            </ul>
-            <button className={styles.upgradeBtn}>Upgrade</button>
-          </div>
-        ))}
+      <div className={styles.newPlansSection}>
+        <h3>You haven't purchased a plan yet</h3>
+        <p>Choose a professional plan to unlock all features and grow your business.</p>
+        <button 
+          className={styles.viewPlansBtn}
+          onClick={() => window.location.href = '/pricing?from=dashboard'}
+        >
+          Buy Now
+        </button>
       </div>
     </div>
   );

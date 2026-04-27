@@ -1,0 +1,365 @@
+.container {
+  min-height: 100vh;
+  background: radial-gradient(circle at top right, #fdf4ff 0%, #f5f3ff 20%, #ffffff 50%);
+  color: #1e293b;
+  padding: 4rem 2rem;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  position: relative;
+}
+
+.backLink {
+  position: absolute;
+  top: 2rem;
+  left: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #64748b;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.backLink:hover {
+  color: #4f46e5;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 4rem;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.header h1 {
+  font-size: 3.5rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 1rem;
+  letter-spacing: -0.025em;
+}
+
+.header p {
+  font-size: 1.25rem;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.billingToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 3rem;
+}
+
+.toggleLabel {
+  font-weight: 600;
+  color: #64748b;
+  transition: color 0.2s;
+}
+
+.toggleLabelActive {
+  color: #4f46e5;
+}
+
+.toggleSwitch {
+  width: 56px;
+  height: 28px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.toggleSwitchActive {
+  background: #4f46e5;
+}
+
+.toggleKnob {
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.toggleKnobActive {
+  transform: translateX(28px);
+}
+
+.pricingGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto 6rem;
+}
+
+.planCard {
+  background: white;
+  border-radius: 20px;
+  padding: 1.75rem;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.planCard:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.1);
+  border-color: #c7d2fe;
+}
+
+.featuredCard {
+  border: 2px solid #4f46e5;
+  z-index: 10;
+}
+
+.badge {
+  position: absolute;
+  top: 1.25rem;
+  right: -2rem;
+  background: #4f46e5;
+  color: white;
+  padding: 0.5rem 3rem;
+  transform: rotate(45deg);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.planName {
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #4f46e5;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.05em;
+}
+
+.targetUser {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: #0f172a;
+}
+
+.priceContainer {
+  margin-bottom: 2rem;
+}
+
+.priceMain {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #0f172a;
+  display: flex;
+  align-items: baseline;
+}
+
+.pricePeriod {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #64748b;
+  margin-left: 0.25rem;
+}
+
+.priceBreakdown {
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-left: 0.5rem;
+}
+
+.priceSecondary {
+  font-size: 1rem;
+  color: #64748b;
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+.billingNote {
+  font-size: 0.8125rem;
+  color: #94a3b8;
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+.savings {
+  color: #059669;
+  font-size: 0.875rem;
+  font-weight: 600;
+  background: #ecfdf5;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  display: inline-block;
+  margin-bottom: 1rem;
+}
+
+.ctaButton {
+  width: 100%;
+  padding: 1rem;
+  border-radius: 12px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 2rem;
+}
+
+.primaryCta {
+  background: #4f46e5;
+  color: white;
+}
+
+.primaryCta:hover {
+  background: #4338ca;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.secondaryCta {
+  background: #f8fafc;
+  color: #4f46e5;
+  border: 1px solid #e2e8f0;
+}
+
+.secondaryCta:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.featureTitle {
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #334155;
+  font-size: 0.875rem;
+}
+
+.featureList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.featureItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #475569;
+}
+
+.featureIcon {
+  color: #059669;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+/* Detailed Comparison Table */
+.comparisonSection {
+  max-width: 1200px;
+  margin: 0 auto;
+  overflow-x: auto;
+}
+
+.comparisonTitle {
+  text-align: center;
+  margin-bottom: 3rem;
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: white;
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.table th, .table td {
+  padding: 1.5rem;
+  text-align: center;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.table th {
+  background: #f8fafc;
+  font-weight: 700;
+  color: #334155;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.featureNameCol {
+  text-align: left !important;
+  font-weight: 600;
+  color: #0f172a;
+  background: #f8fafc !important;
+  width: 30%;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table tr:hover td {
+  background: #fdfcff;
+}
+
+.disclaimer {
+  margin-top: 2rem;
+  font-size: 0.875rem;
+  color: #64748b;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.check {
+  color: #059669;
+}
+
+.cross {
+  color: #94a3b8;
+}
+
+@media (max-width: 1200px) {
+  .pricingGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .header h1 {
+    font-size: 2.5rem;
+  }
+  
+  .pricingGrid {
+    grid-template-columns: 1fr;
+  }
+}

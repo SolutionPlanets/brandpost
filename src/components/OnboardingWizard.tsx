@@ -66,6 +66,7 @@ const HOURS = [
 export default function OnboardingWizard() {
   const router = useRouter();
   const supabase = createClient();
+  const { refreshBrandData } = useBrand();
   const [currentStep, setCurrentStep] = useState(1);
   const [isOpenOpen, setIsOpenOpen] = useState(false);
   const [isOpenClose, setIsOpenClose] = useState(false);
@@ -78,6 +79,7 @@ export default function OnboardingWizard() {
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const darkFileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     ownerName: '',
     businessName: '',
@@ -87,6 +89,9 @@ export default function OnboardingWizard() {
     logo: null as string | null,
     logoUrl: null as string | null,
     logoFile: null as File | null,
+    logoDark: null as string | null,
+    logoDarkUrl: null as string | null,
+    logoDarkFile: null as File | null,
     colors: { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
     tone: 'professional',
     description: '',
@@ -125,6 +130,8 @@ export default function OnboardingWizard() {
           timing: workspace.business_timing || '',
           logo: brandKit?.logo_url || null,
           logoUrl: brandKit?.logo_url || null,
+          logoDark: brandKit?.logo_dark_url || null,
+          logoDarkUrl: brandKit?.logo_dark_url || null,
           colors: brandKit ? {
             primary: brandKit.primary_color || prev.colors.primary,
             secondary: brandKit.secondary_color || prev.colors.secondary,
@@ -198,7 +205,7 @@ export default function OnboardingWizard() {
     }
   };
 
-  const saveBrandKit = async (logoUrlOverride?: string) => {
+  const saveBrandKit = async (logoUrlOverride?: string, logoDarkUrlOverride?: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -237,6 +244,7 @@ export default function OnboardingWizard() {
         workspace_id: workspace.id,
         brand_kit_name: formData.brandKitName || `${formData.businessName} Brand Kit`,
         logo_url: logoUrlOverride || formData.logoUrl || null,
+        logo_dark_url: logoDarkUrlOverride || formData.logoDarkUrl || null,
         primary_color: formData.colors.primary,
         secondary_color: formData.colors.secondary,
         accent_color: formData.colors.accent,
@@ -271,18 +279,21 @@ export default function OnboardingWizard() {
       await saveWorkspace();
 
       let finalLogoUrl = formData.logoUrl;
+      let finalLogoDarkUrl = formData.logoDarkUrl;
+
+      // Upload Primary Logo
       if (formData.logoFile && !finalLogoUrl) {
         setUploading(true);
         const fileExt = formData.logoFile.name.split('.').pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const fileName = `${Date.now()}_primary_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from('BrandpostAI_logos')
           .upload(fileName, formData.logoFile);
 
         if (uploadError) {
-          console.error('Error uploading file:', uploadError);
-          setErrors({ logo: `Upload failed: ${uploadError.message}` });
+          console.error('Error uploading primary file:', uploadError);
+          setErrors({ logo: `Primary logo upload failed: ${uploadError.message}` });
           setUploading(false);
           setLoading(false);
           return;
@@ -293,10 +304,39 @@ export default function OnboardingWizard() {
           .getPublicUrl(fileName);
 
         finalLogoUrl = data.publicUrl;
-        setUploading(false);
       }
 
-      await saveBrandKit(finalLogoUrl || undefined);
+      // Upload Transparent Logo
+      if (formData.logoDarkFile && !finalLogoDarkUrl) {
+        setUploading(true);
+        const fileExt = formData.logoDarkFile.name.split('.').pop();
+        const fileName = `${Date.now()}_dark_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('BrandpostAI_logos')
+          .upload(fileName, formData.logoDarkFile);
+
+        if (uploadError) {
+          console.error('Error uploading dark file:', uploadError);
+          // Non-mandatory, so we just log and continue or show a non-blocking error
+        } else {
+          const { data } = supabase.storage
+            .from('BrandpostAI_logos')
+            .getPublicUrl(fileName);
+          finalLogoDarkUrl = data.publicUrl;
+        }
+      }
+
+      setUploading(false);
+      await (saveBrandKit as any)(finalLogoUrl || undefined, finalLogoDarkUrl || undefined);
+      
+      // Refresh global context to update Header/Sidebar
+      await refreshBrandData();
+      
+      if (isEditMode) {
+        alert('Changes done successfully');
+      }
+      
       router.push('/dashboard');
     } catch (err: any) {
       console.error('Final submit error:', err);
@@ -350,6 +390,16 @@ export default function OnboardingWizard() {
       const reader = new FileReader();
       reader.onload = (e) => {
         setFormData(prev => ({ ...prev, logo: e.target?.result as string, logoFile: file }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDarkFile = (file: File) => {
+    if (file && (file.type === 'image/png' || file.type === 'image/jpeg' || file.type === 'image/svg+xml')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setFormData(prev => ({ ...prev, logoDark: e.target?.result as string, logoDarkFile: file }));
       };
       reader.readAsDataURL(file);
     }
@@ -486,7 +536,7 @@ export default function OnboardingWizard() {
                 <input
                   type="text"
                   placeholder="e.g. Pixel Agency"
-                  value={formData.businessName}
+                  value={formData.businessName || ''}
                   onChange={(e) => {
                     setFormData({ ...formData, businessName: e.target.value });
                     if (errors.businessName) setErrors({ ...errors, businessName: '' });
@@ -500,7 +550,7 @@ export default function OnboardingWizard() {
                 <input
                   type="text"
                   placeholder="e.g. Chirag Mutha"
-                  value={formData.ownerName}
+                  value={formData.ownerName || ''}
                   onChange={(e) => {
                     setFormData({ ...formData, ownerName: e.target.value });
                     if (errors.ownerName) setErrors({ ...errors, ownerName: '' });
@@ -515,7 +565,7 @@ export default function OnboardingWizard() {
               <input
                 type="text"
                 placeholder="Shop/Office location"
-                value={formData.address}
+                value={formData.address || ''}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               />
             </div>
@@ -525,7 +575,7 @@ export default function OnboardingWizard() {
                 <input
                   type="text"
                   placeholder="6-digit code"
-                  value={formData.pincode}
+                  value={formData.pincode || ''}
                   onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
                 />
               </div>
@@ -534,13 +584,13 @@ export default function OnboardingWizard() {
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', position: 'relative' }}>
                   {/* Open Time Custom Dropdown */}
                   <div style={{ flex: 1, position: 'relative' }} ref={dropdownOpenRef}>
-                    <div 
+                    <div
                       onClick={() => setIsOpenOpen(!isOpenOpen)}
-                      style={{ 
-                        height: '40px', 
-                        padding: '0 0.75rem', 
-                        fontSize: '1rem', 
-                        border: '1px solid var(--border)', 
+                      style={{
+                        height: '40px',
+                        padding: '0 0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-md)',
                         display: 'flex',
                         alignItems: 'center',
@@ -553,25 +603,25 @@ export default function OnboardingWizard() {
                       <span style={{ fontSize: '0.8rem' }}>▼</span>
                     </div>
                     {isOpenOpen && (
-                      <div style={{ 
-                        position: 'absolute', 
-                        top: '44px', 
-                        left: 0, 
-                        right: 0, 
-                        maxHeight: '200px', 
-                        overflowY: 'auto', 
-                        background: 'white', 
-                        border: '1px solid var(--border)', 
+                      <div style={{
+                        position: 'absolute',
+                        top: '44px',
+                        left: 0,
+                        right: 0,
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        background: 'white',
+                        border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-md)',
                         zIndex: 100,
                         boxShadow: 'var(--shadow-lg)'
                       }}>
                         {HOURS.map(h => (
-                          <div 
+                          <div
                             key={`open-${h}`}
                             onClick={() => {
                               const end = formData.timing.split(' - ')[1] || '6 PM';
-                              setFormData({...formData, timing: `${h} - ${end}`});
+                              setFormData({ ...formData, timing: `${h} - ${end}` });
                               setIsOpenOpen(false);
                             }}
                             style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}
@@ -589,13 +639,13 @@ export default function OnboardingWizard() {
 
                   {/* Close Time Custom Dropdown */}
                   <div style={{ flex: 1, position: 'relative' }} ref={dropdownCloseRef}>
-                    <div 
+                    <div
                       onClick={() => setIsOpenClose(!isOpenClose)}
-                      style={{ 
-                        height: '40px', 
-                        padding: '0 0.75rem', 
-                        fontSize: '1rem', 
-                        border: '1px solid var(--border)', 
+                      style={{
+                        height: '40px',
+                        padding: '0 0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-md)',
                         display: 'flex',
                         alignItems: 'center',
@@ -608,25 +658,25 @@ export default function OnboardingWizard() {
                       <span style={{ fontSize: '0.8rem' }}>▼</span>
                     </div>
                     {isOpenClose && (
-                      <div style={{ 
-                        position: 'absolute', 
-                        top: '44px', 
-                        left: 0, 
-                        right: 0, 
-                        maxHeight: '200px', 
-                        overflowY: 'auto', 
-                        background: 'white', 
-                        border: '1px solid var(--border)', 
+                      <div style={{
+                        position: 'absolute',
+                        top: '44px',
+                        left: 0,
+                        right: 0,
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        background: 'white',
+                        border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-md)',
                         zIndex: 100,
                         boxShadow: 'var(--shadow-lg)'
                       }}>
                         {HOURS.map(h => (
-                          <div 
+                          <div
                             key={`close-${h}`}
                             onClick={() => {
                               const start = formData.timing.split(' - ')[0] || '9 AM';
-                              setFormData({...formData, timing: `${start} - ${h}`});
+                              setFormData({ ...formData, timing: `${start} - ${h}` });
                               setIsOpenClose(false);
                             }}
                             style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}
@@ -647,40 +697,80 @@ export default function OnboardingWizard() {
       case 2:
         return (
           <div className={styles.stepContent}>
-            <h2>Upload your logo</h2>
-            <p>This will be added to your generated posts.</p>
+            <h2>Upload your brand logos</h2>
+            <p>Upload your primary logo and an optional transparent/dark version.</p>
             {errors.logo && <div style={{ color: 'red', marginBottom: '10px', fontSize: '14px', fontWeight: 500 }}>{errors.logo}</div>}
 
-            {formData.logo ? (
-              <div className={styles.previewContainer}>
-                <img src={formData.logo} alt="Logo Preview" className={styles.previewImage} />
-                <button
-                  className={styles.removeBtn}
-                  onClick={() => setFormData({ ...formData, logo: null, logoUrl: null, logoFile: null })}
-                >
-                  <X size={16} style={{ marginRight: '4px' }} /> Remove and try another
-                </button>
+            <div className={styles.logoUploadGrid}>
+              <div className={styles.logoSection}>
+                <h3>Primary Logo <span style={{ color: 'red' }}>*</span></h3>
+                {formData.logo ? (
+                  <div className={styles.previewContainer}>
+                    <div className={styles.logoPreviewWrapper}>
+                      <img src={formData.logo} alt="Logo Preview" className={styles.previewImage} />
+                    </div>
+                    <button
+                      className={styles.removeBtn}
+                      onClick={() => setFormData({ ...formData, logo: null, logoUrl: null, logoFile: null })}
+                    >
+                      <X size={16} /> Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className={`${styles.uploadBox} ${isDragging ? styles.dragging : ''}`}
+                    onDragOver={onDragOver}
+                    onDragLeave={onDragLeave}
+                    onDrop={onDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={(e) => e.target.files && handleFile(e.target.files[0])}
+                      accept="image/png, image/jpeg, image/svg+xml"
+                      style={{ display: 'none' }}
+                    />
+                    <Upload size={32} className={styles.uploadIcon} />
+                    <span>Click to browse</span>
+                    <p>PNG, SVG or JPG</p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div
-                className={`${styles.uploadBox} ${isDragging ? styles.dragging : ''}`}
-                onDragOver={onDragOver}
-                onDragLeave={onDragLeave}
-                onDrop={onDrop}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={(e) => e.target.files && handleFile(e.target.files[0])}
-                  accept="image/png, image/jpeg, image/svg+xml"
-                  style={{ display: 'none' }}
-                />
-                <Upload size={48} className={styles.uploadIcon} />
-                <span>Click to browse or drag and drop</span>
-                <p>PNG, SVG or JPG (max 2MB)</p>
+
+              <div className={styles.logoSection}>
+                <h3>Transparent Logo <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 400 }}>(Optional)</span></h3>
+                {formData.logoDark ? (
+                  <div className={styles.previewContainer}>
+                    <div className={styles.logoPreviewWrapper} style={{ backgroundColor: '#1e293b' }}>
+                      <img src={formData.logoDark} alt="Dark Logo Preview" className={styles.previewImage} />
+                    </div>
+                    <button
+                      className={styles.removeBtn}
+                      onClick={() => setFormData({ ...formData, logoDark: null, logoDarkUrl: null, logoDarkFile: null })}
+                    >
+                      <X size={16} /> Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className={styles.uploadBox}
+                    onClick={() => darkFileInputRef.current?.click()}
+                  >
+                    <input
+                      type="file"
+                      ref={darkFileInputRef}
+                      onChange={(e) => e.target.files && handleDarkFile(e.target.files[0])}
+                      accept="image/png, image/jpeg, image/svg+xml"
+                      style={{ display: 'none' }}
+                    />
+                    <Upload size={32} className={styles.uploadIcon} />
+                    <span>Click to browse</span>
+                    <p>PNG or SVG</p>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         );
       case 3:
@@ -708,22 +798,16 @@ export default function OnboardingWizard() {
                   <input
                     type="text"
                     className={styles.hexText}
-                    value={formData.colors.primary}
+                    value={formData.colors.primary || ''}
                     onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, primary: e.target.value } })}
                   />
-                  <div className={styles.pickerWrapper} style={{ backgroundColor: formData.colors.primary }}>
+                  <div className={styles.pickerWrapper} style={{ backgroundColor: formData.colors.primary || '#ffffff' }}>
                     <input
                       type="color"
-                      value={formData.colors.primary}
+                      value={formData.colors.primary || '#000000'}
                       onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, primary: e.target.value } })}
                     />
                   </div>
-=======
-=======
->>>>>>> Stashed changes
-                  <input type="color" value={formData.colors.primary} onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, primary: e.target.value } })} />
-                  <span>{formData.colors.primary}</span>
->>>>>>> Stashed changes
                 </div>
               </div>
 
@@ -733,13 +817,13 @@ export default function OnboardingWizard() {
                   <input
                     type="text"
                     className={styles.hexText}
-                    value={formData.colors.secondary}
+                    value={formData.colors.secondary || ''}
                     onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, secondary: e.target.value } })}
                   />
-                  <div className={styles.pickerWrapper} style={{ backgroundColor: formData.colors.secondary }}>
+                  <div className={styles.pickerWrapper} style={{ backgroundColor: formData.colors.secondary || '#ffffff' }}>
                     <input
                       type="color"
-                      value={formData.colors.secondary}
+                      value={formData.colors.secondary || '#000000'}
                       onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, secondary: e.target.value } })}
                     />
                   </div>
@@ -752,22 +836,16 @@ export default function OnboardingWizard() {
                   <input
                     type="text"
                     className={styles.hexText}
-                    value={formData.colors.accent}
+                    value={formData.colors.accent || ''}
                     onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, accent: e.target.value } })}
                   />
-                  <div className={styles.pickerWrapper} style={{ backgroundColor: formData.colors.accent }}>
+                  <div className={styles.pickerWrapper} style={{ backgroundColor: formData.colors.accent || '#ffffff' }}>
                     <input
                       type="color"
-                      value={formData.colors.accent}
+                      value={formData.colors.accent || '#000000'}
                       onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, accent: e.target.value } })}
                     />
                   </div>
-=======
-=======
->>>>>>> Stashed changes
-                  <input type="color" value={formData.colors.secondary} onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, secondary: e.target.value } })} />
-                  <span>{formData.colors.secondary}</span>
->>>>>>> Stashed changes
                 </div>
               </div>
             </div>
@@ -785,14 +863,14 @@ export default function OnboardingWizard() {
               <input
                 type="text"
                 placeholder="e.g. Main Brand"
-                value={formData.brandKitName}
+                value={formData.brandKitName || ''}
                 onChange={(e) => setFormData({ ...formData, brandKitName: e.target.value })}
               />
             </div>
 
             <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
               <label>Tone</label>
-              <select value={formData.tone} onChange={(e) => setFormData({ ...formData, tone: e.target.value })}>
+              <select value={formData.tone || 'professional'} onChange={(e) => setFormData({ ...formData, tone: e.target.value })}>
                 <option value="professional">Professional</option>
                 <option value="playful">Playful</option>
                 <option value="friendly">Friendly</option>
@@ -826,7 +904,7 @@ export default function OnboardingWizard() {
               <textarea
                 className={styles.descriptionTextarea}
                 placeholder="Briefly describe what you do..."
-                value={formData.description}
+                value={formData.description || ''}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               ></textarea>
             </div>
@@ -859,58 +937,8 @@ export default function OnboardingWizard() {
                 <button className={styles.connectBtn}>Connect</button>
               </div>
             </div>
-
           </div>
         );
-<<<<<<< Updated upstream
-=======
-      case 6:
-        return (
-          <div className={styles.stepContent}>
-            <h2>Identify your best post</h2>
-            <p>We've generated two options based on your brand. Select one to post.</p>
-
-            <div className={styles.postSelectionGrid}>
-              <div
-                className={`${styles.postCard} ${formData.selectedPost === 1 ? styles.activePost : ''}`}
-                onClick={() => setFormData({ ...formData, selectedPost: 1 })}
-              >
-                <img src="/post1.png" alt="Generated Post 1" />
-                <div className={styles.postOverlay}>
-                  <div className={styles.radioCircle}></div>
-                </div>
-              </div>
-              <div
-                className={`${styles.postCard} ${formData.selectedPost === 2 ? styles.activePost : ''}`}
-                onClick={() => setFormData({ ...formData, selectedPost: 2 })}
-              >
-                <img src="/post2.png" alt="Generated Post 2" />
-                <div className={styles.postOverlay}>
-                  <div className={styles.radioCircle}></div>
-                </div>
-              </div>
-            </div>
-
-            <div className={styles.platformSelection}>
-              <h3>Post to:</h3>
-              <div className={styles.platformChips}>
-                <button
-                  className={`${styles.platformChip} ${formData.selectedPlatforms.includes('instagram') ? styles.activeChip : ''}`}
-                  onClick={() => togglePlatform('instagram')}
-                >
-                  <Instagram size={18} /> Instagram
-                </button>
-                <button
-                  className={`${styles.platformChip} ${formData.selectedPlatforms.includes('facebook') ? styles.activeChip : ''}`}
-                  onClick={() => togglePlatform('facebook')}
-                >
-                  <Facebook size={18} /> Facebook
-                </button>
-              </div>
-            </div>
-          </div>
-        );
->>>>>>> Stashed changes
       default:
         return null;
     }
@@ -945,8 +973,6 @@ export default function OnboardingWizard() {
           <button
             className={styles.backBtn}
             onClick={prevStep}
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
             disabled={currentStep === 1}
           >
             <ArrowLeft size={18} /> Back

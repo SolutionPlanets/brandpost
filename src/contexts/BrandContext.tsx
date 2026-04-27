@@ -13,6 +13,10 @@ interface BrandContextType {
     secondary: string;
     accent: string;
   };
+  address: string;
+  pincode: string;
+  instagram: string;
+  facebook: string;
   setBusinessName: (name: string) => void;
   setLogo: (logo: string | null) => void;
   setColors: (colors: { primary: string; secondary: string; accent: string }) => void;
@@ -31,6 +35,10 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     secondary: '#64748b',
     accent: '#06b6d4'
   });
+  const [address, setAddress] = useState('');
+  const [pincode, setPincode] = useState('');
+  const [instagram, setInstagram] = useState('');
+  const [facebook, setFacebook] = useState('');
 
   const supabase = createClient();
 
@@ -56,6 +64,8 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         id,
         business_name,
         owner_name,
+        address,
+        pincode,
         brand_kits (*)
       `)
       .eq('owner_id', user.id)
@@ -69,7 +79,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         : '';
       setBusinessName(bName);
       setOwnerName(workspace.owner_name || '');
+      setAddress(workspace.address || '');
+      setPincode(workspace.pincode || '');
       setLogo(brandKit?.logo_url || null);
+      setInstagram(brandKit?.instagram_handle || '');
+      setFacebook(brandKit?.facebook_handle || '');
       if (brandKit?.primary_color) {
         setColors({
           primary: brandKit.primary_color,
@@ -83,7 +97,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         fullName: userProfile?.full_name || '',
         ownerName: workspace.owner_name || '',
         businessName: bName,
+        address: workspace.address || '',
+        pincode: workspace.pincode || '',
         logo: brandKit?.logo_url || null,
+        instagram: brandKit?.instagram_handle || '',
+        facebook: brandKit?.facebook_handle || '',
       }));
     }
   };
@@ -101,21 +119,29 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       fullName,
       ownerName,
       businessName,
-      logo
+      address,
+      pincode,
+      logo,
+      instagram,
+      facebook
     }));
-  }, [fullName, ownerName, businessName, logo]);
+  }, [fullName, ownerName, businessName, address, pincode, logo, instagram, facebook]);
 
   const value = React.useMemo(() => ({
     fullName,
     ownerName,
     businessName,
+    address,
+    pincode,
+    instagram,
+    facebook,
     logo,
     colors,
     setBusinessName,
     setLogo,
     setColors,
     refreshBrandData
-  }), [fullName, ownerName, businessName, logo, colors]);
+  }), [fullName, ownerName, businessName, address, pincode, instagram, facebook, logo, colors]);
 
   return (
     <BrandContext.Provider value={value}>

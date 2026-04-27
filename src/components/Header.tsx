@@ -1,58 +1,35 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, Search, User, MapPin, Hash, MessageSquare, Share2, ChevronDown } from 'lucide-react';
+import { Bell, Search, User, MapPin, Hash, MessageSquare, Share2, ChevronDown, LogOut } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { useBrand } from '@/contexts/BrandContext';
 import styles from './Header.module.css';
-import { useBrand } from '@/contexts/BrandContext';
 
 export default function Header() {
-  const { businessName, ownerName, logo, refreshBrandData } = useBrand();
-  const [userData, setUserData] = useState<any>({
-    email: '',
-    address: 'Set your address',
-    pincode: 'Pincode',
-    instagram: '@instagram',
-    facebook: 'facebook.com'
-  });
+  const { 
+    businessName, 
+    ownerName, 
+    logo, 
+    address, 
+    pincode, 
+    instagram, 
+    facebook,
+    refreshBrandData 
+  } = useBrand();
+  
+  const [email, setEmail] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
   useEffect(() => {
-    async function fetchDetails() {
+    async function fetchUser() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        setUserData(prev => ({ ...prev, email: user.email }));
-        const { data: profile } = await supabase
-          .from('users')
-          .select(`
-            workspaces (
-              address,
-              pincode,
-              brand_kits (
-                instagram_handle,
-                facebook_handle
-              )
-            )
-          `)
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.workspaces?.[0]) {
-          const workspace = profile.workspaces[0];
-          const brandKit = workspace.brand_kits?.[0];
-          setUserData(prev => ({
-            ...prev,
-            address: workspace.address || 'Set your address',
-            pincode: workspace.pincode || 'Pincode',
-            instagram: brandKit?.instagram_handle || '@instagram',
-            facebook: brandKit?.facebook_handle || 'facebook.com'
-          }));
-        }
+        setEmail(user.email || '');
       }
     }
-    fetchDetails();
-  }, [businessName]); // Refresh when context changes
+    fetchUser();
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -121,30 +98,28 @@ export default function Header() {
                 )}
                 <div>
                   <h3>{ownerName || businessName || 'My Brand'}</h3>
-                  <p className={styles.dropdownBizName}>{businessName}</p>
-                  <p>{userData.email}</p>
+                  <p className={styles.dropdownBizName}>{businessName || 'My Business'}</p>
+                  <p>{email}</p>
                 </div>
               </div>
               
               <div className={styles.dropdownContent}>
                 <div className={styles.detailItem}>
                   <MapPin size={16} />
-                  <span>{userData.address}</span>
+                  <span>{address || 'Set your address'}</span>
                 </div>
                 <div className={styles.detailItem}>
                   <Hash size={16} />
-                  <span>{userData.pincode}</span>
+                  <span>{pincode || 'Pincode'}</span>
                 </div>
                 <div className={styles.divider}></div>
                 <div className={styles.socialLink}>
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
                   <Share2 size={16} />
-                  <span>{userData.instagram}</span>
+                  <span>{instagram || '@instagram'}</span>
                 </div>
                 <div className={styles.socialLink}>
                   <MessageSquare size={16} />
-                  <span>{userData.facebook}</span>
+                  <span>{facebook || 'facebook.com'}</span>
                 </div>
               </div>
               
