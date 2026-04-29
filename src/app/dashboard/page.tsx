@@ -24,6 +24,7 @@ import {
   ChevronRight,
   Share2,
   ExternalLink,
+  CheckCircle2,
 } from 'lucide-react';
 import styles from './DashboardHome.module.css';
 
@@ -102,21 +103,25 @@ function getUpcomingEvents() {
 }
 
 function daysUntil(dateStr: string): number {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(dateStr);
-  target.setHours(0, 0, 0, 0);
-  return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const now = new Date();
+  // Get today's date at midnight local time
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  const targetDate = new Date(dateStr);
+  // Get target's date at midnight local time
+  const target = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+  
+  const diffTime = target.getTime() - today.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
 }
 
 // ── Component ────────────────────────────────────────────────────────
 export default function DashboardHome() {
-  const { fullName, ownerName, businessName } = useBrand();
+  const { fullName, ownerName, businessName, trialEndsAt, createdAt, planId, postsUsed } = useBrand();
   const [userData, setUserData] = useState<any>(null);
-  const [usageUsed] = useState(18);
   const supabase = createClient();
-  const usageLimit = 50;
-  const usagePercent = Math.round((usageUsed / usageLimit) * 100);
+  const usageLimit = 50; // Default base limit for solo
   const upcoming = getUpcomingEvents();
 
   useEffect(() => {
@@ -126,11 +131,20 @@ export default function DashboardHome() {
     }
   }, []);
 
+  const isTrial = planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date();
+  const daysRemaining = trialEndsAt ? daysUntil(trialEndsAt) : 0;
+  
+  const trialStartDate = createdAt ? new Date(createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const trialEndDate = trialEndsAt ? new Date(trialEndsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+
+  const currentLimit = isTrial ? 100 : usageLimit;
+  const currentUsagePercent = Math.round((postsUsed / currentLimit) * 100);
+
   const stats = [
     { label: 'Total Posts', value: '24', icon: CalendarDays, color: '#4f46e5' },
     { label: 'Audience Reach', value: '12.4k', icon: TrendingUp, color: '#10b981' },
     { label: 'Engagement', value: '4.2%', icon: Users, color: '#f59e0b' },
-    { label: 'AI Credits Left', value: `${usageLimit - usageUsed}`, icon: Sparkles, color: '#06b6d4' },
+    { label: 'AI Credits Left', value: `${currentLimit - postsUsed}`, icon: Sparkles, color: '#06b6d4' },
   ];
 
   return (
@@ -138,13 +152,45 @@ export default function DashboardHome() {
       {/* ── Header ──────────────────────────────────────────── */}
       <header className={styles.header}>
         <div>
-          <h1 className={styles.title}>Welcome back, {ownerName || fullName || userData?.fullName || 'User'}!</h1>
+          <h1 className={styles.title}>Welcome back, {ownerName || fullName || 'User'}!</h1>
           <p className={styles.subtitle}>Here&apos;s what&apos;s happening with your brand today.</p>
         </div>
         <Link href="/dashboard/composer" className={styles.createBtn}>
           <Plus size={20} /> Create New Post
         </Link>
       </header>
+ 
+      {/* ── Trial Banner (Conditional) ────────────────────── */}
+      {isTrial && (
+        <div className={styles.trialBanner}>
+          <div className={styles.trialLeft}>
+            <div className={styles.trialBadge}>14-Day Free Trial</div>
+            <h2 className={styles.trialTitle}>Your Free Trial has Started!</h2>
+            <p className={styles.trialDesc}>
+              Experience the full power of BrandPost AI with our SMB plan features. 
+              No credit card required during trial.
+            </p>
+            <div className={styles.trialFeatures}>
+              <div className={styles.featureItem}><CheckCircle2 size={16} className={styles.featureIcon} /> 100 AI Posts</div>
+              <div className={styles.featureItem}><CheckCircle2 size={16} className={styles.featureIcon} /> 3 Brand Kits</div>
+              <div className={styles.featureItem}><CheckCircle2 size={16} className={styles.featureIcon} /> Priority AI</div>
+            </div>
+          </div>
+ 
+          <div className={styles.trialRight}>
+            <div className={styles.daysLeft}>
+              {daysRemaining <= 0 ? 'Last' : daysRemaining} <span>{daysRemaining <= 0 ? 'day' : daysRemaining === 1 ? 'day left' : 'days left'}</span>
+            </div>
+            <div className={styles.trialDates}>
+              <div>Trial Period</div>
+              <div>{trialStartDate} - {trialEndDate}</div>
+            </div>
+            <Link href="/pricing?from=dashboard" className={styles.upgradeTrialBtn}>
+              Upgrade Now
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* ── Stats Grid ──────────────────────────────────────── */}
       <div className={styles.statsGrid}>
@@ -213,24 +259,24 @@ export default function DashboardHome() {
                 <Sparkles size={20} className={styles.widgetIcon} />
                 <h2>Usage Tracker</h2>
               </div>
-              <span className={styles.planBadge}>Solo Plan</span>
+              <span className={styles.planBadge}>{isTrial ? 'Trial (SMB)' : planId === 'solo' ? 'Solo Plan' : planId.toUpperCase() + ' Plan'}</span>
             </div>
             <div className={styles.usageContainer}>
               <div className={styles.usageHeader}>
                 <span className={styles.usageLabel}>AI Posts Generated</span>
-                <span className={styles.usageCount}>{usageUsed} <span>/ {usageLimit}</span></span>
+                <span className={styles.usageCount}>{postsUsed} <span>/ {currentLimit}</span></span>
               </div>
               <div className={styles.usageBarTrack}>
                 <div
                   className={styles.usageBarFill}
                   style={{
-                    width: `${usagePercent}%`,
-                    backgroundColor: usagePercent > 80 ? '#ef4444' : usagePercent > 60 ? '#f59e0b' : '#4f46e5',
+                    width: `${currentUsagePercent}%`,
+                    backgroundColor: currentUsagePercent > 80 ? '#ef4444' : currentUsagePercent > 60 ? '#f59e0b' : '#4f46e5',
                   }}
                 />
               </div>
               <p className={styles.usageFooter}>
-                {usageLimit - usageUsed} posts remaining this cycle. Resets on May 1, 2026.
+                {currentLimit - postsUsed} posts remaining this cycle. Resets on May 1, 2026.
               </p>
             </div>
           </div>

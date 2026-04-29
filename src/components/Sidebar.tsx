@@ -26,7 +26,7 @@ const menuItems = [
   { name: 'Brand Kit', icon: Palette, href: '/dashboard/brand-kit' },
   { name: 'Calendar', icon: CalendarDays, href: '/dashboard/calendar' },
   { name: 'History', icon: Clock, href: '/dashboard/posts' },
-  { name: 'Plans', icon: CreditCard, href: '/pricing' },
+  { name: 'Plans', icon: CreditCard, href: '/pricing?from=dashboard' },
   { name: 'Settings', icon: Settings, href: '/dashboard/settings' },
 ];
 

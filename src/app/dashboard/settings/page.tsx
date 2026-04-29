@@ -27,7 +27,7 @@ const TABS = [
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [saved, setSaved] = useState(false);
-  const { businessName, setBusinessName, ownerName, refreshBrandData } = useBrand();
+  const { businessName, setBusinessName, ownerName, refreshBrandData, planId, trialEndsAt } = useBrand();
   const supabase = createClient();
 
   const [profileData, setProfileData] = useState({
@@ -203,13 +203,24 @@ export default function SettingsPage() {
 
 
       <div className={styles.newPlansSection}>
-        <h3>You haven't purchased a plan yet</h3>
-        <p>Choose a professional plan to unlock all features and grow your business.</p>
+        {planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date() ? (
+          <>
+            <div className={styles.trialBadgeActive}>Active: 14-Day Free Trial</div>
+            <h3>You are currently on a Free Trial</h3>
+            <p>Your trial ends on {new Date(trialEndsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}. 
+               Upgrade to a pro plan anytime to keep your premium features.</p>
+          </>
+        ) : (
+          <>
+            <h3>You haven't purchased a plan yet</h3>
+            <p>Choose a professional plan to unlock all features and grow your business.</p>
+          </>
+        )}
         <button 
           className={styles.viewPlansBtn}
           onClick={() => window.location.href = '/pricing?from=dashboard'}
         >
-          Buy Now
+          {planId === 'solo' ? 'Upgrade Plan' : 'Change Plan'}
         </button>
       </div>
     </div>

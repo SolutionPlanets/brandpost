@@ -7,6 +7,7 @@ interface BrandContextType {
   fullName: string;
   ownerName: string;
   businessName: string;
+  brandKitName: string;
   logo: string | null;
   colors: {
     primary: string;
@@ -17,6 +18,10 @@ interface BrandContextType {
   pincode: string;
   instagram: string;
   facebook: string;
+  planId: string;
+  trialEndsAt: string | null;
+  createdAt: string | null;
+  postsUsed: number;
   setBusinessName: (name: string) => void;
   setLogo: (logo: string | null) => void;
   setColors: (colors: { primary: string; secondary: string; accent: string }) => void;
@@ -29,6 +34,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [fullName, setFullName] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [businessName, setBusinessName] = useState('');
+  const [brandKitName, setBrandKitName] = useState('');
   const [logo, setLogo] = useState<string | null>(null);
   const [colors, setColors] = useState({
     primary: '#4f46e5',
@@ -39,6 +45,10 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [pincode, setPincode] = useState('');
   const [instagram, setInstagram] = useState('');
   const [facebook, setFacebook] = useState('');
+  const [planId, setPlanId] = useState('solo');
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
+  const [createdAt, setCreatedAt] = useState<string | null>(null);
+  const [postsUsed, setPostsUsed] = useState(0);
 
   const supabase = createClient();
 
@@ -49,12 +59,15 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     // Fetch user's full_name from the users table
     const { data: userProfile } = await supabase
       .from('users')
-      .select('full_name')
+      .select('full_name, plan_id, trial_ends_at, created_at')
       .eq('id', user.id)
       .maybeSingle();
-
-    if (userProfile?.full_name) {
-      setFullName(userProfile.full_name);
+ 
+    if (userProfile) {
+      if (userProfile.full_name) setFullName(userProfile.full_name);
+      setPlanId(userProfile.plan_id || 'solo');
+      setTrialEndsAt(userProfile.trial_ends_at);
+      setCreatedAt(userProfile.created_at);
     }
 
     // Fetch workspace and brand kit
@@ -66,6 +79,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         owner_name,
         address,
         pincode,
+        posts_used_this_cycle,
         brand_kits (*)
       `)
       .eq('owner_id', user.id)
@@ -74,13 +88,14 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     if (workspace) {
       const bKits = workspace.brand_kits;
       const brandKit = bKits ? (Array.isArray(bKits) ? bKits[0] : bKits) : undefined;
-      const bName = workspace.business_name && workspace.business_name !== 'My Workspace' 
-        ? workspace.business_name 
-        : '';
+      const rawBName = workspace.business_name || workspace.name || '';
+      const bName = rawBName.toLowerCase().includes('my workspace') ? '' : rawBName;
       setBusinessName(bName);
+      setBrandKitName(brandKit?.brand_kit_name || '');
       setOwnerName(workspace.owner_name || '');
       setAddress(workspace.address || '');
       setPincode(workspace.pincode || '');
+      setPostsUsed(workspace.posts_used_this_cycle || 0);
       setLogo(brandKit?.logo_url || null);
       setInstagram(brandKit?.instagram_handle || '');
       setFacebook(brandKit?.facebook_handle || '');
@@ -107,41 +122,72 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    const savedData = localStorage.getItem('brandpost_user_data');
+    if (savedData) {
+      try {
+        const d = JSON.parse(savedData);
+        if (d.fullName) setFullName(d.fullName);
+        if (d.ownerName) setOwnerName(d.ownerName);
+        if (d.businessName) setBusinessName(d.businessName);
+        if (d.brandKitName) setBrandKitName(d.brandKitName);
+        if (d.address) setAddress(d.address);
+        if (d.pincode) setPincode(d.pincode);
+        if (d.instagram) setInstagram(d.instagram);
+        if (d.facebook) setFacebook(d.facebook);
+        if (d.planId) setPlanId(d.planId);
+        if (d.trialEndsAt) setTrialEndsAt(d.trialEndsAt);
+        if (d.createdAt) setCreatedAt(d.createdAt);
+        if (d.postsUsed !== undefined) setPostsUsed(d.postsUsed);
+        if (d.logo) setLogo(d.logo);
+        if (d.colors) setColors(d.colors);
+      } catch (e) {
+        console.error('Error parsing brand data:', e);
+      }
+    }
     refreshBrandData();
   }, []);
 
   // Update localStorage when businessName changes locally (for real-time sync with legacy components)
+  // Update localStorage when state changes
   useEffect(() => {
-    const savedData = localStorage.getItem('brandpost_user_data');
-    const parsedData = savedData ? JSON.parse(savedData) : {};
     localStorage.setItem('brandpost_user_data', JSON.stringify({
-      ...parsedData,
       fullName,
       ownerName,
       businessName,
+      brandKitName,
       address,
       pincode,
-      logo,
       instagram,
-      facebook
+      facebook,
+      planId,
+      trialEndsAt,
+      createdAt,
+      postsUsed,
+      logo,
+      colors
     }));
-  }, [fullName, ownerName, businessName, address, pincode, logo, instagram, facebook]);
+  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, planId, trialEndsAt, createdAt, postsUsed, logo, colors]);
 
   const value = React.useMemo(() => ({
     fullName,
     ownerName,
     businessName,
+    brandKitName,
     address,
     pincode,
     instagram,
     facebook,
     logo,
     colors,
+    planId,
+    trialEndsAt,
+    createdAt,
+    postsUsed,
     setBusinessName,
     setLogo,
     setColors,
     refreshBrandData
-  }), [fullName, ownerName, businessName, address, pincode, instagram, facebook, logo, colors]);
+  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, logo, colors, planId, trialEndsAt, createdAt, postsUsed]);
 
   return (
     <BrandContext.Provider value={value}>

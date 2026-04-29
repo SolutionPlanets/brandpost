@@ -258,7 +258,7 @@
 }
 
 .formGroup textarea {
-  resize: vertical;
+  resize: none;
 }
 
 .charCount {
@@ -561,7 +561,8 @@
   outline: none;
   font-size: 0.9375rem;
   line-height: 1.6;
-  resize: vertical;
+  resize: none;
+  min-height: 200px;
   font-family: inherit;
   color: var(--text);
   background-color: var(--surface);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -25,6 +25,7 @@ import {
   Image as ImageIcon,
   RefreshCw,
 } from 'lucide-react';
+import { useBrand } from '@/contexts/BrandContext';
 import styles from './Composer.module.css';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -57,8 +58,11 @@ const STEP_LABELS = ['Content Type', 'Details', 'AI Generation', 'Preview & Edit
 // ── Component ────────────────────────────────────────────────────────
 export default function ComposerPage() {
   const searchParams = useSearchParams();
+  const { brandKitName, businessName } = useBrand();
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationState, setGenerationState] = useState<'generating' | 'paused' | 'stopped'>('generating');
+  const generationStateRef = useRef<'generating' | 'paused' | 'stopped'>('generating');
   const [selectedCaption, setSelectedCaption] = useState(0);
   const [selectedImage, setSelectedImage] = useState(0);
   const [editedCaption, setEditedCaption] = useState('');
@@ -94,8 +98,26 @@ export default function ComposerPage() {
 
   const handleGenerate = async () => {
     setIsGenerating(true);
-    // Simulated AI generation (Claude + DALL-E placeholders)
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    setGenerationState('generating');
+    generationStateRef.current = 'generating';
+
+    // Simulated AI generation with pause/stop support
+    for (let i = 0; i < 30; i++) {
+      if (generationStateRef.current === 'stopped') {
+        setIsGenerating(false);
+        return;
+      }
+      while (generationStateRef.current === 'paused') {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    if (generationStateRef.current === 'stopped') {
+      setIsGenerating(false);
+      return;
+    }
+
     setGenerated({
       captions: [
         `🎉 ${form.topic} is here! Celebrate with us and make this occasion unforgettable. Our brand brings you the best in quality and style. #${form.topic.replace(/\s/g, '')} #BrandPost`,
@@ -201,7 +223,7 @@ export default function ComposerPage() {
               value={form.brandKit}
               onChange={(e) => setForm({ ...form, brandKit: e.target.value })}
             >
-              <option value="main-brand">Main Brand</option>
+              <option value="main-brand">{brandKitName || businessName || 'Main Brand'}</option>
             </select>
           </div>
 
@@ -240,26 +262,95 @@ export default function ComposerPage() {
   // ── Step 3: AI Generation Loading ──────────────────────────────────
   const renderStep3 = () => (
     <div className={styles.stepContent}>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '1.5rem' }}>
+        <button 
+          onClick={() => {
+            generationStateRef.current = 'stopped';
+            setGenerationState('stopped');
+            setIsGenerating(false);
+            setStep(2);
+          }}
+          style={{ 
+            display: 'flex', alignItems: 'center', gap: '0.5rem', 
+            background: 'none', border: 'none', color: 'var(--text-muted)', 
+            cursor: 'pointer', fontWeight: 500, padding: 0 
+          }}
+        >
+          <ArrowLeft size={16} /> Back to Details
+        </button>
+      </div>
+
       <div className={styles.generatingContainer}>
         <div className={styles.generatingAnimation}>
           <div className={styles.generatingRing}>
-            <Sparkles size={40} className={styles.generatingIcon} />
+            {generationState === 'paused' || generationState === 'stopped' ? (
+              <Loader2 size={40} className={styles.generatingIcon} style={{ animation: 'none', opacity: 0.5 }} />
+            ) : (
+              <Sparkles size={40} className={styles.generatingIcon} />
+            )}
           </div>
         </div>
-        <h2 className={styles.generatingTitle}>Generating your content...</h2>
+        <h2 className={styles.generatingTitle}>
+          {generationState === 'stopped' ? 'Generation Stopped' : 
+           generationState === 'paused' ? 'Generation Paused' : 
+           'Generating your content...'}
+        </h2>
         <p className={styles.generatingDesc}>
-          AI is crafting 3 caption variants and 2 image options based on your brand kit.
+          {generationState === 'stopped' ? 'You stopped the AI generation process.' : 
+           'AI is crafting 3 caption variants and 2 image options based on your brand kit.'}
         </p>
         <div className={styles.generatingSteps}>
-          <div className={`${styles.genStep} ${styles.genStepActive}`}>
-            <Loader2 size={16} className={styles.spinner} /> Analyzing brand tone &amp; style...
+          <div className={`${styles.genStep} ${generationState !== 'stopped' ? styles.genStepActive : ''}`}>
+            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: generationState === 'paused' || generationState === 'stopped' ? 'paused' : 'running' }} /> Analyzing brand tone &amp; style...
           </div>
           <div className={styles.genStep}>
-            <Loader2 size={16} className={styles.spinner} /> Generating captions via Claude AI...
+            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: generationState === 'paused' || generationState === 'stopped' ? 'paused' : 'running' }} /> Generating captions via Claude AI...
           </div>
           <div className={styles.genStep}>
-            <Loader2 size={16} className={styles.spinner} /> Creating images via DALL·E 3...
+            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: generationState === 'paused' || generationState === 'stopped' ? 'paused' : 'running' }} /> Creating images via DALL·E 3...
           </div>
+        </div>
+        
+        <div style={{ marginTop: '2.5rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+          <button 
+            onClick={() => {
+              if (generationState === 'stopped') return;
+              const nextState = generationState === 'paused' ? 'generating' : 'paused';
+              setGenerationState(nextState);
+              generationStateRef.current = nextState;
+            }}
+            disabled={generationState === 'stopped'}
+            style={{ 
+              padding: '0.75rem 2rem', borderRadius: 'var(--radius-md)', 
+              border: '1px solid var(--primary)', 
+              background: generationState === 'paused' ? 'var(--primary)' : 'transparent', 
+              color: generationState === 'paused' ? 'white' : 'var(--primary)', 
+              fontWeight: 600, cursor: generationState === 'stopped' ? 'not-allowed' : 'pointer',
+              opacity: generationState === 'stopped' ? 0.5 : 1
+            }}
+          >
+            {generationState === 'paused' ? 'Continue' : 'Pause'}
+          </button>
+          <button 
+            onClick={() => {
+              setGenerationState('stopped');
+              generationStateRef.current = 'stopped';
+              setIsGenerating(false);
+              setTimeout(() => {
+                setStep(2);
+              }, 3500); // Redirects after 3.5 seconds
+            }}
+            disabled={generationState === 'stopped'}
+            style={{ 
+              padding: '0.75rem 2rem', borderRadius: 'var(--radius-md)', 
+              border: '1px solid #ef4444', background: 'transparent', 
+              color: '#ef4444', fontWeight: 600, 
+              cursor: generationState === 'stopped' ? 'not-allowed' : 'pointer',
+              opacity: generationState === 'stopped' ? 0.5 : 1
+            }}
+          >
+            Stop
+          </button>
         </div>
       </div>
     </div>
@@ -454,7 +545,7 @@ export default function ComposerPage() {
       {/* Footer Navigation */}
       <div className={styles.composerFooter}>
         {step > 1 && step !== 3 && (
-          <button className={styles.backBtn} onClick={() => setStep(step - 1)}>
+          <button className={styles.backBtn} onClick={() => setStep(step === 4 ? 2 : step - 1)}>
             <ArrowLeft size={18} /> Back
           </button>
         )}

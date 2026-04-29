@@ -124,7 +124,7 @@ export default function OnboardingWizard() {
         setFormData(prev => ({
           ...prev,
           ownerName: workspace.owner_name || '',
-          businessName: workspace.business_name || '',
+          businessName: ((workspace.business_name || workspace.name || '').toLowerCase().includes('my workspace')) ? '' : (workspace.business_name || workspace.name || ''),
           address: workspace.address || '',
           pincode: workspace.pincode || '',
           timing: workspace.business_timing || '',
@@ -145,7 +145,8 @@ export default function OnboardingWizard() {
           instagram: brandKit?.instagram_handle || '',
           facebook: brandKit?.facebook_handle || '',
         }));
-        if (workspace.business_name) {
+        const bNameToCheck = workspace.business_name || workspace.name || '';
+        if (bNameToCheck && !bNameToCheck.toLowerCase().includes('my workspace')) {
           setIsEditMode(true);
         }
       }
@@ -363,6 +364,13 @@ export default function OnboardingWizard() {
       }
     }
 
+    if (currentStep === 4) {
+      if (!formData.brandKitName.trim()) {
+        setErrors({ brandKitName: 'Brand Kit Name is required' });
+        return;
+      }
+    }
+
     if (currentStep < steps.length) {
       setCurrentStep(prev => prev + 1);
     } else {
@@ -576,8 +584,19 @@ export default function OnboardingWizard() {
                   type="text"
                   placeholder="6-digit code"
                   value={formData.pincode || ''}
-                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                  onChange={(e) => {
+                    const rawVal = e.target.value;
+                    const val = rawVal.replace(/\D/g, '');
+                    if (rawVal.length > 6 || val.length > 6) {
+                      setErrors({ ...errors, pincode: 'Pincode cannot be more than 6 digits' });
+                    } else {
+                      if (errors.pincode) setErrors({ ...errors, pincode: '' });
+                    }
+                    setFormData({ ...formData, pincode: val.slice(0, 6) });
+                  }}
+                  style={errors.pincode ? { borderColor: 'red' } : {}}
                 />
+                {errors.pincode && <span style={{ color: 'red', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.pincode}</span>}
               </div>
               <div className={styles.inputGroup}>
                 <label>Business Timing</label>
@@ -859,13 +878,18 @@ export default function OnboardingWizard() {
             <p>How should your brand speak to its audience?</p>
 
             <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
-              <label>Brand Kit Name</label>
+              <label>Brand Kit Name <span style={{ color: 'red' }}>*</span></label>
               <input
                 type="text"
                 placeholder="e.g. Main Brand"
                 value={formData.brandKitName || ''}
-                onChange={(e) => setFormData({ ...formData, brandKitName: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, brandKitName: e.target.value });
+                  if (errors.brandKitName) setErrors({ ...errors, brandKitName: '' });
+                }}
+                style={errors.brandKitName ? { borderColor: 'red' } : {}}
               />
+              {errors.brandKitName && <span style={{ color: 'red', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.brandKitName}</span>}
             </div>
 
             <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
