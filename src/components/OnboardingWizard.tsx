@@ -15,7 +15,9 @@ import {
   X,
   Instagram,
   Facebook,
-  Loader2
+  Loader2,
+  ChevronDown,
+  Sparkles
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import styles from './OnboardingWizard.module.css';
@@ -35,6 +37,11 @@ const fontOptions = [
   { value: 'Raleway', label: 'Raleway' },
   { value: 'Merriweather', label: 'Merriweather' },
   { value: 'Lora', label: 'Lora' }
+];
+
+const HOURS = [
+  '12 AM', '1 AM', '2 AM', '3 AM', '4 AM', '5 AM', '6 AM', '7 AM', '8 AM', '9 AM', '10 AM', '11 AM',
+  '12 PM', '1 PM', '2 PM', '3 PM', '4 PM', '5 PM', '6 PM', '7 PM', '8 PM', '9 PM', '10 PM', '11 PM'
 ];
 
 const customSelectStyles = {
@@ -70,10 +77,13 @@ export default function OnboardingWizard() {
     businessName: '',
     address: '',
     pincode: '',
-    timing: '',
+    timing: '9 AM - 6 PM',
     logo: null as string | null,
     logoUrl: null as string | null,
     logoFile: null as File | null,
+    logoDark: null as string | null,
+    logoDarkUrl: null as string | null,
+    logoDarkFile: null as File | null,
     colors: { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
     tone: 'professional',
     description: '',
@@ -86,6 +96,24 @@ export default function OnboardingWizard() {
     instagram: '',
     facebook: ''
   });
+
+  const [isOpenOpen, setIsOpenOpen] = useState(false);
+  const [isOpenClose, setIsOpenClose] = useState(false);
+  const dropdownOpenRef = useRef<HTMLDivElement>(null);
+  const dropdownCloseRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownOpenRef.current && !dropdownOpenRef.current.contains(event.target as Node)) {
+        setIsOpenOpen(false);
+      }
+      if (dropdownCloseRef.current && !dropdownCloseRef.current.contains(event.target as Node)) {
+        setIsOpenClose(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     async function fetchExistingData() {
@@ -156,6 +184,7 @@ export default function OnboardingWizard() {
       .from('workspaces')
       .update({ 
         business_name: formData.businessName,
+        owner_name: formData.ownerName,
         address: formData.address,
         pincode: formData.pincode,
         business_timing: formData.timing
@@ -167,7 +196,7 @@ export default function OnboardingWizard() {
     }
   };
 
-  const saveBrandKit = async (logoUrlOverride?: string) => {
+  const saveBrandKit = async (logoUrlOverride?: string, logoDarkUrlOverride?: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -206,6 +235,7 @@ export default function OnboardingWizard() {
         workspace_id: workspace.id,
         brand_kit_name: formData.brandKitName || `${formData.businessName} Brand Kit`,
         logo_url: logoUrlOverride || formData.logoUrl || null,
+        logo_dark_url: logoDarkUrlOverride || formData.logoDarkUrl || null,
         primary_color: formData.colors.primary,
         secondary_color: formData.colors.secondary,
         accent_color: formData.colors.accent,
@@ -238,20 +268,23 @@ export default function OnboardingWizard() {
     setLoading(true);
     try {
       await saveWorkspace();
-      
+
       let finalLogoUrl = formData.logoUrl;
+      let finalLogoDarkUrl = formData.logoDarkUrl;
+
+      // Upload Primary Logo
       if (formData.logoFile && !finalLogoUrl) {
         setUploading(true);
         const fileExt = formData.logoFile.name.split('.').pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        
+        const fileName = `${Date.now()}_primary_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
         const { error: uploadError } = await supabase.storage
           .from('BrandpostAI_logos')
           .upload(fileName, formData.logoFile);
 
         if (uploadError) {
-          console.error('Error uploading file:', uploadError);
-          setErrors({ logo: `Upload failed: ${uploadError.message}` });
+          console.error('Error uploading primary file:', uploadError);
+          setErrors({ logo: `Primary logo upload failed: ${uploadError.message}` });
           setUploading(false);
           setLoading(false);
           return;
@@ -262,10 +295,30 @@ export default function OnboardingWizard() {
           .getPublicUrl(fileName);
 
         finalLogoUrl = data.publicUrl;
-        setUploading(false);
       }
-      
-      await saveBrandKit(finalLogoUrl || undefined);
+
+      // Upload Transparent Logo
+      if (formData.logoDarkFile && !finalLogoDarkUrl) {
+        setUploading(true);
+        const fileExt = formData.logoDarkFile.name.split('.').pop();
+        const fileName = `${Date.now()}_dark_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('BrandpostAI_logos')
+          .upload(fileName, formData.logoDarkFile);
+
+        if (uploadError) {
+          console.error('Error uploading dark file:', uploadError);
+        } else {
+          const { data } = supabase.storage
+            .from('BrandpostAI_logos')
+            .getPublicUrl(fileName);
+          finalLogoDarkUrl = data.publicUrl;
+        }
+      }
+
+      setUploading(false);
+      await saveBrandKit(finalLogoUrl || undefined, finalLogoDarkUrl || undefined);
       router.push('/dashboard');
     } catch (err: any) {
       console.error('Final submit error:', err);
@@ -312,7 +365,17 @@ export default function OnboardingWizard() {
     if (file && (file.type === 'image/png' || file.type === 'image/jpeg' || file.type === 'image/svg+xml')) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setFormData(prev => ({...prev, logo: e.target?.result as string, logoFile: file }));
+        setFormData(prev => ({ ...prev, logo: e.target?.result as string, logoFile: file }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDarkFile = (file: File) => {
+    if (file && (file.type === 'image/png' || file.type === 'image/jpeg' || file.type === 'image/svg+xml')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setFormData(prev => ({ ...prev, logoDark: e.target?.result as string, logoDarkFile: file }));
       };
       reader.readAsDataURL(file);
     }
@@ -341,19 +404,35 @@ export default function OnboardingWizard() {
           <div className={styles.stepContent}>
             <h2>Tell us about your business</h2>
             <p>We'll use this to personalize your content and profile.</p>
-            <div className={styles.inputGroup}>
-              <label>Business Name <span style={{color: 'red'}}>*</span></label>
-              <input 
-                type="text" 
-                placeholder="e.g. Pixel Agency" 
-                value={formData.businessName}
-                onChange={(e) => {
-                  setFormData({...formData, businessName: e.target.value});
-                  if (errors.businessName) setErrors({...errors, businessName: ''});
-                }}
-                style={errors.businessName ? { borderColor: 'red' } : {}}
-              />
-              {errors.businessName && <span style={{color: 'red', fontSize: '12px', marginTop: '4px', display: 'block'}}>{errors.businessName}</span>}
+            <div className={styles.inputGrid}>
+              <div className={styles.inputGroup}>
+                <label>Business Name <span style={{color: 'red'}}>*</span></label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Pixel Agency" 
+                  value={formData.businessName}
+                  onChange={(e) => {
+                    setFormData({...formData, businessName: e.target.value});
+                    if (errors.businessName) setErrors({...errors, businessName: ''});
+                  }}
+                  style={errors.businessName ? { borderColor: 'red' } : {}}
+                />
+                {errors.businessName && <span style={{color: 'red', fontSize: '12px', marginTop: '4px', display: 'block'}}>{errors.businessName}</span>}
+              </div>
+              <div className={styles.inputGroup}>
+                <label>Business Owner Name <span style={{color: 'red'}}>*</span></label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. John Doe" 
+                  value={formData.ownerName}
+                  onChange={(e) => {
+                    setFormData({...formData, ownerName: e.target.value});
+                    if (errors.ownerName) setErrors({...errors, ownerName: ''});
+                  }}
+                  style={errors.ownerName ? { borderColor: 'red' } : {}}
+                />
+                {errors.ownerName && <span style={{color: 'red', fontSize: '12px', marginTop: '4px', display: 'block'}}>{errors.ownerName}</span>}
+              </div>
             </div>
             <div className={styles.inputGroup}>
               <label>Address</label>
@@ -376,12 +455,117 @@ export default function OnboardingWizard() {
               </div>
               <div className={styles.inputGroup}>
                 <label>Business Timing</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. 9 AM - 8 PM" 
-                  value={formData.timing}
-                  onChange={(e) => setFormData({...formData, timing: e.target.value})}
-                />
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', position: 'relative' }}>
+                  {/* Open Time Custom Dropdown */}
+                  <div style={{ flex: 1, position: 'relative' }} ref={dropdownOpenRef}>
+                    <div
+                      onClick={() => setIsOpenOpen(!isOpenOpen)}
+                      style={{
+                        height: '40px',
+                        padding: '0 0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        background: 'white'
+                      }}
+                    >
+                      <span>{formData.timing.split(' - ')[0] || '9 AM'}</span>
+                      <ChevronDown size={16} color="var(--text-muted)" />
+                    </div>
+
+                    {isOpenOpen && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '45px',
+                        left: 0,
+                        width: '100%',
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        background: 'white',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        zIndex: 100,
+                        boxShadow: 'var(--shadow-lg)'
+                      }}>
+                        {HOURS.map(h => (
+                          <div
+                            key={`open-${h}`}
+                            onClick={() => {
+                              const end = formData.timing.split(' - ')[1] || '6 PM';
+                              setFormData({ ...formData, timing: `${h} - ${end}` });
+                              setIsOpenOpen(false);
+                            }}
+                            style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}
+                            onMouseOver={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            {h}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <span style={{ color: 'var(--text-muted)' }}>to</span>
+
+                  {/* Close Time Custom Dropdown */}
+                  <div style={{ flex: 1, position: 'relative' }} ref={dropdownCloseRef}>
+                    <div
+                      onClick={() => setIsOpenClose(!isOpenClose)}
+                      style={{
+                        height: '40px',
+                        padding: '0 0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        background: 'white'
+                      }}
+                    >
+                      <span>{formData.timing.split(' - ')[1] || '6 PM'}</span>
+                      <ChevronDown size={16} color="var(--text-muted)" />
+                    </div>
+
+                    {isOpenClose && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '45px',
+                        left: 0,
+                        width: '100%',
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        background: 'white',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        zIndex: 100,
+                        boxShadow: 'var(--shadow-lg)'
+                      }}>
+                        {HOURS.map(h => (
+                          <div
+                            key={`close-${h}`}
+                            onClick={() => {
+                              const start = formData.timing.split(' - ')[0] || '9 AM';
+                              setFormData({ ...formData, timing: `${start} - ${h}` });
+                              setIsOpenClose(false);
+                            }}
+                            style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}
+                            onMouseOver={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            {h}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -389,40 +573,90 @@ export default function OnboardingWizard() {
       case 2:
         return (
           <div className={styles.stepContent}>
-            <h2>Upload your logo</h2>
-            <p>This will be added to your generated posts.</p>
-            {errors.logo && <div style={{color: 'red', marginBottom: '10px', fontSize: '14px', fontWeight: 500}}>{errors.logo}</div>}
-            
-            {formData.logo ? (
-              <div className={styles.previewContainer}>
-                <img src={formData.logo} alt="Logo Preview" className={styles.previewImage} />
-                <button 
-                  className={styles.removeBtn}
-                  onClick={() => setFormData({ ...formData, logo: null, logoUrl: null, logoFile: null })}
-                >
-                  <X size={16} style={{ marginRight: '4px' }} /> Remove and try another
-                </button>
+            <h2>Upload your brand logos</h2>
+            <p>Upload your primary logo and an optional transparent/dark version.</p>
+            {errors.logo && <div style={{ color: 'red', marginBottom: '10px', fontSize: '14px', fontWeight: 500 }}>{errors.logo}</div>}
+
+            <div className={styles.logoUploadGrid}>
+              <div className={styles.logoSection}>
+                <h3>Primary Logo <span style={{ color: 'red' }}>*</span></h3>
+                {formData.logo ? (
+                  <div className={styles.previewContainer}>
+                    <div className={styles.logoPreviewWrapper}>
+                      <img src={formData.logo} alt="Logo Preview" className={styles.previewImage} />
+                    </div>
+                    <button
+                      className={styles.removeBtn}
+                      onClick={() => setFormData({ ...formData, logo: null, logoUrl: null, logoFile: null })}
+                    >
+                      <X size={16} /> Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className={`${styles.uploadBox} ${isDragging ? styles.dragging : ''}`}
+                    onDragOver={onDragOver}
+                    onDragLeave={onDragLeave}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={(e) => e.target.files && handleFile(e.target.files[0])}
+                      accept="image/png, image/jpeg, image/svg+xml"
+                      style={{ display: 'none' }}
+                    />
+                    <Upload size={32} className={styles.uploadIcon} />
+                    <span>Click to browse</span>
+                    <p>PNG, SVG or JPG</p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div 
-                className={`${styles.uploadBox} ${isDragging ? styles.dragging : ''}`}
-                onDragOver={onDragOver}
-                onDragLeave={onDragLeave}
-                onDrop={onDrop}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <input 
-                  type="file" 
-                  ref={fileInputRef}
-                  onChange={(e) => e.target.files && handleFile(e.target.files[0])}
-                  accept="image/png, image/jpeg, image/svg+xml"
-                  style={{ display: 'none' }}
-                />
-                <Upload size={48} className={styles.uploadIcon} />
-                <span>Click to browse or drag and drop</span>
-                <p>PNG, SVG or JPG (max 2MB)</p>
+
+              <div className={styles.logoSection}>
+                <h3>Transparent Logo (Optional)</h3>
+                {formData.logoDark ? (
+                  <div className={styles.previewContainer}>
+                    <div className={styles.logoPreviewWrapper} style={{ backgroundColor: '#1a1a1a' }}>
+                      <img src={formData.logoDark} alt="Logo Dark Preview" className={styles.previewImage} />
+                    </div>
+                    <button
+                      className={styles.removeBtn}
+                      onClick={() => setFormData({ ...formData, logoDark: null, logoDarkUrl: null, logoDarkFile: null })}
+                    >
+                      <X size={16} /> Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className={styles.uploadBox}
+                    onDragOver={onDragOver}
+                    onDragLeave={onDragLeave}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      if (e.dataTransfer.files[0]) handleDarkFile(e.dataTransfer.files[0]);
+                    }}
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = 'image/png, image/jpeg, image/svg+xml';
+                      input.onchange = (e: any) => e.target.files && handleDarkFile(e.target.files[0]);
+                      input.click();
+                    }}
+                  >
+                    <Upload size={32} className={styles.uploadIcon} />
+                    <span>Click to browse</span>
+                    <p>PNG or SVG</p>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         );
       case 3:
@@ -430,39 +664,72 @@ export default function OnboardingWizard() {
           <div className={styles.stepContent}>
             <h2>Choose your colors</h2>
             <p>Select colors that represent your brand.</p>
-            
+
             {formData.logo && (
-              <div className={styles.autoDetectContainer}>
-                <button 
-                  className={styles.autoDetectBtn}
-                  onClick={handleAutoDetect}
-                  type="button"
-                >
-                  <Palette size={18} /> Auto detect from Logo
-                </button>
-              </div>
+              <button
+                className={styles.aiColorBtn}
+                onClick={handleAutoDetect}
+                type="button"
+              >
+                <Sparkles size={20} /> Auto-detect from Logo
+              </button>
             )}
 
-            <div className={styles.colorSelection}>
+            <div className={styles.inputGrid}>
               <div className={styles.colorPicker}>
                 <label>Primary</label>
                 <div className={styles.colorInput}>
-                  <input type="color" value={formData.colors.primary} onChange={(e) => setFormData({...formData, colors: {...formData.colors, primary: e.target.value}})} />
-                  <span>{formData.colors.primary}</span>
+                  <input
+                    type="text"
+                    className={styles.hexText}
+                    value={formData.colors.primary || ''}
+                    onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, primary: e.target.value } })}
+                  />
+                  <div className={styles.pickerWrapper} style={{ backgroundColor: formData.colors.primary || '#ffffff' }}>
+                    <input
+                      type="color"
+                      value={formData.colors.primary || '#000000'}
+                      onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, primary: e.target.value } })}
+                    />
+                  </div>
                 </div>
               </div>
+
               <div className={styles.colorPicker}>
                 <label>Secondary</label>
                 <div className={styles.colorInput}>
-                  <input type="color" value={formData.colors.secondary} onChange={(e) => setFormData({...formData, colors: {...formData.colors, secondary: e.target.value}})} />
-                  <span>{formData.colors.secondary}</span>
+                  <input
+                    type="text"
+                    className={styles.hexText}
+                    value={formData.colors.secondary || ''}
+                    onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, secondary: e.target.value } })}
+                  />
+                  <div className={styles.pickerWrapper} style={{ backgroundColor: formData.colors.secondary || '#ffffff' }}>
+                    <input
+                      type="color"
+                      value={formData.colors.secondary || '#000000'}
+                      onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, secondary: e.target.value } })}
+                    />
+                  </div>
                 </div>
               </div>
-              <div className={styles.colorPicker}>
-                <label>Accent</label>
-                <div className={styles.colorInput}>
-                  <input type="color" value={formData.colors.accent} onChange={(e) => setFormData({...formData, colors: {...formData.colors, accent: e.target.value}})} />
-                  <span>{formData.colors.accent}</span>
+            </div>
+
+            <div className={styles.colorPicker} style={{ maxWidth: '300px', marginTop: '1.5rem' }}>
+              <label>Accent</label>
+              <div className={styles.colorInput}>
+                <input
+                  type="text"
+                  className={styles.hexText}
+                  value={formData.colors.accent || ''}
+                  onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, accent: e.target.value } })}
+                />
+                <div className={styles.pickerWrapper} style={{ backgroundColor: formData.colors.accent || '#ffffff' }}>
+                  <input
+                    type="color"
+                    value={formData.colors.accent || '#000000'}
+                    onChange={(e) => setFormData({ ...formData, colors: { ...formData.colors, accent: e.target.value } })}
+                  />
                 </div>
               </div>
             </div>

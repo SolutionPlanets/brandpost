@@ -1,4 +1,8 @@
--- 1. FIX WORKSPACES TABLE
+-- 1. FIX USERS TABLE
+ALTER TABLE public.users 
+ADD COLUMN IF NOT EXISTS mail_verified boolean DEFAULT false;
+
+-- 2. FIX WORKSPACES TABLE
 -- Rename 'name' to 'business_name' to match the PRD and Frontend code
 DO $$ 
 BEGIN
@@ -13,7 +17,7 @@ ADD COLUMN IF NOT EXISTS address text,
 ADD COLUMN IF NOT EXISTS pincode text,
 ADD COLUMN IF NOT EXISTS business_timing text;
 
--- 2. FIX BRAND_KITS TABLE
+-- 3. FIX BRAND_KITS TABLE
 -- Ensure 'brand_kit_name' exists and is not 'name'
 DO $$ 
 BEGIN
@@ -22,8 +26,15 @@ BEGIN
   END IF;
 END $$;
 
--- 3. FIX ROW LEVEL SECURITY (RLS)
--- This is likely why you get {} error: the user doesn't have permission to Update or Insert.
+-- 4. FIX ROW LEVEL SECURITY (RLS)
+-- Users Policies
+DROP POLICY IF EXISTS "Users can view their own profile" ON users;
+DROP POLICY IF EXISTS "Users can update their own profile" ON users;
+DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON users;
+
+CREATE POLICY "Users can view their own profile" ON users FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update their own profile" ON users FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Enable insert for authenticated users only" ON users FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- Workspaces Policies
 DROP POLICY IF EXISTS "Users can view their own workspaces" ON workspaces;
@@ -48,20 +59,32 @@ FOR UPDATE USING (workspace_id IN (SELECT id FROM workspaces WHERE owner_id = au
 CREATE POLICY "Users can insert their own brand kits" ON brand_kits 
 FOR INSERT WITH CHECK (workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid()));
 
--- 4. UPDATE TRIGGER FUNCTION
--- Ensure it uses the new column name 'business_name'
+-- 5. UPDATE TRIGGER FUNCTION
+-- Ensure it handles mail_verified and business_name
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 DECLARE
     new_user_id uuid;
+    is_verified boolean;
 BEGIN
-    INSERT INTO public.users (id, email, full_name, plan_id, trial_ends_at)
-    VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 'solo', now() + interval '14 days')
+    -- Google users are auto-verified
+    is_verified := (new.raw_app_meta_data->>'provider' = 'google');
+
+    INSERT INTO public.users (id, email, full_name, plan_id, trial_ends_at, mail_verified)
+    VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 'solo', now() + interval '14 days', is_verified)
     RETURNING id INTO new_user_id;
 
     INSERT INTO public.workspaces (owner_id, business_name, plan_id)
     VALUES (new_user_id, 'My Workspace', 'solo');
 
     RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 6. SECURE EMAIL EXISTENCE CHECK (FOR SIGNUP UX)
+CREATE OR REPLACE FUNCTION public.check_user_exists(email_to_check text)
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (SELECT 1 FROM public.users WHERE email = email_to_check);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -363,11 +363,50 @@
   cursor: not-allowed;
 }
 
+.logoUploadGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+.logoSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.logoSection h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.logoPreviewWrapper {
+  width: 100%;
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  overflow: hidden;
+}
+
+.logoPreviewWrapper img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
 .previewContainer {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
   width: 100%;
 }
 

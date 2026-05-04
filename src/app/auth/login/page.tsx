@@ -33,7 +33,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -45,7 +45,24 @@ export default function LoginPage() {
         setError(error.message);
       }
       setLoading(false);
-    } else {
+      return;
+    }
+
+    if (authData?.user) {
+      // Check if mail_verified is true in public.users
+      const { data: publicUser } = await supabase
+        .from('users')
+        .select('mail_verified')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+
+      if (publicUser && !publicUser.mail_verified) {
+        setError('Your email is not verified yet. Please click the confirmation link sent to your inbox to log in.');
+        await supabase.auth.signOut();
+        setLoading(false);
+        return;
+      }
+      
       router.push('/dashboard');
     }
   };
