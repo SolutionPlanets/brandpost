@@ -1,64 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ChevronLeft,
   ChevronRight,
-  PartyPopper,
-  Gift,
-  Star,
-  Heart,
-  Sun,
-  Moon,
-  Flame,
-  Leaf,
-  Sparkles,
   Plus,
   CalendarDays,
+  Loader2,
 } from 'lucide-react';
 import styles from './Calendar.module.css';
+import { getMergedFestiveEvents, type FestiveEvent } from '@/utils/festivals';
 
 // ── Festive events data ──────────────────────────────────────────────
-const FESTIVE_EVENTS = [
-  { id: 1, name: 'New Year', date: '2026-01-01', icon: PartyPopper, color: '#6366f1', category: 'global' },
-  { id: 2, name: 'Makar Sankranti', date: '2026-01-14', icon: Sun, color: '#f59e0b', category: 'indian' },
-  { id: 3, name: 'Pongal', date: '2026-01-15', icon: Sun, color: '#f59e0b', category: 'indian' },
-  { id: 4, name: 'Republic Day', date: '2026-01-26', icon: Star, color: '#10b981', category: 'indian' },
-  { id: 5, name: "Valentine's Day", date: '2026-02-14', icon: Heart, color: '#ef4444', category: 'global' },
-  { id: 6, name: "Women's Day", date: '2026-03-08', icon: Heart, color: '#a855f7', category: 'global' },
-  { id: 7, name: 'Holi', date: '2026-03-17', icon: Sparkles, color: '#ec4899', category: 'indian' },
-  { id: 8, name: 'Ugadi / Gudi Padwa', date: '2026-03-19', icon: Moon, color: '#f97316', category: 'indian' },
-  { id: 9, name: 'Ram Navami', date: '2026-03-28', icon: Sun, color: '#eab308', category: 'indian' },
-  { id: 10, name: 'Eid ul-Fitr', date: '2026-04-01', icon: Moon, color: '#14b8a6', category: 'indian' },
-  { id: 11, name: 'Easter', date: '2026-04-05', icon: Gift, color: '#06b6d4', category: 'global' },
-  { id: 12, name: 'Baisakhi', date: '2026-04-13', icon: Leaf, color: '#22c55e', category: 'indian' },
-  { id: 13, name: 'Earth Day', date: '2026-04-22', icon: Leaf, color: '#16a34a', category: 'global' },
-  { id: 14, name: "Mother's Day", date: '2026-05-10', icon: Heart, color: '#f43f5e', category: 'global' },
-  { id: 15, name: 'Buddha Purnima', date: '2026-05-12', icon: Sun, color: '#eab308', category: 'indian' },
-  { id: 16, name: 'World Environment Day', date: '2026-06-05', icon: Leaf, color: '#16a34a', category: 'global' },
-  { id: 17, name: 'Eid ul-Adha', date: '2026-06-07', icon: Moon, color: '#14b8a6', category: 'indian' },
-  { id: 18, name: "Father's Day", date: '2026-06-21', icon: Star, color: '#3b82f6', category: 'global' },
-  { id: 19, name: 'Yoga Day', date: '2026-06-21', icon: Leaf, color: '#10b981', category: 'global' },
-  { id: 20, name: 'Independence Day', date: '2026-08-15', icon: Star, color: '#f97316', category: 'indian' },
-  { id: 21, name: 'Raksha Bandhan', date: '2026-08-12', icon: Heart, color: '#ec4899', category: 'indian' },
-  { id: 22, name: 'Janmashtami', date: '2026-08-22', icon: PartyPopper, color: '#8b5cf6', category: 'indian' },
-  { id: 23, name: 'Onam', date: '2026-09-02', icon: Flame, color: '#f59e0b', category: 'indian' },
-  { id: 24, name: "Teachers' Day", date: '2026-09-05', icon: Star, color: '#6366f1', category: 'indian' },
-  { id: 25, name: 'Ganesh Chaturthi', date: '2026-09-07', icon: PartyPopper, color: '#ef4444', category: 'indian' },
-  { id: 26, name: 'Navratri Begins', date: '2026-10-02', icon: Moon, color: '#e11d48', category: 'indian' },
-  { id: 27, name: 'Gandhi Jayanti', date: '2026-10-02', icon: Star, color: '#10b981', category: 'indian' },
-  { id: 28, name: 'Dussehra', date: '2026-10-11', icon: Flame, color: '#dc2626', category: 'indian' },
-  { id: 29, name: 'Diwali', date: '2026-10-20', icon: Sparkles, color: '#f59e0b', category: 'indian' },
-  { id: 30, name: 'Halloween', date: '2026-10-31', icon: Moon, color: '#7c3aed', category: 'global' },
-  { id: 31, name: 'Guru Nanak Jayanti', date: '2026-11-08', icon: Sun, color: '#eab308', category: 'indian' },
-  { id: 32, name: "Children's Day", date: '2026-11-14', icon: Gift, color: '#06b6d4', category: 'indian' },
-  { id: 33, name: 'Thanksgiving', date: '2026-11-26', icon: Leaf, color: '#f97316', category: 'global' },
-  { id: 34, name: 'Christmas', date: '2026-12-25', icon: Gift, color: '#ef4444', category: 'global' },
-  { id: 35, name: 'New Year Eve', date: '2026-12-31', icon: PartyPopper, color: '#6366f1', category: 'global' },
-  { id: 36, name: 'Mahavir JanmaKalyanak', date: '2026-03-31', icon: Sun, color: '#f59e0b', category: 'indian' },
-];
-
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
@@ -77,13 +31,13 @@ function getMonthDays(year: number, month: number) {
   return days;
 }
 
-function getEventsForDate(year: number, month: number, day: number) {
+function getEventsForDate(events: FestiveEvent[], year: number, month: number, day: number) {
   const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  return FESTIVE_EVENTS.filter((e) => e.date === dateStr);
+  return events.filter((e) => e.date === dateStr);
 }
 
-function getEventsForMonth(year: number, month: number, filter: FilterType) {
-  return FESTIVE_EVENTS.filter((e) => {
+function getEventsForMonth(events: FestiveEvent[], year: number, month: number, filter: FilterType) {
+  return events.filter((e) => {
     const d = new Date(e.date);
     const matchMonth = d.getFullYear() === year && d.getMonth() === month;
     if (!matchMonth) return false;
@@ -97,9 +51,26 @@ export default function CalendarPage() {
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [filter, setFilter] = useState<FilterType>('all');
+  const [allEvents, setAllEvents] = useState<FestiveEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchHolidays() {
+      setIsLoading(true);
+      try {
+        const events = await getMergedFestiveEvents(currentYear);
+        setAllEvents(events);
+      } catch (error) {
+        console.error('Failed to fetch holidays:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchHolidays();
+  }, [currentYear]);
 
   const days = getMonthDays(currentYear, currentMonth);
-  const monthEvents = getEventsForMonth(currentYear, currentMonth, filter);
+  const monthEvents = getEventsForMonth(allEvents, currentYear, currentMonth, filter);
 
   const prevMonth = () => {
     if (currentMonth === 0) {
@@ -155,7 +126,7 @@ export default function CalendarPage() {
             ))}
             {days.map((day, i) => {
               if (day === null) return <div key={`empty-${i}`} className={styles.dayCell} />;
-              const events = getEventsForDate(currentYear, currentMonth, day);
+              const events = getEventsForDate(allEvents, currentYear, currentMonth, day);
               return (
                 <div key={day} className={`${styles.dayCell} ${styles.dayCellActive} ${isToday(day) ? styles.dayCellToday : ''}`}>
                   <span className={styles.dayNumber}>{day}</span>
@@ -191,7 +162,12 @@ export default function CalendarPage() {
           </div>
 
           <div className={styles.eventsList}>
-            {monthEvents.length === 0 ? (
+            {isLoading ? (
+              <div className={styles.loadingState}>
+                <Loader2 size={32} className={styles.spinner} />
+                <p>Fetching festive occasions...</p>
+              </div>
+            ) : monthEvents.length === 0 ? (
               <div className={styles.noEvents}>
                 <CalendarDays size={32} />
                 <p>No events this month</p>

@@ -206,7 +206,123 @@
   justify-content: center;
 }
 
-/* ── Step 2: Form ────────────────────────────────────── */
+
+/* ── Step 2: Template Grid ───────────────────────────── */
+.templateGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.templateCard {
+  background: none;
+  border: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.templateImage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4/5;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 2px solid var(--border);
+  transition: all 0.2s ease;
+}
+
+.templateImage img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.templateCard:hover .templateImage {
+  border-color: var(--primary);
+  transform: scale(1.02);
+}
+
+.templateCardActive .templateImage {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+}
+
+.templateCheck {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.templateName {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+
+.templateCardActive .templateName {
+  color: var(--primary);
+}
+
+.templateNoneWrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+  padding-top: 2rem;
+  border-top: 1px dashed var(--border);
+}
+
+.noneBtn {
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  padding: 1rem 3rem;
+  border-radius: var(--radius-lg);
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.noneBtn:hover {
+  border-color: var(--primary);
+  background-color: var(--surface);
+}
+
+.noneBtnActive {
+  border-color: var(--primary);
+  background-color: var(--primary-light);
+  color: var(--primary);
+}
+
+.noneBtn p {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.noneBtnActive p {
+  color: var(--primary);
+  opacity: 0.8;
+}
+
+/* ── Step 3: Form ────────────────────────────────────── */
 .formGrid {
   display: flex;
   flex-direction: column;

@@ -10,10 +10,26 @@ import {
   Key,
   Save,
   Check,
+  Globe,
+  Clock,
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { useBrand } from '@/contexts/BrandContext';
 import styles from './Settings.module.css';
+
+const TIMEZONES = [
+  { value: 'Asia/Kolkata', label: '(GMT+05:30) India Standard Time' },
+  { value: 'UTC', label: '(GMT+00:00) UTC' },
+  { value: 'America/New_York', label: '(GMT-05:00) Eastern Time' },
+  { value: 'America/Chicago', label: '(GMT-06:00) Central Time' },
+  { value: 'America/Denver', label: '(GMT-07:00) Mountain Time' },
+  { value: 'America/Los_Angeles', label: '(GMT-08:00) Pacific Time' },
+  { value: 'Europe/London', label: '(GMT+00:00) London' },
+  { value: 'Europe/Paris', label: '(GMT+01:00) Paris' },
+  { value: 'Asia/Dubai', label: '(GMT+04:00) Dubai' },
+  { value: 'Asia/Singapore', label: '(GMT+08:00) Singapore' },
+  { value: 'Australia/Sydney', label: '(GMT+11:00) Sydney' },
+];
 
 type SettingsTab = 'profile' | 'workspace' | 'billing' | 'notifications';
 
@@ -27,7 +43,7 @@ const TABS = [
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [saved, setSaved] = useState(false);
-  const { businessName, setBusinessName, ownerName, refreshBrandData, planId, trialEndsAt } = useBrand();
+  const { businessName, setBusinessName, ownerName, refreshBrandData, planId, trialEndsAt, timezone } = useBrand();
   const supabase = createClient();
 
   const [profileData, setProfileData] = useState({
@@ -41,6 +57,7 @@ export default function SettingsPage() {
     platform: 'both',
     tone: 'professional'
   });
+
 
   useEffect(() => {
     async function fetchData() {
@@ -62,7 +79,8 @@ export default function SettingsPage() {
       if (workspace) {
         setProfileData(prev => ({
           ...prev,
-          fullName: workspace.owner_name || prev.fullName
+          fullName: workspace.owner_name || prev.fullName,
+          timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata'
         }));
         setWorkspaceData({
           name: workspace.business_name === 'My Workspace' ? '' : (workspace.business_name || ''),
@@ -96,7 +114,8 @@ export default function SettingsPage() {
           .from('workspaces')
           .update({ 
             business_name: businessName,
-            owner_name: profileData.fullName
+            owner_name: profileData.fullName,
+            timezone: profileData.timezone
           })
           .eq('id', workspace.id);
         
@@ -144,7 +163,19 @@ export default function SettingsPage() {
             placeholder="email@example.com"
           />
         </div>
-
+        <div className={styles.formGroup}>
+          <label><Globe size={14} /> Timezone</label>
+          <select 
+            value={profileData.timezone}
+            disabled
+            style={{ backgroundColor: 'var(--background)', cursor: 'not-allowed', opacity: 0.8 }}
+          >
+            {TIMEZONES.map(tz => (
+              <option key={tz.value} value={tz.value}>{tz.label}</option>
+            ))}
+          </select>
+          <p className={styles.fieldHelp}>Detected automatically based on your location.</p>
+        </div>
       </div>
 
       <div className={styles.dangerZone}>
@@ -256,7 +287,10 @@ export default function SettingsPage() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <h1 className={styles.title}>Settings</h1>
+        <div>
+          <h1 className={styles.title}>Settings</h1>
+          <p className={styles.subtitle}>Manage your account and workspace preferences.</p>
+        </div>
       </header>
 
       <div className={styles.settingsLayout}>

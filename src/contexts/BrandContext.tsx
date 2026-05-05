@@ -22,6 +22,7 @@ interface BrandContextType {
   trialEndsAt: string | null;
   createdAt: string | null;
   postsUsed: number;
+  timezone: string;
   setBusinessName: (name: string) => void;
   setLogo: (logo: string | null) => void;
   setColors: (colors: { primary: string; secondary: string; accent: string }) => void;
@@ -49,6 +50,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [postsUsed, setPostsUsed] = useState(0);
+  const [timezone, setTimezone] = useState('Asia/Kolkata');
 
   const supabase = createClient();
 
@@ -79,6 +81,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         owner_name,
         address,
         pincode,
+        timezone,
         posts_used_this_cycle,
         brand_kits (*)
       `)
@@ -96,6 +99,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       setAddress(workspace.address || '');
       setPincode(workspace.pincode || '');
       setPostsUsed(workspace.posts_used_this_cycle || 0);
+      setTimezone(workspace.timezone || 'Asia/Kolkata');
       setLogo(brandKit?.logo_url || null);
       setInstagram(brandKit?.instagram_handle || '');
       setFacebook(brandKit?.facebook_handle || '');
@@ -117,6 +121,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         logo: brandKit?.logo_url || null,
         instagram: brandKit?.instagram_handle || '',
         facebook: brandKit?.facebook_handle || '',
+        timezone: workspace.timezone || 'Asia/Kolkata',
       }));
     }
   };
@@ -138,6 +143,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         if (d.trialEndsAt) setTrialEndsAt(d.trialEndsAt);
         if (d.createdAt) setCreatedAt(d.createdAt);
         if (d.postsUsed !== undefined) setPostsUsed(d.postsUsed);
+        if (d.timezone) setTimezone(d.timezone);
         if (d.logo) setLogo(d.logo);
         if (d.colors) setColors(d.colors);
       } catch (e) {
@@ -163,10 +169,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       trialEndsAt,
       createdAt,
       postsUsed,
+      timezone,
       logo,
       colors
     }));
-  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, planId, trialEndsAt, createdAt, postsUsed, logo, colors]);
+  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, planId, trialEndsAt, createdAt, postsUsed, timezone, logo, colors]);
 
   const value = React.useMemo(() => ({
     fullName,
@@ -183,11 +190,12 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     trialEndsAt,
     createdAt,
     postsUsed,
+    timezone,
     setBusinessName,
     setLogo,
     setColors,
     refreshBrandData
-  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, logo, colors, planId, trialEndsAt, createdAt, postsUsed]);
+  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, logo, colors, planId, trialEndsAt, createdAt, postsUsed, timezone]);
 
   return (
     <BrandContext.Provider value={value}>

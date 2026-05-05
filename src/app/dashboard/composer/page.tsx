@@ -34,6 +34,7 @@ type Platform = 'facebook' | 'instagram' | 'both';
 
 interface ComposerForm {
   contentType: ContentType | null;
+  templateId: string | null;
   topic: string;
   brandKit: string;
   platform: Platform;
@@ -53,7 +54,34 @@ const CONTENT_TYPES = [
   { type: 'general' as ContentType, label: 'General', icon: Layers, color: '#8b5cf6', desc: 'Brand awareness & engagement' },
 ];
 
-const STEP_LABELS = ['Content Type', 'Details', 'AI Generation', 'Preview & Edit'];
+const TEMPLATES: Record<ContentType, { id: string; name: string; image: string }[]> = {
+  festive: [
+    { id: 'fest-1', name: 'Traditional Glow', image: '/templates/festive/traditional.png' },
+    { id: 'fest-2', name: 'Modern Minimal', image: '/templates/festive/modern.png' },
+    { id: 'fest-3', name: 'Vibrant Celebration', image: '/templates/festive/vibrant.png' },
+    { id: 'fest-4', name: 'Elegant Script', image: '/templates/festive/elegant.png' },
+  ],
+  offer: [
+    { id: 'off-1', name: 'Big Bold Sale', image: '/templates/offer/bold.png' },
+    { id: 'off-2', name: 'Flash Deal', image: '/templates/offer/flash.png' },
+    { id: 'off-3', name: 'Product Spotlight', image: '/templates/offer/minimal.png' },
+    { id: 'off-4', name: 'Discount Badge', image: '/templates/offer/badge.png' },
+  ],
+  informational: [
+    { id: 'info-1', name: 'Expert Tips', image: '/templates/info/tips.png' },
+    { id: 'info-2', name: 'Did You Know?', image: '/templates/info/didyouknow.png' },
+    { id: 'info-3', name: 'Step-by-Step', image: '/templates/info/stepbystep.png' },
+    { id: 'info-4', name: 'Clean Listicle', image: '/templates/info/listicle.png' },
+  ],
+  general: [
+    { id: 'gen-1', name: 'Daily Quote', image: '/templates/gen/quote.png' },
+    { id: 'gen-2', name: 'Behind the Scenes', image: '/templates/gen/lifestyle.png' },
+    { id: 'gen-3', name: 'Question/Poll', image: '/templates/gen/bts.png' },
+    { id: 'gen-4', name: 'Lifestyle Focus', image: '/templates/gen/question.png' },
+  ],
+};
+
+const STEP_LABELS = ['Content Type', 'Template', 'Details', 'AI Generation', 'Preview & Edit'];
 
 // ── Component ────────────────────────────────────────────────────────
 export default function ComposerPage() {
@@ -74,6 +102,7 @@ export default function ComposerPage() {
 
   const [form, setForm] = useState<ComposerForm>({
     contentType: null,
+    templateId: null,
     topic: '',
     brandKit: 'main-brand',
     platform: 'both',
@@ -94,7 +123,8 @@ export default function ComposerPage() {
   }, [searchParams]);
 
   const canProceedStep2 = form.contentType !== null;
-  const canProceedStep3 = form.topic.trim().length > 0;
+  const canProceedStep3 = form.templateId !== null || form.templateId === 'none';
+  const canProceedStep4 = form.topic.trim().length > 0;
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -132,7 +162,7 @@ export default function ComposerPage() {
     setSelectedCaption(0);
     setSelectedImage(0);
     setIsGenerating(false);
-    setStep(4);
+    setStep(5);
   };
 
   const formatDateToDDMMYY = (dateStr: string) => {
@@ -196,8 +226,48 @@ export default function ComposerPage() {
     </div>
   );
 
-  // ── Step 2: Input Form ─────────────────────────────────────────────
-  const renderStep2 = () => (
+  // ── Step 2: Template Selector ──────────────────────────────────────
+  const renderStep2 = () => {
+    if (!form.contentType) return null;
+    const templates = TEMPLATES[form.contentType];
+    
+    return (
+      <div className={styles.stepContent}>
+        <h2 className={styles.stepTitle}>Choose a template</h2>
+        <p className={styles.stepDesc}>Select a visual style that matches your vision.</p>
+        <div className={styles.templateGrid}>
+          {templates.map((tpl) => {
+            const isSelected = form.templateId === tpl.id;
+            return (
+              <button
+                key={tpl.id}
+                className={`${styles.templateCard} ${isSelected ? styles.templateCardActive : ''}`}
+                onClick={() => setForm({ ...form, templateId: tpl.id })}
+              >
+                <div className={styles.templateImage}>
+                  <img src={tpl.image} alt={tpl.name} />
+                  {isSelected && <div className={styles.templateCheck}><Check size={18} /></div>}
+                </div>
+                <span className={styles.templateName}>{tpl.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className={styles.templateNoneWrap}>
+          <button 
+            className={`${styles.noneBtn} ${form.templateId === 'none' ? styles.noneBtnActive : ''}`}
+            onClick={() => setForm({ ...form, templateId: 'none' })}
+          >
+            None of the above
+            <p>AI will generate a custom layout for you</p>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Step 3: Input Form ─────────────────────────────────────────────
+  const renderStep3 = () => (
     <div className={styles.stepContent}>
       <h2 className={styles.stepTitle}>Tell us about your post</h2>
       <p className={styles.stepDesc}>Provide details so AI can generate the perfect content.</p>
@@ -259,8 +329,8 @@ export default function ComposerPage() {
     </div>
   );
 
-  // ── Step 3: AI Generation Loading ──────────────────────────────────
-  const renderStep3 = () => (
+  // ── Step 4: AI Generation Loading ──────────────────────────────────
+  const renderStep4 = () => (
     <div className={styles.stepContent}>
       <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '1.5rem' }}>
         <button 
@@ -268,7 +338,7 @@ export default function ComposerPage() {
             generationStateRef.current = 'stopped';
             setGenerationState('stopped');
             setIsGenerating(false);
-            setStep(2);
+            setStep(3);
           }}
           style={{ 
             display: 'flex', alignItems: 'center', gap: '0.5rem', 
@@ -337,7 +407,7 @@ export default function ComposerPage() {
               generationStateRef.current = 'stopped';
               setIsGenerating(false);
               setTimeout(() => {
-                setStep(2);
+                setStep(3);
               }, 3500); // Redirects after 3.5 seconds
             }}
             disabled={generationState === 'stopped'}
@@ -356,8 +426,8 @@ export default function ComposerPage() {
     </div>
   );
 
-  // ── Step 4: Preview & Edit ─────────────────────────────────────────
-  const renderStep4 = () => {
+  // ── Step 5: Preview & Edit ─────────────────────────────────────────
+  const renderStep5 = () => {
     if (!generated) return null;
     return (
       <div className={styles.stepContent}>
@@ -540,12 +610,13 @@ export default function ComposerPage() {
         {step === 2 && renderStep2()}
         {step === 3 && renderStep3()}
         {step === 4 && renderStep4()}
+        {step === 5 && renderStep5()}
       </div>
 
       {/* Footer Navigation */}
       <div className={styles.composerFooter}>
-        {step > 1 && step !== 3 && (
-          <button className={styles.backBtn} onClick={() => setStep(step === 4 ? 2 : step - 1)}>
+        {step > 1 && step !== 4 && (
+          <button className={styles.backBtn} onClick={() => setStep(step === 5 ? 3 : step - 1)}>
             <ArrowLeft size={18} /> Back
           </button>
         )}
@@ -561,16 +632,25 @@ export default function ComposerPage() {
           )}
           {step === 2 && (
             <button
-              className={styles.generateBtn}
+              className={styles.nextBtn}
               disabled={!canProceedStep3}
-              onClick={() => { setStep(3); handleGenerate(); }}
+              onClick={() => setStep(3)}
+            >
+              Next <ArrowRight size={18} />
+            </button>
+          )}
+          {step === 3 && (
+            <button
+              className={styles.generateBtn}
+              disabled={!canProceedStep4}
+              onClick={() => { setStep(4); handleGenerate(); }}
             >
               <Sparkles size={18} /> Generate with AI
             </button>
           )}
-          {step === 4 && (
+          {step === 5 && (
             <>
-              <button className={styles.regenerateBtn} onClick={() => { setStep(3); handleGenerate(); }}>
+              <button className={styles.regenerateBtn} onClick={() => { setStep(4); handleGenerate(); }}>
                 <RefreshCw size={16} /> Regenerate
               </button>
               <button className={styles.scheduleBtn} onClick={() => setShowScheduleModal(true)}>

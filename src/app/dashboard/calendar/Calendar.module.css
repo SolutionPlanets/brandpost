@@ -225,7 +225,8 @@
   overflow-y: auto;
 }
 
-.noEvents {
+.noEvents,
+.loadingState {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -233,6 +234,16 @@
   padding: 3rem 1rem;
   color: var(--text-muted);
   text-align: center;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+  color: var(--primary);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .eventItem {

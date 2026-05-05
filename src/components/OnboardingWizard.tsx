@@ -102,7 +102,8 @@ export default function OnboardingWizard() {
     selectedPlatforms: [] as string[],
     platforms: [],
     instagram: '',
-    facebook: ''
+    facebook: '',
+    timezone: 'Asia/Kolkata'
   });
 
   useEffect(() => {
@@ -144,10 +145,17 @@ export default function OnboardingWizard() {
           bodyFont: brandKit?.body_font || 'Inter',
           instagram: brandKit?.instagram_handle || '',
           facebook: brandKit?.facebook_handle || '',
+          timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
         }));
         const bNameToCheck = workspace.business_name || workspace.name || '';
         if (bNameToCheck && !bNameToCheck.toLowerCase().includes('my workspace')) {
           setIsEditMode(true);
+        }
+      } else {
+        // New user, auto-detect timezone
+        const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (detectedTz) {
+          setFormData(prev => ({ ...prev, timezone: detectedTz }));
         }
       }
       setIsRefreshing(false);
@@ -197,7 +205,8 @@ export default function OnboardingWizard() {
         owner_name: formData.ownerName,
         address: formData.address,
         pincode: formData.pincode,
-        business_timing: formData.timing
+        business_timing: formData.timing,
+        timezone: formData.timezone
       })
       .eq('owner_id', user.id);
 
@@ -709,6 +718,27 @@ export default function OnboardingWizard() {
                     )}
                   </div>
                 </div>
+              </div>
+              <div className={styles.inputGroup}>
+                <label>Timezone</label>
+                <select
+                  value={formData.timezone}
+                  disabled
+                  style={{ height: '40px', backgroundColor: '#f9fafb', cursor: 'not-allowed' }}
+                >
+                  <option value="Asia/Kolkata">(GMT+05:30) India Standard Time</option>
+                  <option value="UTC">(GMT+00:00) UTC</option>
+                  <option value="America/New_York">(GMT-05:00) Eastern Time</option>
+                  <option value="America/Chicago">(GMT-06:00) Central Time</option>
+                  <option value="America/Denver">(GMT-07:00) Mountain Time</option>
+                  <option value="America/Los_Angeles">(GMT-08:00) Pacific Time</option>
+                  <option value="Europe/London">(GMT+00:00) London</option>
+                  <option value="Europe/Paris">(GMT+01:00) Paris</option>
+                  <option value="Asia/Dubai">(GMT+04:00) Dubai</option>
+                  <option value="Asia/Singapore">(GMT+08:00) Singapore</option>
+                  <option value="Australia/Sydney">(GMT+11:00) Sydney</option>
+                </select>
+                <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>Location detected automatically</p>
               </div>
             </div>
           </div>
