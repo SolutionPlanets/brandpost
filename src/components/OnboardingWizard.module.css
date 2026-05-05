@@ -141,6 +141,17 @@
   transition: border-color 0.2s ease;
 }
 
+.inputGroup select {
+  min-height: 50px;
+  line-height: 1.4;
+  padding-right: 2.5rem;
+}
+
+.timezoneSelect {
+  background-color: #f9fafb;
+  cursor: not-allowed;
+}
+
 .inputGroup input:focus,
 .inputGroup select:focus,
 .inputGroup textarea:focus {

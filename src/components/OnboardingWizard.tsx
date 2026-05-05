@@ -422,108 +422,6 @@ export default function OnboardingWizard() {
     }
   };
 
-  const handleFinish = async () => {
-    setIsSaving(true);
-    console.log('Starting save process...', formData);
-    try {
-      // 1. Get current user
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError) {
-        console.error('Auth Error:', authError);
-      }
-
-      if (!user) {
-        console.warn('No active user session found.');
-        alert('You are not logged in! Data will only be saved locally in your browser. Please login to save to the database.');
-        localStorage.setItem('brandpost_user_data', JSON.stringify(formData));
-        window.location.href = '/dashboard';
-        return;
-      }
-
-      // 2. Identify Workspace
-      let workspaceId: string | null = null;
-
-      const { data: workspaces, error: wsFetchError } = await supabase
-        .from('workspaces')
-        .select('id')
-        .eq('owner_id', user.id);
-
-      if (wsFetchError) {
-        console.error('Workspace fetch error:', wsFetchError);
-      }
-
-      if (workspaces && workspaces.length > 0) {
-        workspaceId = workspaces[0].id;
-      } else {
-        // Fallback: Create workspace if trigger didn't for some reason
-        const { data: newWs, error: newWsError } = await supabase
-          .from('workspaces')
-          .insert({
-            owner_id: user.id,
-            name: `${formData.businessName || 'My Business'}'s Workspace`,
-            plan_id: 'solo'
-          })
-          .select()
-          .single();
-
-        if (newWsError) {
-          console.error('Workspace creation error:', newWsError);
-          throw newWsError;
-        }
-        workspaceId = newWs.id;
-      }
-
-      // 3. Create Brand Kit
-      const { error: bkError } = await supabase
-        .from('brand_kits')
-        .insert({
-          workspace_id: workspaceId,
-          name: formData.businessName || 'Main Brand',
-          primary_color: formData.colors.primary,
-          secondary_color: formData.colors.secondary,
-          tone: formData.tone.toLowerCase(),
-          brand_description: formData.description,
-          logo_url: formData.logo
-        });
-
-      if (bkError) {
-        console.error('Brand Kit Error:', bkError);
-        throw new Error(`Brand Kit Error: ${bkError.message}`);
-      }
-
-      // 4. Update user's name
-      if (formData.businessName) {
-        await supabase
-          .from('users')
-          .update({ full_name: formData.businessName })
-          .eq('id', user.id);
-
-        await supabase
-          .from('workspaces')
-          .update({ name: formData.businessName })
-          .eq('id', workspaceId);
-      }
-
-      console.log('Database save successful!');
-
-      // Cleanup and redirect
-      const { logo, ...dataToSave } = formData;
-      try {
-        localStorage.setItem('brandpost_user_data', JSON.stringify(dataToSave));
-      } catch (e) {
-        console.warn('Failed to save to localStorage (quota exceeded)', e);
-      }
-
-      window.location.href = '/dashboard';
-    } catch (error: any) {
-      console.error('Error saving to database:', error);
-      alert(`Error: ${error.message || 'Something went wrong while saving'}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -724,7 +622,7 @@ export default function OnboardingWizard() {
                 <select
                   value={formData.timezone}
                   disabled
-                  style={{ height: '40px', backgroundColor: '#f9fafb', cursor: 'not-allowed' }}
+                  className={styles.timezoneSelect}
                 >
                   <option value="Asia/Kolkata">(GMT+05:30) India Standard Time</option>
                   <option value="UTC">(GMT+00:00) UTC</option>

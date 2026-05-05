@@ -162,6 +162,12 @@
   transition: border-color 0.2s;
 }
 
+.formGroup select {
+  min-height: 42px;
+  line-height: 1.4;
+  padding-right: 2.25rem;
+}
+
 .formGroup input:focus,
 .formGroup select:focus {
   border-color: var(--primary);

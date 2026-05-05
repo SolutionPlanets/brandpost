@@ -91,7 +91,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     if (workspace) {
       const bKits = workspace.brand_kits;
       const brandKit = bKits ? (Array.isArray(bKits) ? bKits[0] : bKits) : undefined;
-      const rawBName = workspace.business_name || workspace.name || '';
+      const rawBName = workspace.business_name || '';
       const bName = rawBName.toLowerCase().includes('my workspace') ? '' : rawBName;
       setBusinessName(bName);
       setBrandKitName(brandKit?.brand_kit_name || '');

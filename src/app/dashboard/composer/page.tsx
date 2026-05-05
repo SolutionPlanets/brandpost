@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -31,6 +31,7 @@ import styles from './Composer.module.css';
 // ── Types ────────────────────────────────────────────────────────────
 type ContentType = 'festive' | 'offer' | 'informational' | 'general';
 type Platform = 'facebook' | 'instagram' | 'both';
+type GenerationState = 'generating' | 'paused' | 'stopped';
 
 interface ComposerForm {
   contentType: ContentType | null;
@@ -84,13 +85,13 @@ const TEMPLATES: Record<ContentType, { id: string; name: string; image: string }
 const STEP_LABELS = ['Content Type', 'Template', 'Details', 'AI Generation', 'Preview & Edit'];
 
 // ── Component ────────────────────────────────────────────────────────
-export default function ComposerPage() {
+function ComposerPageContent() {
   const searchParams = useSearchParams();
   const { brandKitName, businessName } = useBrand();
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generationState, setGenerationState] = useState<'generating' | 'paused' | 'stopped'>('generating');
-  const generationStateRef = useRef<'generating' | 'paused' | 'stopped'>('generating');
+  const [generationState, setGenerationState] = useState<GenerationState>('generating');
+  const generationStateRef = useRef<GenerationState>('generating');
   const [selectedCaption, setSelectedCaption] = useState(0);
   const [selectedImage, setSelectedImage] = useState(0);
   const [editedCaption, setEditedCaption] = useState('');
@@ -133,17 +134,19 @@ export default function ComposerPage() {
 
     // Simulated AI generation with pause/stop support
     for (let i = 0; i < 30; i++) {
-      if (generationStateRef.current === 'stopped') {
+      const currentGenerationState = () => generationStateRef.current as GenerationState;
+
+      if (currentGenerationState() === 'stopped') {
         setIsGenerating(false);
         return;
       }
-      while (generationStateRef.current === 'paused') {
+      while (currentGenerationState() === 'paused') {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
-    if (generationStateRef.current === 'stopped') {
+    if ((generationStateRef.current as GenerationState) === 'stopped') {
       setIsGenerating(false);
       return;
     }
@@ -663,5 +666,13 @@ export default function ComposerPage() {
 
       {renderScheduleModal()}
     </div>
+  );
+}
+
+export default function ComposerPage() {
+  return (
+    <Suspense fallback={null}>
+      <ComposerPageContent />
+    </Suspense>
   );
 }

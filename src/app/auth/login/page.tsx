@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '../../../utils/supabase/client';
 import { LogIn, Loader2, Mail, Lock, Chrome, Eye, EyeOff } from 'lucide-react';
 import styles from '../Auth.module.css';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
@@ -33,7 +33,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -45,7 +45,24 @@ export default function LoginPage() {
         setError(error.message);
       }
       setLoading(false);
-    } else {
+      return;
+    }
+
+    if (authData?.user) {
+      // Check if mail_verified is true in public.users
+      const { data: publicUser } = await supabase
+        .from('users')
+        .select('mail_verified')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+
+      if (publicUser && !publicUser.mail_verified) {
+        setError('Your email is not verified yet. Please click the confirmation link sent to your inbox to log in.');
+        await supabase.auth.signOut();
+        setLoading(false);
+        return;
+      }
+
       router.push('/dashboard');
     }
   };
@@ -124,5 +141,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

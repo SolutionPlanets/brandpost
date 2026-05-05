@@ -24,13 +24,11 @@ export default function SignupPage() {
     setError(null);
 
     // Check if user already exists in our public records
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .single();
+    const { data: userExists } = await supabase.rpc('check_user_exists', {
+      email_to_check: email
+    });
 
-    if (existingUser) {
+    if (userExists) {
       setError('An account with this email already exists. Please log in.');
       setLoading(false);
       return;
@@ -51,11 +49,11 @@ export default function SignupPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      // If email confirmation is off, data.user will exist
-      if (data.user) {
+      // If email confirmation is off, data.session will exist
+      if (data.session) {
         router.push('/onboarding');
       } else {
-        // If email confirmation is on
+        // If email confirmation is on, session is null
         setError('Check your email to confirm your account!');
         setLoading(false);
       }

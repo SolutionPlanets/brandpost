@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Check, X, ArrowLeft, Info } from 'lucide-react';
 import Link from 'next/link';
@@ -81,7 +81,7 @@ const featureComparison = [
   { feature: 'White-label reports', solo: 'No', smb: 'No', agency: 'Yes', franchise: 'Yes' },
 ];
 
-export default function PricingPage() {
+function PricingPageContent() {
   const [isYearly, setIsYearly] = useState(false);
   const [inrRate, setInrRate] = useState(83.3);
   const searchParams = useSearchParams();
@@ -214,5 +214,13 @@ export default function PricingPage() {
         </p>
       </section>
     </div>
+  );
+}
+
+export default function PricingPage() {
+  return (
+    <Suspense fallback={null}>
+      <PricingPageContent />
+    </Suspense>
   );
 }
