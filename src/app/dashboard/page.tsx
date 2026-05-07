@@ -118,18 +118,39 @@ function daysUntil(dateStr: string): number {
 
 // ── Component ────────────────────────────────────────────────────────
 export default function DashboardHome() {
-  const { fullName, ownerName, businessName, trialEndsAt, createdAt, planId, postsUsed } = useBrand();
-  const [userData, setUserData] = useState<any>(null);
-  const supabase = createClient();
+  const { fullName, ownerName, businessName, trialEndsAt, createdAt, planId, postsUsed, workspaceId } = useBrand();
+  const [recentPosts, setRecentPosts] = useState<any[]>([]);
+  const [totalPosts, setTotalPosts] = useState(0);
   const usageLimit = 50; // Default base limit for solo
   const upcoming = getUpcomingEvents();
-
   useEffect(() => {
-    const savedData = localStorage.getItem('brandpost_user_data');
-    if (savedData) {
-      setUserData(JSON.parse(savedData));
+    const supabase = createClient();
+    async function fetchDashboardData() {
+      if (!workspaceId) return;
+      try {
+        // Fetch recent posts
+        const { data: recent } = await supabase
+          .from('posts')
+          .select('*')
+          .eq('workspace_id', workspaceId)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        
+        if (recent) setRecentPosts(recent);
+
+        // Fetch total count
+        const { count } = await supabase
+          .from('posts')
+          .select('*', { count: 'exact', head: true })
+          .eq('workspace_id', workspaceId);
+        
+        if (count !== null) setTotalPosts(count);
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+      }
     }
-  }, []);
+    fetchDashboardData();
+  }, [workspaceId, postsUsed]);
 
   const isTrial = planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date();
   const daysRemaining = trialEndsAt ? daysUntil(trialEndsAt) : 0;
@@ -138,13 +159,13 @@ export default function DashboardHome() {
   const trialEndDate = trialEndsAt ? new Date(trialEndsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
   const currentLimit = isTrial ? 100 : usageLimit;
-  const currentUsagePercent = Math.round((postsUsed / currentLimit) * 100);
+  const currentUsagePercent = Math.min(Math.round((postsUsed / currentLimit) * 100), 100);
 
   const stats = [
-    { label: 'Total Posts', value: '24', icon: CalendarDays, color: '#4f46e5' },
-    { label: 'Audience Reach', value: '12.4k', icon: TrendingUp, color: '#10b981' },
-    { label: 'Engagement', value: '4.2%', icon: Users, color: '#f59e0b' },
-    { label: 'AI Credits Left', value: `${currentLimit - postsUsed}`, icon: Sparkles, color: '#06b6d4' },
+    { label: 'Total Posts', value: totalPosts.toString(), icon: CalendarDays, color: '#4f46e5' },
+    { label: 'Audience Reach', value: '0', icon: TrendingUp, color: '#10b981' },
+    { label: 'Engagement', value: '0%', icon: Users, color: '#f59e0b' },
+    { label: 'AI Credits Left', value: Math.max(0, currentLimit - postsUsed).toString(), icon: Sparkles, color: '#06b6d4' },
   ];
 
   return (
@@ -299,26 +320,36 @@ export default function DashboardHome() {
                 <span>Status</span>
                 <span>Date</span>
               </div>
-              {RECENT_POSTS.map((post) => (
-                <div key={post.id} className={styles.tableRow}>
-                  <div className={styles.postCell}>
-                    <div className={styles.postThumb}>
-                      <ImageIcon size={16} />
-                    </div>
-                    <span className={styles.postTitle}>{post.title}</span>
-                  </div>
-                  <div className={styles.platformCell}>
-                    {(post.platform === 'facebook' || post.platform === 'both') && <MessageSquare size={16} className={styles.fbIcon} />}
-                    {(post.platform === 'instagram' || post.platform === 'both') && <Share2 size={16} className={styles.igIcon} />}
-                  </div>
-                  <div>
-                    <span className={`${styles.statusBadge} ${getStatusStyle(post.status)}`}>
-                      {post.status}
-                    </span>
-                  </div>
-                  <span className={styles.dateCell}>{formatDate(post.date)}</span>
+              {recentPosts.length === 0 ? (
+                <div className={styles.emptyActivity}>
+                  <p>No recent activity found.</p>
                 </div>
-              ))}
+              ) : (
+                recentPosts.map((post) => (
+                  <div key={post.id} className={styles.tableRow}>
+                    <div className={styles.postCell}>
+                      <div className={styles.postThumb}>
+                        {post.image_url ? (
+                          <img src={post.image_url} alt="" className={styles.thumbImg} />
+                        ) : (
+                          <ImageIcon size={16} />
+                        )}
+                      </div>
+                      <span className={styles.postTitle}>{post.title}</span>
+                    </div>
+                    <div className={styles.platformCell}>
+                      {(post.platform === 'facebook' || post.platform === 'both') && <MessageSquare size={16} className={styles.fbIcon} />}
+                      {(post.platform === 'instagram' || post.platform === 'both') && <Share2 size={16} className={styles.igIcon} />}
+                    </div>
+                    <div>
+                      <span className={`${styles.statusBadge} ${getStatusStyle(post.status)}`}>
+                        {post.status}
+                      </span>
+                    </div>
+                    <span className={styles.dateCell}>{formatDate(post.created_at)}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 

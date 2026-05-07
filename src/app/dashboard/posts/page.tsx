@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { createClient } from '@/utils/supabase/client';
+import { useBrand } from '@/contexts/BrandContext';
 import {
   Search,
   Filter,
@@ -51,12 +53,38 @@ function formatDate(dateStr: string | null): string {
 }
 
 export default function PostsPage() {
+  const { workspaceId } = useBrand();
+  const [posts, setPosts] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const supabase = createClient();
 
-  const filteredPosts = MOCK_POSTS.filter((post) => {
+  useEffect(() => {
+    async function fetchPosts() {
+      if (!workspaceId) return;
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('posts')
+          .select('*')
+          .eq('workspace_id', workspaceId)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setPosts(data || []);
+      } catch (err) {
+        console.error('Error fetching posts:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchPosts();
+  }, [workspaceId, supabase]);
+
+  const filteredPosts = posts.filter((post) => {
     if (statusFilter !== 'all' && post.status !== statusFilter) return false;
     if (platformFilter !== 'all' && post.platform !== platformFilter) return false;
     if (searchQuery && !post.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -64,11 +92,11 @@ export default function PostsPage() {
   });
 
   const statusCounts = {
-    all: MOCK_POSTS.length,
-    draft: MOCK_POSTS.filter((p) => p.status === 'draft').length,
-    scheduled: MOCK_POSTS.filter((p) => p.status === 'scheduled').length,
-    published: MOCK_POSTS.filter((p) => p.status === 'published').length,
-    failed: MOCK_POSTS.filter((p) => p.status === 'failed').length,
+    all: posts.length,
+    draft: posts.filter((p) => p.status === 'draft').length,
+    scheduled: posts.filter((p) => p.status === 'scheduled').length,
+    published: posts.filter((p) => p.status === 'published').length,
+    failed: posts.filter((p) => p.status === 'failed').length,
   };
 
   return (
@@ -141,11 +169,15 @@ export default function PostsPage() {
             <div key={post.id} className={styles.tableDataRow}>
               <div className={styles.colPost}>
                 <div className={styles.postThumb}>
-                  <ImageIcon size={18} />
+                  {post.image_url ? (
+                    <img src={post.image_url} alt="" className={styles.thumbImg} />
+                  ) : (
+                    <ImageIcon size={18} />
+                  )}
                 </div>
                 <div className={styles.postInfo}>
                   <h4>{post.title}</h4>
-                  <p>{post.caption.substring(0, 50)}...</p>
+                  <p>{post.caption?.substring(0, 50)}...</p>
                 </div>
               </div>
               <div className={styles.colPlatform}>
@@ -153,7 +185,7 @@ export default function PostsPage() {
                 {(post.platform === 'instagram' || post.platform === 'both') && <Share2 size={16} className={styles.igIcon} />}
               </div>
               <div className={styles.colType}>
-                <span className={styles.typeBadge}>{post.contentType}</span>
+                <span className={styles.typeBadge}>{post.content_type || post.contentType}</span>
               </div>
               <div className={styles.colStatus}>
                 <span className={`${styles.statusBadge} ${styles[`status${post.status.charAt(0).toUpperCase() + post.status.slice(1)}`]}`}>
@@ -162,9 +194,9 @@ export default function PostsPage() {
               </div>
               <div className={styles.colDate}>
                 {post.status === 'scheduled' ? (
-                  <span className={styles.scheduledDate}><CalendarClock size={13} /> {formatDate(post.scheduledAt)}</span>
+                  <span className={styles.scheduledDate}><CalendarClock size={13} /> {formatDate(post.scheduled_at || post.scheduledAt)}</span>
                 ) : (
-                  <span>{formatDate(post.publishedAt || post.createdAt)}</span>
+                  <span>{formatDate(post.published_at || post.publishedAt || post.created_at || post.createdAt)}</span>
                 )}
               </div>
               <div className={styles.colActions}>

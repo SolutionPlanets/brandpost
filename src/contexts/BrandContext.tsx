@@ -18,11 +18,15 @@ interface BrandContextType {
   pincode: string;
   instagram: string;
   facebook: string;
+  brandTone: string;
+  brandDescription: string;
   planId: string;
   trialEndsAt: string | null;
   createdAt: string | null;
   postsUsed: number;
+  workspaceId: string | null;
   timezone: string;
+  timing: string;
   setBusinessName: (name: string) => void;
   setLogo: (logo: string | null) => void;
   setColors: (colors: { primary: string; secondary: string; accent: string }) => void;
@@ -46,11 +50,15 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [pincode, setPincode] = useState('');
   const [instagram, setInstagram] = useState('');
   const [facebook, setFacebook] = useState('');
+  const [brandTone, setBrandTone] = useState('Professional');
+  const [brandDescription, setBrandDescription] = useState('');
   const [planId, setPlanId] = useState('solo');
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [postsUsed, setPostsUsed] = useState(0);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [timezone, setTimezone] = useState('Asia/Kolkata');
+  const [timing, setTiming] = useState('');
 
   const supabase = createClient();
 
@@ -89,6 +97,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       .maybeSingle();
 
     if (workspace) {
+      setWorkspaceId(workspace.id);
       const bKits = workspace.brand_kits;
       const brandKit = bKits ? (Array.isArray(bKits) ? bKits[0] : bKits) : undefined;
       const rawBName = workspace.business_name || '';
@@ -100,9 +109,12 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       setPincode(workspace.pincode || '');
       setPostsUsed(workspace.posts_used_this_cycle || 0);
       setTimezone(workspace.timezone || 'Asia/Kolkata');
+      setTiming(workspace.business_timing || '');
       setLogo(brandKit?.logo_url || null);
       setInstagram(brandKit?.instagram_handle || '');
       setFacebook(brandKit?.facebook_handle || '');
+      setBrandTone(brandKit?.tone || 'Professional');
+      setBrandDescription(brandKit?.brand_description || '');
       if (brandKit?.primary_color) {
         setColors({
           primary: brandKit.primary_color,
@@ -121,7 +133,10 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         logo: brandKit?.logo_url || null,
         instagram: brandKit?.instagram_handle || '',
         facebook: brandKit?.facebook_handle || '',
+        brandTone: brandKit?.tone || 'Professional',
+        brandDescription: brandKit?.brand_description || '',
         timezone: workspace.timezone || 'Asia/Kolkata',
+        timing: workspace.business_timing || '',
       }));
     }
   };
@@ -139,11 +154,14 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         if (d.pincode) setPincode(d.pincode);
         if (d.instagram) setInstagram(d.instagram);
         if (d.facebook) setFacebook(d.facebook);
+        if (d.brandTone) setBrandTone(d.brandTone);
+        if (d.brandDescription) setBrandDescription(d.brandDescription);
         if (d.planId) setPlanId(d.planId);
         if (d.trialEndsAt) setTrialEndsAt(d.trialEndsAt);
         if (d.createdAt) setCreatedAt(d.createdAt);
         if (d.postsUsed !== undefined) setPostsUsed(d.postsUsed);
         if (d.timezone) setTimezone(d.timezone);
+        if (d.timing) setTiming(d.timing);
         if (d.logo) setLogo(d.logo);
         if (d.colors) setColors(d.colors);
       } catch (e) {
@@ -153,7 +171,6 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     refreshBrandData();
   }, []);
 
-  // Update localStorage when businessName changes locally (for real-time sync with legacy components)
   // Update localStorage when state changes
   useEffect(() => {
     localStorage.setItem('brandpost_user_data', JSON.stringify({
@@ -165,15 +182,18 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       pincode,
       instagram,
       facebook,
+      brandTone,
+      brandDescription,
       planId,
       trialEndsAt,
       createdAt,
       postsUsed,
       timezone,
       logo,
-      colors
+      colors,
+      timing
     }));
-  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, planId, trialEndsAt, createdAt, postsUsed, timezone, logo, colors]);
+  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, planId, trialEndsAt, createdAt, postsUsed, timezone, logo, colors, timing]);
 
   const value = React.useMemo(() => ({
     fullName,
@@ -184,18 +204,22 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     pincode,
     instagram,
     facebook,
+    brandTone,
+    brandDescription,
     logo,
     colors,
     planId,
     trialEndsAt,
     createdAt,
     postsUsed,
+    workspaceId,
     timezone,
+    timing,
     setBusinessName,
     setLogo,
     setColors,
     refreshBrandData
-  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, logo, colors, planId, trialEndsAt, createdAt, postsUsed, timezone]);
+  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, logo, colors, planId, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing]);
 
   return (
     <BrandContext.Provider value={value}>
@@ -211,4 +235,3 @@ export function useBrand() {
   }
   return context;
 }
-

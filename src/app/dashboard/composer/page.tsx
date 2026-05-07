@@ -15,15 +15,14 @@ import {
   Share2,
   Check,
   Loader2,
-  Eye,
   Edit3,
   ToggleLeft,
   ToggleRight,
-  Download,
   CalendarClock,
   Send,
   Image as ImageIcon,
   RefreshCw,
+  Download,
 } from 'lucide-react';
 import { useBrand } from '@/contexts/BrandContext';
 import styles from './Composer.module.css';
@@ -87,9 +86,15 @@ const STEP_LABELS = ['Content Type', 'Template', 'Details', 'AI Generation', 'Pr
 // ── Component ────────────────────────────────────────────────────────
 function ComposerPageContent() {
   const searchParams = useSearchParams();
-  const { brandKitName, businessName } = useBrand();
+  const { 
+    brandKitName, businessName, brandTone, brandDescription, colors,
+    fullName, ownerName, address, pincode, timing, logo,
+    postsUsed, planId, trialEndsAt, refreshBrandData, workspaceId
+  } = useBrand();
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingCaptions, setIsGeneratingCaptions] = useState(false);
+  const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [generationState, setGenerationState] = useState<GenerationState>('generating');
   const generationStateRef = useRef<GenerationState>('generating');
   const [selectedCaption, setSelectedCaption] = useState(0);
@@ -127,45 +132,137 @@ function ComposerPageContent() {
   const canProceedStep3 = form.templateId !== null || form.templateId === 'none';
   const canProceedStep4 = form.topic.trim().length > 0;
 
-  const handleGenerate = async () => {
-    setIsGenerating(true);
-    setGenerationState('generating');
-    generationStateRef.current = 'generating';
-
-    // Simulated AI generation with pause/stop support
-    for (let i = 0; i < 30; i++) {
-      const currentGenerationState = () => generationStateRef.current as GenerationState;
-
-      if (currentGenerationState() === 'stopped') {
-        setIsGenerating(false);
-        return;
-      }
-      while (currentGenerationState() === 'paused') {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    if ((generationStateRef.current as GenerationState) === 'stopped') {
-      setIsGenerating(false);
+  const handleGenerateFull = async () => {
+    // Credit check
+    const isTrial = planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date();
+    const currentLimit = isTrial ? 100 : 50;
+    if (postsUsed >= currentLimit) {
+      alert("Please upgrade your plan. You have reached your AI generation limit.");
       return;
     }
 
-    setGenerated({
-      captions: [
-        `🎉 ${form.topic} is here! Celebrate with us and make this occasion unforgettable. Our brand brings you the best in quality and style. #${form.topic.replace(/\s/g, '')} #BrandPost`,
-        `✨ This ${form.topic}, let your brand shine brighter than ever. Discover our exclusive collection curated just for you. Tap the link in bio! #Celebrate #${form.topic.replace(/\s/g, '')}`,
-        `🌟 Wishing everyone a wonderful ${form.topic}! At our brand, we believe in celebrating every moment with style and grace. Share your celebrations with us! #${form.topic.replace(/\s/g, '')} #Joy`,
-      ],
-      images: [
-        '/api/placeholder/1024/1024',
-        '/api/placeholder/1024/1024',
-      ],
-    });
-    setSelectedCaption(0);
-    setSelectedImage(0);
-    setIsGenerating(false);
-    setStep(5);
+    setIsGenerating(true);
+    setStep(4);
+    try {
+      const [captionsData, imagesData] = await Promise.all([
+        generateCaptions(),
+        generateImages()
+      ]);
+
+      if (captionsData.error) throw new Error(`Captions: ${captionsData.error}`);
+      if (imagesData.error) throw new Error(`Images: ${imagesData.error}`);
+
+      setGenerated({
+        captions: captionsData.captions || [],
+        images: imagesData.images || []
+      });
+      setSelectedCaption(0);
+      setSelectedImage(0);
+      setStep(5);
+      refreshBrandData(); // Update credits and history
+    } catch (error: any) {
+      console.error('Generation failed:', error);
+      alert(error.message || 'Generation failed. Please try again.');
+      setStep(3);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const generateCaptions = async () => {
+    setIsGeneratingCaptions(true);
+    try {
+      const res = await fetch('/api/generate/captions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: form.topic,
+          contentType: form.contentType,
+          platform: form.platform,
+          extraInstructions: form.extraInstructions,
+          brandDetails: { businessName, brandTone, brandDescription, colors }
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate captions');
+      return data;
+    } finally {
+      setIsGeneratingCaptions(false);
+    }
+  };
+
+  const generateImages = async () => {
+    setIsGeneratingImages(true);
+    try {
+      const res = await fetch('/api/generate/images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: form.topic,
+          contentType: form.contentType,
+          platform: form.platform,
+          extraInstructions: form.extraInstructions,
+          workspaceId: workspaceId,
+          brandDetails: { 
+            businessName, 
+            brandDescription, 
+            colors,
+            fullName: fullName || ownerName,
+            brandTone,
+            address,
+            pincode,
+            timing,
+            logo
+          }
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate images');
+      return data;
+    } finally {
+      setIsGeneratingImages(false);
+    }
+  };
+
+  const handleRegenerateCaptions = async () => {
+    try {
+      const data = await generateCaptions();
+      if (data.captions) {
+        setGenerated(prev => prev ? { ...prev, captions: data.captions } : null);
+        setSelectedCaption(0);
+      }
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  const handleRegenerateImages = async () => {
+    try {
+      const data = await generateImages();
+      if (data.images) {
+        setGenerated(prev => prev ? { ...prev, images: data.images } : null);
+        setSelectedImage(0);
+      }
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  const downloadImage = async () => {
+    if (!generated?.images[selectedImage]) return;
+    try {
+      const response = await fetch(generated.images[selectedImage]);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `brandpost-${form.topic.replace(/\s+/g, '-')}-${selectedImage + 1}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
   };
 
   const formatDateToDDMMYY = (dateStr: string) => {
@@ -377,53 +474,11 @@ function ComposerPageContent() {
             <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: generationState === 'paused' || generationState === 'stopped' ? 'paused' : 'running' }} /> Analyzing brand tone &amp; style...
           </div>
           <div className={styles.genStep}>
-            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: generationState === 'paused' || generationState === 'stopped' ? 'paused' : 'running' }} /> Generating captions via Claude AI...
+            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: (isGenerating || isGeneratingCaptions) ? 'running' : 'paused' }} /> Generating captions via OpenAI...
           </div>
           <div className={styles.genStep}>
-            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: generationState === 'paused' || generationState === 'stopped' ? 'paused' : 'running' }} /> Creating images via DALL·E 3...
+            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: (isGenerating || isGeneratingImages) ? 'running' : 'paused' }} /> Creating images via DALL·E 3...
           </div>
-        </div>
-        
-        <div style={{ marginTop: '2.5rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-          <button 
-            onClick={() => {
-              if (generationState === 'stopped') return;
-              const nextState = generationState === 'paused' ? 'generating' : 'paused';
-              setGenerationState(nextState);
-              generationStateRef.current = nextState;
-            }}
-            disabled={generationState === 'stopped'}
-            style={{ 
-              padding: '0.75rem 2rem', borderRadius: 'var(--radius-md)', 
-              border: '1px solid var(--primary)', 
-              background: generationState === 'paused' ? 'var(--primary)' : 'transparent', 
-              color: generationState === 'paused' ? 'white' : 'var(--primary)', 
-              fontWeight: 600, cursor: generationState === 'stopped' ? 'not-allowed' : 'pointer',
-              opacity: generationState === 'stopped' ? 0.5 : 1
-            }}
-          >
-            {generationState === 'paused' ? 'Continue' : 'Pause'}
-          </button>
-          <button 
-            onClick={() => {
-              setGenerationState('stopped');
-              generationStateRef.current = 'stopped';
-              setIsGenerating(false);
-              setTimeout(() => {
-                setStep(3);
-              }, 3500); // Redirects after 3.5 seconds
-            }}
-            disabled={generationState === 'stopped'}
-            style={{ 
-              padding: '0.75rem 2rem', borderRadius: 'var(--radius-md)', 
-              border: '1px solid #ef4444', background: 'transparent', 
-              color: '#ef4444', fontWeight: 600, 
-              cursor: generationState === 'stopped' ? 'not-allowed' : 'pointer',
-              opacity: generationState === 'stopped' ? 0.5 : 1
-            }}
-          >
-            Stop
-          </button>
         </div>
       </div>
     </div>
@@ -441,11 +496,29 @@ function ComposerPageContent() {
           {/* Left: Image Preview */}
           <div className={styles.previewImageSection}>
             <div className={styles.previewImageFrame}>
-              <div className={styles.placeholderImage}>
-                <ImageIcon size={64} />
-                <span>AI Generated Image {selectedImage + 1}</span>
-                <span className={styles.imageSize}>1024 × 1024</span>
-              </div>
+              {generated.images[selectedImage] ? (
+                <>
+                  <img 
+                    src={generated.images[selectedImage]} 
+                    alt={`AI Generated ${selectedImage + 1}`} 
+                    className={styles.previewImage}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  <button 
+                    className={styles.downloadBtn}
+                    onClick={downloadImage}
+                    title="Download Image"
+                  >
+                    <Download size={20} />
+                  </button>
+                </>
+              ) : (
+                <div className={styles.placeholderImage}>
+                  <ImageIcon size={64} />
+                  <span>AI Generated Image {selectedImage + 1}</span>
+                  <span className={styles.imageSize}>1024 × 1024</span>
+                </div>
+              )}
               {showLogoOverlay && (
                 <div className={styles.logoOverlay}>
                   <div className={styles.overlayLogo}>B</div>
@@ -463,6 +536,15 @@ function ComposerPageContent() {
                   Option {i + 1}
                 </button>
               ))}
+              <button 
+                className={styles.regenerateBtn} 
+                onClick={handleRegenerateImages}
+                disabled={isGeneratingImages}
+                style={{ marginLeft: 'auto' }}
+              >
+                {isGeneratingImages ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
+                Regen Image
+              </button>
             </div>
             <button
               className={styles.logoToggle}
@@ -476,7 +558,17 @@ function ComposerPageContent() {
           {/* Right: Caption Editor */}
           <div className={styles.previewCaptionSection}>
             <div className={styles.captionVariants}>
-              <span className={styles.optionLabel}>Caption Variants:</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className={styles.optionLabel}>Caption Variants:</span>
+                <button 
+                  className={styles.regenerateBtn} 
+                  onClick={handleRegenerateCaptions}
+                  disabled={isGeneratingCaptions}
+                >
+                  {isGeneratingCaptions ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
+                  Regen Captions
+                </button>
+              </div>
               <div className={styles.variantTabs}>
                 {generated.captions.map((_, i) => (
                   <button
@@ -646,16 +738,13 @@ function ComposerPageContent() {
             <button
               className={styles.generateBtn}
               disabled={!canProceedStep4}
-              onClick={() => { setStep(4); handleGenerate(); }}
+              onClick={handleGenerateFull}
             >
               <Sparkles size={18} /> Generate with AI
             </button>
           )}
           {step === 5 && (
             <>
-              <button className={styles.regenerateBtn} onClick={() => { setStep(4); handleGenerate(); }}>
-                <RefreshCw size={16} /> Regenerate
-              </button>
               <button className={styles.scheduleBtn} onClick={() => setShowScheduleModal(true)}>
                 <CalendarClock size={18} /> Schedule / Publish
               </button>
