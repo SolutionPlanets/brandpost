@@ -1,8 +1,9 @@
 'use client';
 
 import { Suspense, useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { createClient } from '@/utils/supabase/client';
 import {
   PartyPopper,
   Tag,
@@ -91,6 +92,7 @@ function ComposerPageContent() {
     fullName, ownerName, address, pincode, timing, logo,
     postsUsed, planId, trialEndsAt, refreshBrandData, workspaceId
   } = useBrand();
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingCaptions, setIsGeneratingCaptions] = useState(false);
@@ -117,14 +119,62 @@ function ComposerPageContent() {
 
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
 
-  // Pre-fill from calendar link
+  // Pre-fill from calendar link or Edit/Duplicate
   useEffect(() => {
+    const editId = searchParams.get('editId');
+    const duplicateId = searchParams.get('duplicateId');
     const occasion = searchParams.get('occasion');
     const type = searchParams.get('type');
-    if (occasion) setForm((prev) => ({ ...prev, topic: occasion }));
-    if (type && ['festive', 'offer', 'informational', 'general'].includes(type)) {
-      setForm((prev) => ({ ...prev, contentType: type as ContentType }));
-      if (occasion) setStep(2);
+
+    async function fetchPost(id: string, isEdit: boolean) {
+      const supabase = createClient();
+      try {
+        const { data, error } = await supabase
+          .from('posts')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (error) throw error;
+        if (data) {
+          setForm({
+            contentType: data.content_type || 'general',
+            templateId: 'none',
+            topic: data.title || data.caption?.substring(0, 30) || 'Previous Post',
+            brandKit: 'main-brand',
+            platform: data.platform || 'both',
+            extraInstructions: '',
+          });
+
+          if (isEdit) {
+            setGenerated({
+              captions: [data.caption || ''],
+              images: [data.image_url || '']
+            });
+            setEditedCaption(data.caption || '');
+            setStep(5);
+          } else {
+            // Duplicate: Just pre-fill and go to details step
+            setStep(3);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching post for pre-fill:', err);
+      }
+    }
+
+    if (editId) {
+      fetchPost(editId, true);
+    } else if (duplicateId) {
+      fetchPost(duplicateId, false);
+    } else if (occasion) {
+      setForm((prev) => ({ ...prev, topic: occasion }));
+      if (type && ['festive', 'offer', 'informational', 'general'].includes(type)) {
+        setForm((prev) => ({ ...prev, contentType: type as ContentType }));
+        setStep(2);
+      } else {
+        setStep(1);
+      }
     }
   }, [searchParams]);
 
@@ -262,6 +312,48 @@ function ComposerPageContent() {
       document.body.removeChild(link);
     } catch (error) {
       console.error('Download failed:', error);
+    }
+  };
+
+  const handleConfirmSchedule = async () => {
+    const supabase = createClient();
+    const editId = searchParams.get('editId');
+    
+    setIsGenerating(true); // Reuse loading state for saving
+    try {
+      const postData = {
+        title: form.topic,
+        caption: editedCaption,
+        platform: form.platform,
+        content_type: form.contentType,
+        image_url: generated?.images[selectedImage],
+        status: isImmediate ? 'published' : 'scheduled',
+        scheduled_at: isImmediate ? null : `${scheduleDate}T${scheduleTime}:00`,
+        workspace_id: workspaceId,
+      };
+
+      if (editId) {
+        const { error } = await supabase
+          .from('posts')
+          .update(postData)
+          .eq('id', editId);
+        if (error) throw error;
+        alert('Post updated successfully!');
+      } else {
+        const { error } = await supabase
+          .from('posts')
+          .insert([postData]);
+        if (error) throw error;
+        alert('Post saved successfully!');
+      }
+      
+      setShowScheduleModal(false);
+      router.push('/dashboard/posts');
+    } catch (err: any) {
+      console.error('Error saving post:', err);
+      alert(err.message || 'Failed to save post.');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -676,11 +768,17 @@ function ComposerPageContent() {
             <button className={styles.modalCancel} onClick={() => setShowScheduleModal(false)}>
               Cancel
             </button>
-            <button className={styles.modalConfirm}>
-              {isImmediate ? (
-                <><Send size={16} /> Publish Now</>
-              ) : (
-                <><CalendarClock size={16} /> Schedule Post</>
+            <button 
+              className={styles.modalConfirm} 
+              onClick={handleConfirmSchedule}
+              disabled={isGenerating}
+            >
+              {isGenerating ? <Loader2 size={16} className={styles.spinner} /> : (
+                isImmediate ? (
+                  <><Send size={16} /> Publish Now</>
+                ) : (
+                  <><CalendarClock size={16} /> Schedule Post</>
+                )
               )}
             </button>
           </div>

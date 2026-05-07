@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { useBrand } from '@/contexts/BrandContext';
 import {
@@ -61,6 +62,36 @@ export default function PostsPage() {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const supabase = createClient();
+  const router = useRouter();
+
+  const handleView = (post: any) => {
+    if (post.image_url) {
+      window.open(post.image_url, '_blank');
+    } else {
+      alert('No image available for this post.');
+    }
+  };
+
+  const handleEdit = (id: number) => {
+    router.push(`/dashboard/composer?editId=${id}`);
+  };
+
+  const handleDuplicate = (id: number) => {
+    router.push(`/dashboard/composer?duplicateId=${id}`);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this post?')) return;
+    try {
+      const { error } = await supabase.from('posts').delete().eq('id', id);
+      if (error) throw error;
+      setPosts(posts.filter((p) => p.id !== id));
+      setOpenMenuId(null);
+    } catch (err) {
+      console.error('Error deleting post:', err);
+      alert('Failed to delete post.');
+    }
+  };
 
   useEffect(() => {
     async function fetchPosts() {
@@ -209,10 +240,10 @@ export default function PostsPage() {
                   </button>
                   {openMenuId === post.id && (
                     <div className={styles.dropdown}>
-                      <button><Eye size={14} /> View</button>
-                      <button><Edit3 size={14} /> Edit</button>
-                      <button><Copy size={14} /> Duplicate</button>
-                      <button className={styles.deleteAction}><Trash2 size={14} /> Delete</button>
+                      <button onClick={() => handleView(post)}><Eye size={14} /> View</button>
+                      <button onClick={() => handleEdit(post.id)}><Edit3 size={14} /> Edit</button>
+                      <button onClick={() => handleDuplicate(post.id)}><Copy size={14} /> Duplicate</button>
+                      <button className={styles.deleteAction} onClick={() => handleDelete(post.id)}><Trash2 size={14} /> Delete</button>
                     </div>
                   )}
                 </div>
