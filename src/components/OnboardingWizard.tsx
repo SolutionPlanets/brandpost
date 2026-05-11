@@ -123,12 +123,14 @@ export default function OnboardingWizard() {
         return;
       }
 
+      // 1. Fetch from DB
       const { data: workspace } = await supabase
         .from('workspaces')
         .select('*, brand_kits(*), social_connections(*)')
         .eq('owner_id', user.id)
         .maybeSingle();
 
+      let dbData: any = {};
       if (workspace) {
         if (workspace.social_connections && workspace.social_connections.length > 0) {
           setSocialConnections({
@@ -137,8 +139,8 @@ export default function OnboardingWizard() {
           });
         }
         const brandKit = workspace.brand_kits?.[0];
-        setFormData(prev => ({
-          ...prev,
+        
+        dbData = {
           ownerName: workspace.owner_name || '',
           businessName: ((workspace.business_name || workspace.name || '').toLowerCase().includes('my workspace')) ? '' : (workspace.business_name || workspace.name || ''),
           address: workspace.address || '',
@@ -149,10 +151,10 @@ export default function OnboardingWizard() {
           logoDark: brandKit?.logo_dark_url || null,
           logoDarkUrl: brandKit?.logo_dark_url || null,
           colors: brandKit ? {
-            primary: brandKit.primary_color || prev.colors.primary,
-            secondary: brandKit.secondary_color || prev.colors.secondary,
-            accent: brandKit.accent_color || prev.colors.accent,
-          } : prev.colors,
+            primary: brandKit.primary_color || '#4f46e5',
+            secondary: brandKit.secondary_color || '#64748b',
+            accent: brandKit.accent_color || '#fbbf24',
+          } : { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
           tone: brandKit?.tone ? brandKit.tone.toLowerCase() : 'professional',
           description: brandKit?.brand_description || '',
           brandKitName: brandKit?.brand_kit_name || '',
@@ -161,7 +163,8 @@ export default function OnboardingWizard() {
           instagram: brandKit?.instagram_handle || '',
           facebook: brandKit?.facebook_handle || '',
           timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
-        }));
+        };
+
         const bNameToCheck = workspace.business_name || workspace.name || '';
         if (bNameToCheck && !bNameToCheck.toLowerCase().includes('my workspace')) {
           setIsEditMode(true);
@@ -169,13 +172,46 @@ export default function OnboardingWizard() {
       } else {
         const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
         if (detectedTz) {
-          setFormData(prev => ({ ...prev, timezone: detectedTz }));
+          dbData.timezone = detectedTz;
         }
       }
+
+      // 2. Load from localStorage (priority for draft data)
+      const savedState = localStorage.getItem('onboarding_formData');
+      if (savedState) {
+        try {
+          const parsed = JSON.parse(savedState);
+          setFormData(prev => ({ ...prev, ...dbData, ...parsed }));
+          
+          const savedStep = localStorage.getItem('onboarding_currentStep');
+          if (savedStep && !searchParams.get('step')) {
+            setCurrentStep(parseInt(savedStep, 10));
+          }
+        } catch (e) {
+          console.error('Error parsing onboarding state:', e);
+          setFormData(prev => ({ ...prev, ...dbData }));
+        }
+      } else {
+        setFormData(prev => ({ ...prev, ...dbData }));
+      }
+
       setIsRefreshing(false);
     }
     fetchExistingData();
   }, []);
+
+  // Save to localStorage whenever formData or currentStep changes
+  useEffect(() => {
+    if (isRefreshing) return;
+    
+    const stateToSave = { ...formData };
+    // Don't save File objects
+    delete (stateToSave as any).logoFile;
+    delete (stateToSave as any).logoDarkFile;
+    
+    localStorage.setItem('onboarding_formData', JSON.stringify(stateToSave));
+    localStorage.setItem('onboarding_currentStep', currentStep.toString());
+  }, [formData, currentStep, isRefreshing]);
 
   const { data: palette } = usePalette(formData.logo || '', 5, 'hex', {
     quality: 10,
@@ -279,14 +315,32 @@ export default function OnboardingWizard() {
       let finalLogoUrl = formData.logoUrl;
       let finalLogoDarkUrl = formData.logoDarkUrl;
 
-      if (formData.logoFile && !finalLogoUrl) {
+      const base64ToFile = (base64String: string, fileName: string) => {
+        const arr = base64String.split(',');
+        const mime = arr[0].match(/:(.*?);/)![1];
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new File([u8arr], fileName, { type: mime });
+      };
+
+      // Upload Primary Logo
+      let logoFileToUpload = formData.logoFile;
+      if (!logoFileToUpload && formData.logo && formData.logo.startsWith('data:image')) {
+        logoFileToUpload = base64ToFile(formData.logo, 'logo.png');
+      }
+
+      if (logoFileToUpload && !finalLogoUrl) {
         setUploading(true);
-        const fileExt = formData.logoFile.name.split('.').pop();
+        const fileExt = logoFileToUpload.name.split('.').pop() || 'png';
         const fileName = `${Date.now()}_primary_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from('BrandpostAI_logos')
-          .upload(fileName, formData.logoFile);
+          .upload(fileName, logoFileToUpload);
 
         if (!uploadError) {
           const { data } = supabase.storage.from('BrandpostAI_logos').getPublicUrl(fileName);
@@ -294,14 +348,20 @@ export default function OnboardingWizard() {
         }
       }
 
-      if (formData.logoDarkFile && !finalLogoDarkUrl) {
+      // Upload Transparent Logo
+      let logoDarkFileToUpload = formData.logoDarkFile;
+      if (!logoDarkFileToUpload && formData.logoDark && formData.logoDark.startsWith('data:image')) {
+        logoDarkFileToUpload = base64ToFile(formData.logoDark, 'logo_dark.png');
+      }
+
+      if (logoDarkFileToUpload && !finalLogoDarkUrl) {
         setUploading(true);
-        const fileExt = formData.logoDarkFile.name.split('.').pop();
+        const fileExt = logoDarkFileToUpload.name.split('.').pop() || 'png';
         const fileName = `${Date.now()}_dark_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from('BrandpostAI_logos')
-          .upload(fileName, formData.logoDarkFile);
+          .upload(fileName, logoDarkFileToUpload);
 
         if (!uploadError) {
           const { data } = supabase.storage.from('BrandpostAI_logos').getPublicUrl(fileName);
@@ -313,6 +373,10 @@ export default function OnboardingWizard() {
       await (saveBrandKit as any)(finalLogoUrl || undefined, finalLogoDarkUrl || undefined);
       
       await refreshBrandData();
+      
+      // Success! Clear state
+      localStorage.removeItem('onboarding_formData');
+      localStorage.removeItem('onboarding_currentStep');
       
       if (isEditMode) {
         alert('Changes done successfully');
