@@ -129,12 +129,14 @@ export default function OnboardingWizard() {
         return;
       }
 
+      // 1. Fetch from DB
       const { data: workspace } = await supabase
         .from('workspaces')
         .select('*, brand_kits(*), social_connections(*)')
         .eq('owner_id', user.id)
         .maybeSingle();
 
+      let dbData: any = {};
       if (workspace) {
         if (workspace.social_connections && workspace.social_connections.length > 0) {
           setSocialConnections({
@@ -143,8 +145,7 @@ export default function OnboardingWizard() {
           });
         }
         const brandKit = workspace.brand_kits?.[0];
-        setFormData(prev => ({
-          ...prev,
+        dbData = {
           businessName: workspace.business_name || '',
           address: workspace.address || '',
           pincode: workspace.pincode || '',
@@ -152,10 +153,10 @@ export default function OnboardingWizard() {
           logo: brandKit?.logo_url || null,
           logoUrl: brandKit?.logo_url || null,
           colors: brandKit ? {
-            primary: brandKit.primary_color || prev.colors.primary,
-            secondary: brandKit.secondary_color || prev.colors.secondary,
-            accent: brandKit.accent_color || prev.colors.accent,
-          } : prev.colors,
+            primary: brandKit.primary_color || '#4f46e5',
+            secondary: brandKit.secondary_color || '#64748b',
+            accent: brandKit.accent_color || '#fbbf24',
+          } : { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
           tone: brandKit?.tone ? brandKit.tone.toLowerCase() : 'professional',
           description: brandKit?.brand_description || '',
           brandKitName: brandKit?.brand_kit_name || '',
@@ -163,12 +164,43 @@ export default function OnboardingWizard() {
           bodyFont: brandKit?.body_font || 'Inter',
           instagram: brandKit?.instagram_handle || '',
           facebook: brandKit?.facebook_handle || '',
-        }));
+        };
       }
+
+      // 2. Load from localStorage (priority for draft data)
+      const savedState = localStorage.getItem('onboarding_formData');
+      if (savedState) {
+        try {
+          const parsed = JSON.parse(savedState);
+          setFormData(prev => ({ ...prev, ...dbData, ...parsed }));
+          
+          const savedStep = localStorage.getItem('onboarding_currentStep');
+          if (savedStep) setCurrentStep(parseInt(savedStep, 10));
+        } catch (e) {
+          console.error('Error parsing onboarding state:', e);
+          if (dbData.businessName) setFormData(prev => ({ ...prev, ...dbData }));
+        }
+      } else if (dbData.businessName) {
+        setFormData(prev => ({ ...prev, ...dbData }));
+      }
+
       setIsRefreshing(false);
     }
     fetchExistingData();
   }, []);
+
+  // Save to localStorage whenever formData or currentStep changes
+  useEffect(() => {
+    if (isRefreshing) return;
+    
+    const stateToSave = { ...formData };
+    // Don't save File objects
+    delete stateToSave.logoFile;
+    delete stateToSave.logoDarkFile;
+    
+    localStorage.setItem('onboarding_formData', JSON.stringify(stateToSave));
+    localStorage.setItem('onboarding_currentStep', currentStep.toString());
+  }, [formData, currentStep, isRefreshing]);
 
   // For color extraction
   const { data: palette } = usePalette(formData.logo || '', 5, 'hex', {
@@ -284,15 +316,32 @@ export default function OnboardingWizard() {
       let finalLogoUrl = formData.logoUrl;
       let finalLogoDarkUrl = formData.logoDarkUrl;
 
+      const base64ToFile = (base64String: string, fileName: string) => {
+        const arr = base64String.split(',');
+        const mime = arr[0].match(/:(.*?);/)![1];
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new File([u8arr], fileName, { type: mime });
+      };
+
       // Upload Primary Logo
-      if (formData.logoFile && !finalLogoUrl) {
+      let logoFileToUpload = formData.logoFile;
+      if (!logoFileToUpload && formData.logo && formData.logo.startsWith('data:image')) {
+        logoFileToUpload = base64ToFile(formData.logo, 'logo.png');
+      }
+
+      if (logoFileToUpload && !finalLogoUrl) {
         setUploading(true);
-        const fileExt = formData.logoFile.name.split('.').pop();
+        const fileExt = logoFileToUpload.name.split('.').pop() || 'png';
         const fileName = `${Date.now()}_primary_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from('BrandpostAI_logos')
-          .upload(fileName, formData.logoFile);
+          .upload(fileName, logoFileToUpload);
 
         if (uploadError) {
           console.error('Error uploading primary file:', uploadError);
@@ -310,14 +359,19 @@ export default function OnboardingWizard() {
       }
 
       // Upload Transparent Logo
-      if (formData.logoDarkFile && !finalLogoDarkUrl) {
+      let logoDarkFileToUpload = formData.logoDarkFile;
+      if (!logoDarkFileToUpload && formData.logoDark && formData.logoDark.startsWith('data:image')) {
+        logoDarkFileToUpload = base64ToFile(formData.logoDark, 'logo_dark.png');
+      }
+
+      if (logoDarkFileToUpload && !finalLogoDarkUrl) {
         setUploading(true);
-        const fileExt = formData.logoDarkFile.name.split('.').pop();
+        const fileExt = logoDarkFileToUpload.name.split('.').pop() || 'png';
         const fileName = `${Date.now()}_dark_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from('BrandpostAI_logos')
-          .upload(fileName, formData.logoDarkFile);
+          .upload(fileName, logoDarkFileToUpload);
 
         if (uploadError) {
           console.error('Error uploading dark file:', uploadError);
@@ -331,6 +385,11 @@ export default function OnboardingWizard() {
 
       setUploading(false);
       await saveBrandKit(finalLogoUrl || undefined, finalLogoDarkUrl || undefined);
+      
+      // Success! Clear state
+      localStorage.removeItem('onboarding_formData');
+      localStorage.removeItem('onboarding_currentStep');
+      
       router.push('/dashboard');
     } catch (err: any) {
       console.error('Final submit error:', err);

@@ -11,6 +11,11 @@ export async function GET(request: Request) {
 
   if (error_description) {
     console.error('Callback: Auth error from provider:', error_description);
+    // If the user was in the middle of onboarding or settings, send them back there
+    if (next && (next.includes('/onboarding') || next.includes('/dashboard'))) {
+      const separator = next.includes('?') ? '&' : '?';
+      return NextResponse.redirect(`${origin}${next}${separator}error=${encodeURIComponent(error_description)}`);
+    }
     return NextResponse.redirect(`${origin}/auth/login?error=${encodeURIComponent(error_description)}`);
   }
 
