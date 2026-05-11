@@ -9,6 +9,8 @@ interface BrandContextType {
   businessName: string;
   brandKitName: string;
   logo: string | null;
+  profilePhoto: string | null;
+  authProvider: string;
   colors: {
     primary: string;
     secondary: string;
@@ -29,6 +31,7 @@ interface BrandContextType {
   timing: string;
   setBusinessName: (name: string) => void;
   setLogo: (logo: string | null) => void;
+  setProfilePhoto: (photo: string | null) => void;
   setColors: (colors: { primary: string; secondary: string; accent: string }) => void;
   refreshBrandData: () => Promise<void>;
 }
@@ -41,6 +44,8 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [businessName, setBusinessName] = useState('');
   const [brandKitName, setBrandKitName] = useState('');
   const [logo, setLogo] = useState<string | null>(null);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [authProvider, setAuthProvider] = useState<string>('email');
   const [colors, setColors] = useState({
     primary: '#4f46e5',
     secondary: '#64748b',
@@ -66,10 +71,10 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Fetch user's full_name from the users table
+    // Fetch user profile info
     const { data: userProfile } = await supabase
       .from('users')
-      .select('full_name, plan_id, trial_ends_at, created_at')
+      .select('full_name, plan_id, trial_ends_at, created_at, profile_photo, auth_provider')
       .eq('id', user.id)
       .maybeSingle();
  
@@ -78,6 +83,18 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       setPlanId(userProfile.plan_id || 'solo');
       setTrialEndsAt(userProfile.trial_ends_at);
       setCreatedAt(userProfile.created_at);
+      
+      const storedProvider = userProfile.auth_provider || 'email';
+      setAuthProvider(storedProvider);
+
+      // Priority: 1) Photo from DB 2) OAuth metadata
+      if (userProfile.profile_photo) {
+        setProfilePhoto(userProfile.profile_photo);
+      } else if (storedProvider === 'google' || storedProvider === 'facebook') {
+        setProfilePhoto(user.user_metadata?.avatar_url || user.user_metadata?.picture || null);
+      } else {
+        setProfilePhoto(null);
+      }
     }
 
     // Fetch workspace and brand kit
@@ -90,6 +107,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         address,
         pincode,
         timezone,
+        business_timing,
         posts_used_this_cycle,
         brand_kits (*)
       `)
@@ -122,22 +140,6 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
           accent: brandKit.accent_color || '#06b6d4'
         });
       }
-
-      // Sync with localStorage for legacy components
-      localStorage.setItem('brandpost_user_data', JSON.stringify({
-        fullName: userProfile?.full_name || '',
-        ownerName: workspace.owner_name || '',
-        businessName: bName,
-        address: workspace.address || '',
-        pincode: workspace.pincode || '',
-        logo: brandKit?.logo_url || null,
-        instagram: brandKit?.instagram_handle || '',
-        facebook: brandKit?.facebook_handle || '',
-        brandTone: brandKit?.tone || 'Professional',
-        brandDescription: brandKit?.brand_description || '',
-        timezone: workspace.timezone || 'Asia/Kolkata',
-        timing: workspace.business_timing || '',
-      }));
     }
   };
 
@@ -164,6 +166,8 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         if (d.timing) setTiming(d.timing);
         if (d.logo) setLogo(d.logo);
         if (d.colors) setColors(d.colors);
+        if (d.profilePhoto) setProfilePhoto(d.profilePhoto);
+        if (d.authProvider) setAuthProvider(d.authProvider);
       } catch (e) {
         console.error('Error parsing brand data:', e);
       }
@@ -191,9 +195,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       timezone,
       logo,
       colors,
-      timing
+      timing,
+      profilePhoto,
+      authProvider
     }));
-  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, planId, trialEndsAt, createdAt, postsUsed, timezone, logo, colors, timing]);
+  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, planId, trialEndsAt, createdAt, postsUsed, timezone, logo, colors, timing, profilePhoto, authProvider]);
 
   const value = React.useMemo(() => ({
     fullName,
@@ -207,6 +213,8 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     brandTone,
     brandDescription,
     logo,
+    profilePhoto,
+    authProvider,
     colors,
     planId,
     trialEndsAt,
@@ -217,9 +225,10 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     timing,
     setBusinessName,
     setLogo,
+    setProfilePhoto,
     setColors,
     refreshBrandData
-  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, logo, colors, planId, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing]);
+  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, logo, colors, planId, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, profilePhoto, authProvider]);
 
   return (
     <BrandContext.Provider value={value}>

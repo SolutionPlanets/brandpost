@@ -21,7 +21,7 @@ import {
 import { createClient } from '@/utils/supabase/client';
 import { useBrand } from '@/contexts/BrandContext';
 import styles from './OnboardingWizard.module.css';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { usePalette } from 'color-thief-react';
 import Select from 'react-select';
 
@@ -65,13 +65,21 @@ const HOURS = [
 
 export default function OnboardingWizard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const { refreshBrandData } = useBrand();
-  const [currentStep, setCurrentStep] = useState(1);
+
+  const [currentStep, setCurrentStep] = useState(() => {
+    const stepParam = searchParams.get('step');
+    return stepParam ? parseInt(stepParam, 10) : 1;
+  });
+
   const [isOpenOpen, setIsOpenOpen] = useState(false);
   const [isOpenClose, setIsOpenClose] = useState(false);
   const dropdownOpenRef = useRef<HTMLDivElement>(null);
   const dropdownCloseRef = useRef<HTMLDivElement>(null);
+
+  const [socialConnections, setSocialConnections] = useState({ facebook: false, instagram: false });
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
@@ -80,6 +88,7 @@ export default function OnboardingWizard() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const darkFileInputRef = useRef<HTMLInputElement>(null);
+
   const [formData, setFormData] = useState({
     ownerName: '',
     businessName: '',
@@ -116,11 +125,17 @@ export default function OnboardingWizard() {
 
       const { data: workspace } = await supabase
         .from('workspaces')
-        .select('*, brand_kits(*)')
+        .select('*, brand_kits(*), social_connections(*)')
         .eq('owner_id', user.id)
         .maybeSingle();
 
       if (workspace) {
+        if (workspace.social_connections && workspace.social_connections.length > 0) {
+          setSocialConnections({
+            facebook: workspace.social_connections.some((c: any) => c.platform === 'facebook'),
+            instagram: workspace.social_connections.some((c: any) => c.platform === 'instagram'),
+          });
+        }
         const brandKit = workspace.brand_kits?.[0];
         setFormData(prev => ({
           ...prev,
@@ -152,7 +167,6 @@ export default function OnboardingWizard() {
           setIsEditMode(true);
         }
       } else {
-        // New user, auto-detect timezone
         const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
         if (detectedTz) {
           setFormData(prev => ({ ...prev, timezone: detectedTz }));
@@ -163,7 +177,6 @@ export default function OnboardingWizard() {
     fetchExistingData();
   }, []);
 
-  // For color extraction
   const { data: palette } = usePalette(formData.logo || '', 5, 'hex', {
     quality: 10,
   });
@@ -218,32 +231,16 @@ export default function OnboardingWizard() {
   const saveBrandKit = async (logoUrlOverride?: string, logoDarkUrlOverride?: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.warn('saveBrandKit: No user session found');
-        return;
-      }
+      if (!user) return;
 
-      // Get workspace ID - using maybeSingle to avoid errors if multiple found (though trigger should prevent)
       const { data: workspace, error: wsError } = await supabase
         .from('workspaces')
         .select('id')
         .eq('owner_id', user.id)
         .maybeSingle();
 
-      if (wsError) {
-        console.error('saveBrandKit: Error fetching workspace:', wsError);
-        return;
-      }
+      if (wsError || !workspace) return;
 
-      if (!workspace) {
-        console.warn('saveBrandKit: No workspace found for user', user.id);
-        return;
-      }
-
-      console.log('saveBrandKit: Saving for workspace', workspace.id);
-
-      // Fetch existing brand kit to append 'id' if it exists. 
-      // This bypasses the need for the ON CONFLICT specifying 'workspace_id' which throws 42P10.
       const { data: existingBrandKit } = await supabase
         .from('brand_kits')
         .select('id')
@@ -265,19 +262,10 @@ export default function OnboardingWizard() {
       };
 
       if (existingBrandKit?.id) {
-        payload.id = existingBrandKit.id; // Append primary key for seamless UPSERT fallback
+        payload.id = existingBrandKit.id;
       }
 
-      const { error, data } = await supabase
-        .from('brand_kits')
-        .upsert(payload)
-        .select();
-
-      if (error) {
-        console.error('Brand kit upsert error:', JSON.stringify(error, null, 2));
-      } else {
-        console.log('Brand kit saved successfully:', data);
-      }
+      await supabase.from('brand_kits').upsert(payload);
     } catch (err) {
       console.error('Fatal error in saveBrandKit:', err);
     }
@@ -291,7 +279,6 @@ export default function OnboardingWizard() {
       let finalLogoUrl = formData.logoUrl;
       let finalLogoDarkUrl = formData.logoDarkUrl;
 
-      // Upload Primary Logo
       if (formData.logoFile && !finalLogoUrl) {
         setUploading(true);
         const fileExt = formData.logoFile.name.split('.').pop();
@@ -301,22 +288,12 @@ export default function OnboardingWizard() {
           .from('BrandpostAI_logos')
           .upload(fileName, formData.logoFile);
 
-        if (uploadError) {
-          console.error('Error uploading primary file:', uploadError);
-          setErrors({ logo: `Primary logo upload failed: ${uploadError.message}` });
-          setUploading(false);
-          setLoading(false);
-          return;
+        if (!uploadError) {
+          const { data } = supabase.storage.from('BrandpostAI_logos').getPublicUrl(fileName);
+          finalLogoUrl = data.publicUrl;
         }
-
-        const { data } = supabase.storage
-          .from('BrandpostAI_logos')
-          .getPublicUrl(fileName);
-
-        finalLogoUrl = data.publicUrl;
       }
 
-      // Upload Transparent Logo
       if (formData.logoDarkFile && !finalLogoDarkUrl) {
         setUploading(true);
         const fileExt = formData.logoDarkFile.name.split('.').pop();
@@ -326,13 +303,8 @@ export default function OnboardingWizard() {
           .from('BrandpostAI_logos')
           .upload(fileName, formData.logoDarkFile);
 
-        if (uploadError) {
-          console.error('Error uploading dark file:', uploadError);
-          // Non-mandatory, so we just log and continue or show a non-blocking error
-        } else {
-          const { data } = supabase.storage
-            .from('BrandpostAI_logos')
-            .getPublicUrl(fileName);
+        if (!uploadError) {
+          const { data } = supabase.storage.from('BrandpostAI_logos').getPublicUrl(fileName);
           finalLogoDarkUrl = data.publicUrl;
         }
       }
@@ -340,7 +312,6 @@ export default function OnboardingWizard() {
       setUploading(false);
       await (saveBrandKit as any)(finalLogoUrl || undefined, finalLogoDarkUrl || undefined);
       
-      // Refresh global context to update Header/Sidebar
       await refreshBrandData();
       
       if (isEditMode) {
@@ -351,6 +322,23 @@ export default function OnboardingWizard() {
     } catch (err: any) {
       console.error('Final submit error:', err);
       setLoading(false);
+    }
+  };
+
+  const connectFacebook = async () => {
+    const { error } = await supabase.auth.linkIdentity({
+      provider: 'facebook',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent('/onboarding?step=5&provider=facebook')}`,
+        scopes: 'public_profile,email,pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish',
+        queryParams: {
+          config_id: '1280830517526784'
+        }
+      },
+    });
+    if (error) {
+      console.error('Facebook connect error:', error.message);
+      alert(`Connection failed: ${error.message}`);
     }
   };
 
@@ -391,15 +379,6 @@ export default function OnboardingWizard() {
 
   const skipSocials = async () => {
     await submitAllData();
-  };
-
-  const togglePlatform = (platform: string) => {
-    setFormData(prev => ({
-      ...prev,
-      selectedPlatforms: prev.selectedPlatforms.includes(platform)
-        ? prev.selectedPlatforms.filter(p => p !== platform)
-        : [...prev.selectedPlatforms, platform]
-    }));
   };
 
   const handleFile = (file: File) => {
@@ -508,7 +487,6 @@ export default function OnboardingWizard() {
               <div className={styles.inputGroup}>
                 <label>Business Timing</label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', position: 'relative' }}>
-                  {/* Open Time Custom Dropdown */}
                   <div style={{ flex: 1, position: 'relative' }} ref={dropdownOpenRef}>
                     <div
                       onClick={() => setIsOpenOpen(!isOpenOpen)}
@@ -560,10 +538,7 @@ export default function OnboardingWizard() {
                       </div>
                     )}
                   </div>
-
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>to</span>
-
-                  {/* Close Time Custom Dropdown */}
                   <div style={{ flex: 1, position: 'relative' }} ref={dropdownCloseRef}>
                     <div
                       onClick={() => setIsOpenClose(!isOpenClose)}
@@ -647,7 +622,6 @@ export default function OnboardingWizard() {
             <h2>Upload your brand logos</h2>
             <p>Upload your primary logo and an optional transparent/dark version.</p>
             {errors.logo && <div style={{ color: 'red', marginBottom: '10px', fontSize: '14px', fontWeight: 500 }}>{errors.logo}</div>}
-
             <div className={styles.logoUploadGrid}>
               <div className={styles.logoSection}>
                 <h3>Primary Logo <span style={{ color: 'red' }}>*</span></h3>
@@ -684,7 +658,6 @@ export default function OnboardingWizard() {
                   </div>
                 )}
               </div>
-
               <div className={styles.logoSection}>
                 <h3>Transparent Logo <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 400 }}>(Optional)</span></h3>
                 {formData.logoDark ? (
@@ -725,19 +698,13 @@ export default function OnboardingWizard() {
           <div className={styles.stepContent}>
             <h2>Choose your colors</h2>
             <p>Select colors that represent your brand.</p>
-
             {formData.logo && (
               <div className={styles.autoDetectContainer}>
-                <button
-                  className={styles.aiColorBtn}
-                  onClick={handleAutoDetect}
-                  type="button"
-                >
+                <button className={styles.aiColorBtn} onClick={handleAutoDetect} type="button">
                   <Sparkles size={20} /> Auto-detect from Logo
                 </button>
               </div>
             )}
-
             <div className={styles.colorSelection}>
               <div className={styles.colorPicker}>
                 <label>Primary</label>
@@ -757,7 +724,6 @@ export default function OnboardingWizard() {
                   </div>
                 </div>
               </div>
-
               <div className={styles.colorPicker}>
                 <label>Secondary</label>
                 <div className={styles.colorInput}>
@@ -776,7 +742,6 @@ export default function OnboardingWizard() {
                   </div>
                 </div>
               </div>
-
               <div className={styles.colorPicker}>
                 <label>Accent</label>
                 <div className={styles.colorInput}>
@@ -804,7 +769,6 @@ export default function OnboardingWizard() {
             <style dangerouslySetInnerHTML={{ __html: `@import url('https://fonts.googleapis.com/css2?family=Roboto&family=Inter&family=Open+Sans&family=Lato&family=Poppins&family=Montserrat&family=Oswald&family=Playfair+Display&family=Raleway&family=Merriweather&family=Lora&display=swap');` }} />
             <h2>Brand Voice</h2>
             <p>How should your brand speak to its audience?</p>
-
             <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
               <label>Brand Kit Name <span style={{ color: 'red' }}>*</span></label>
               <input
@@ -819,7 +783,6 @@ export default function OnboardingWizard() {
               />
               {errors.brandKitName && <span style={{ color: 'red', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.brandKitName}</span>}
             </div>
-
             <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
               <label>Tone</label>
               <select value={formData.tone || 'professional'} onChange={(e) => setFormData({ ...formData, tone: e.target.value })}>
@@ -829,7 +792,6 @@ export default function OnboardingWizard() {
                 <option value="authoritative">Authoritative</option>
               </select>
             </div>
-
             <div className={styles.inputGrid} style={{ marginBottom: '15px' }}>
               <div className={styles.inputGroup}>
                 <label>Heading Font</label>
@@ -850,7 +812,6 @@ export default function OnboardingWizard() {
                 />
               </div>
             </div>
-
             <div className={styles.inputGroup}>
               <label>Brief Description</label>
               <textarea
@@ -876,7 +837,11 @@ export default function OnboardingWizard() {
                     <p>Connect pages</p>
                   </div>
                 </div>
-                <button className={styles.connectBtn}>Connect</button>
+                {socialConnections.facebook ? (
+                  <button className={styles.connectBtn} style={{ backgroundColor: '#22c55e', borderColor: '#22c55e', color: 'white' }} disabled>Connected</button>
+                ) : (
+                  <button className={styles.connectBtn} onClick={connectFacebook}>Connect</button>
+                )}
               </div>
               <div className={styles.socialCard}>
                 <div className={styles.socialInfo}>
@@ -886,8 +851,15 @@ export default function OnboardingWizard() {
                     <p>Business account</p>
                   </div>
                 </div>
-                <button className={styles.connectBtn}>Connect</button>
+                {socialConnections.instagram ? (
+                  <button className={styles.connectBtn} style={{ backgroundColor: '#22c55e', borderColor: '#22c55e', color: 'white' }} disabled>Connected</button>
+                ) : (
+                  <button className={styles.connectBtn} onClick={connectFacebook}>Connect</button>
+                )}
               </div>
+            </div>
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <button className={styles.skipBtn} onClick={skipSocials}>Skip for now</button>
             </div>
           </div>
         );
@@ -917,10 +889,8 @@ export default function OnboardingWizard() {
           </div>
         ))}
       </div>
-
       <div className={styles.mainCard}>
         {renderStep()}
-
         <div className={styles.footer}>
           <button
             className={styles.backBtn}

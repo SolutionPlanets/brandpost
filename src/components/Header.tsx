@@ -9,6 +9,7 @@ export default function Header() {
     businessName, 
     ownerName, 
     logo, 
+    profilePhoto,
     address, 
     pincode, 
     instagram, 
@@ -79,7 +80,9 @@ export default function Header() {
               <span className={styles.userRole}>{businessName}</span>
             </div>
             <div className={styles.avatar}>
-              {logo ? (
+              {profilePhoto ? (
+                <img src={profilePhoto} alt="Profile" className={styles.profileImg} referrerPolicy="no-referrer" />
+              ) : logo ? (
                 <img src={logo} alt="Profile" className={styles.profileImg} />
               ) : (
                 <User size={20} />
@@ -91,7 +94,9 @@ export default function Header() {
           {showDropdown && (
             <div className={styles.dropdown}>
               <div className={styles.dropdownHeader}>
-                {logo ? (
+                {profilePhoto ? (
+                  <img src={profilePhoto} alt="Profile" className={styles.dropdownLogo} referrerPolicy="no-referrer" />
+                ) : logo ? (
                   <img src={logo} alt="Logo" className={styles.dropdownLogo} />
                 ) : (
                   <div className={styles.dropdownAvatar}><User /></div>
