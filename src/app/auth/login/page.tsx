@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '../../../utils/supabase/client';
-import { LogIn, Loader2, Mail, Lock, Chrome, Eye, EyeOff } from 'lucide-react';
+import { LogIn, Loader2, Mail, Lock, Chrome, Facebook, Eye, EyeOff } from 'lucide-react';
 import styles from '../Auth.module.css';
 
 export default function LoginPage() {
@@ -78,6 +78,18 @@ export default function LoginPage() {
     if (error) setError(error.message);
   };
 
+  const handleFacebookLogin = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'facebook',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        scopes: 'public_profile,email,pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish',
+      },
+    });
+
+    if (error) setError(error.message);
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.authCard}>
@@ -134,6 +146,10 @@ export default function LoginPage() {
 
         <button onClick={handleGoogleLogin} className={styles.socialBtn}>
           <Chrome size={18} /> Continue with Google
+        </button>
+
+        <button onClick={handleFacebookLogin} className={`${styles.socialBtn} ${styles.facebookBtn}`}>
+          <Facebook size={18} /> Continue with Facebook
         </button>
 
         <p className={styles.footer}>

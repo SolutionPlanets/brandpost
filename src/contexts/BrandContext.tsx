@@ -7,6 +7,8 @@ interface BrandContextType {
   fullName: string;
   businessName: string;
   logo: string | null;
+  profilePhoto: string | null;
+  authProvider: string;
   colors: {
     primary: string;
     secondary: string;
@@ -14,6 +16,7 @@ interface BrandContextType {
   };
   setBusinessName: (name: string) => void;
   setLogo: (logo: string | null) => void;
+  setProfilePhoto: (photo: string | null) => void;
   setColors: (colors: { primary: string; secondary: string; accent: string }) => void;
   refreshBrandData: () => Promise<void>;
 }
@@ -24,6 +27,8 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [fullName, setFullName] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [logo, setLogo] = useState<string | null>(null);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [authProvider, setAuthProvider] = useState<string>('email');
   const [colors, setColors] = useState({
     primary: '#4f46e5',
     secondary: '#64748b',
@@ -36,15 +41,30 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Fetch user's full_name from the users table
+    // Fetch user's full_name, profile_photo, and auth_provider from the users table
     const { data: userProfile } = await supabase
       .from('users')
-      .select('full_name')
+      .select('full_name, profile_photo, auth_provider')
       .eq('id', user.id)
       .maybeSingle();
 
     if (userProfile?.full_name) {
       setFullName(userProfile.full_name);
+    }
+
+    // Determine profile photo based on auth provider
+    const storedProvider = userProfile?.auth_provider || 'email';
+    setAuthProvider(storedProvider);
+
+    // Priority: 1) Photo from DB (captured in callback or uploaded) 2) OAuth metadata
+    if (userProfile?.profile_photo) {
+      setProfilePhoto(userProfile.profile_photo);
+    } else if (storedProvider === 'google') {
+      setProfilePhoto(user.user_metadata?.avatar_url || user.user_metadata?.picture || null);
+    } else if (storedProvider === 'facebook') {
+      setProfilePhoto(user.user_metadata?.avatar_url || user.user_metadata?.picture || null);
+    } else {
+      setProfilePhoto(null);
     }
 
     // Fetch workspace and brand kit
@@ -79,6 +99,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         fullName: userProfile?.full_name || '',
         businessName: bName,
         logo: brandKit?.logo_url || null,
+        profilePhoto: userProfile?.profile_photo || null,
       }));
     }
   };
@@ -103,12 +124,15 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     fullName,
     businessName,
     logo,
+    profilePhoto,
+    authProvider,
     colors,
     setBusinessName,
     setLogo,
+    setProfilePhoto,
     setColors,
     refreshBrandData
-  }), [fullName, businessName, logo, colors]);
+  }), [fullName, businessName, logo, profilePhoto, authProvider, colors]);
 
   return (
     <BrandContext.Provider value={value}>

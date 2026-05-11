@@ -5,7 +5,7 @@ import styles from './Header.module.css';
 import { useBrand } from '@/contexts/BrandContext';
 
 export default function Header() {
-  const { businessName, logo, refreshBrandData } = useBrand();
+  const { businessName, logo, profilePhoto, refreshBrandData } = useBrand();
   const [userData, setUserData] = useState<any>({
     email: '',
     address: 'Set your address',
@@ -83,7 +83,9 @@ export default function Header() {
               <span className={styles.userRole}>Brand Manager</span>
             </div>
             <div className={styles.avatar}>
-              {logo ? (
+              {profilePhoto ? (
+                <img src={profilePhoto} alt="Profile" className={styles.profileImg} referrerPolicy="no-referrer" />
+              ) : logo ? (
                 <img src={logo} alt="Profile" className={styles.profileImg} />
               ) : (
                 <User size={20} />
@@ -95,7 +97,9 @@ export default function Header() {
           {showDropdown && (
             <div className={styles.dropdown}>
               <div className={styles.dropdownHeader}>
-                {logo ? (
+                {profilePhoto ? (
+                  <img src={profilePhoto} alt="Profile" className={styles.dropdownLogo} referrerPolicy="no-referrer" />
+                ) : logo ? (
                   <img src={logo} alt="Logo" className={styles.dropdownLogo} />
                 ) : (
                   <div className={styles.dropdownAvatar}><User /></div>

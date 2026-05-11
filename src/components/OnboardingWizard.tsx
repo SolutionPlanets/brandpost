@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import styles from './OnboardingWizard.module.css';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { usePalette } from 'color-thief-react';
 import Select from 'react-select';
 
@@ -65,8 +65,13 @@ const steps = [
 
 export default function OnboardingWizard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(() => {
+    const stepParam = searchParams.get('step');
+    return stepParam ? parseInt(stepParam, 10) : 1;
+  });
+  const [socialConnections, setSocialConnections] = useState({ facebook: false, instagram: false });
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
@@ -75,6 +80,7 @@ export default function OnboardingWizard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     businessName: '',
+    ownerName: '',
     address: '',
     pincode: '',
     timing: '9 AM - 6 PM',
@@ -125,11 +131,17 @@ export default function OnboardingWizard() {
 
       const { data: workspace } = await supabase
         .from('workspaces')
-        .select('*, brand_kits(*)')
+        .select('*, brand_kits(*), social_connections(*)')
         .eq('owner_id', user.id)
         .maybeSingle();
 
       if (workspace) {
+        if (workspace.social_connections && workspace.social_connections.length > 0) {
+          setSocialConnections({
+            facebook: workspace.social_connections.some((c: any) => c.platform === 'facebook'),
+            instagram: workspace.social_connections.some((c: any) => c.platform === 'instagram'),
+          });
+        }
         const brandKit = workspace.brand_kits?.[0];
         setFormData(prev => ({
           ...prev,
@@ -323,6 +335,23 @@ export default function OnboardingWizard() {
     } catch (err: any) {
       console.error('Final submit error:', err);
       setLoading(false);
+    }
+  };
+
+  const connectFacebook = async () => {
+    const { error } = await supabase.auth.linkIdentity({
+      provider: 'facebook',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent('/onboarding?step=5&provider=facebook')}`,
+        scopes: 'public_profile,email,pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish',
+        queryParams: {
+          config_id: '1280830517526784'
+        }
+      },
+    });
+    if (error) {
+      console.error('Facebook connect error:', error.message);
+      alert(`Connection failed: ${error.message}`);
     }
   };
 
@@ -808,7 +837,11 @@ export default function OnboardingWizard() {
                     <p>Connect pages</p>
                   </div>
                 </div>
-                <button className={styles.connectBtn}>Connect</button>
+                {socialConnections.facebook ? (
+                  <button className={styles.connectBtn} style={{ backgroundColor: '#22c55e', borderColor: '#22c55e', color: 'white' }} disabled>Connected</button>
+                ) : (
+                  <button className={styles.connectBtn} onClick={connectFacebook}>Connect</button>
+                )}
               </div>
               <div className={styles.socialCard}>
                 <div className={styles.socialInfo}>
@@ -818,33 +851,11 @@ export default function OnboardingWizard() {
                     <p>Business account</p>
                   </div>
                 </div>
-                <button className={styles.connectBtn}>Connect</button>
-              </div>
-            </div>
-            <div className={styles.socialInputs}>
-              <div className={styles.inputGroup}>
-                <label>Instagram Handle</label>
-                <div className={styles.inputWithIcon}>
-                  <Instagram size={18} />
-                  <input 
-                    type="text" 
-                    placeholder="@yourbrand" 
-                    value={formData.instagram}
-                    onChange={(e) => setFormData({...formData, instagram: e.target.value})}
-                  />
-                </div>
-              </div>
-              <div className={styles.inputGroup}>
-                <label>Facebook Page URL</label>
-                <div className={styles.inputWithIcon}>
-                  <Facebook size={18} />
-                  <input 
-                    type="text" 
-                    placeholder="facebook.com/yourbrand" 
-                    value={formData.facebook}
-                    onChange={(e) => setFormData({...formData, facebook: e.target.value})}
-                  />
-                </div>
+                {socialConnections.instagram ? (
+                  <button className={styles.connectBtn} style={{ backgroundColor: '#22c55e', borderColor: '#22c55e', color: 'white' }} disabled>Connected</button>
+                ) : (
+                  <button className={styles.connectBtn} onClick={connectFacebook}>Connect</button>
+                )}
               </div>
             </div>
 
