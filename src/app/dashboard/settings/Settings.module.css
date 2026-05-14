@@ -473,6 +473,20 @@
   color: #92400e;
 }
 
+.tokenExpired {
+  background: linear-gradient(135deg, #fee2e2, #fecaca);
+  border-color: #ef4444;
+  color: #991b1b;
+}
+
+.tokenExpired .reconnectBtn {
+  background-color: #ef4444;
+}
+
+.tokenExpired .reconnectBtn:hover {
+  background-color: #dc2626;
+}
+
 .tokenWarning strong {
   font-size: 0.875rem;
 }
@@ -570,6 +584,11 @@
   font-size: 0.6875rem;
   font-weight: 600;
   margin-top: 0.25rem;
+}
+
+.expiredBadge {
+  background-color: #fecaca;
+  color: #991b1b;
 }
 
 .disconnectBtn {

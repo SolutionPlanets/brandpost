@@ -75,7 +75,6 @@ export async function GET(request: Request) {
           });
         } else {
           // User exists — update profile_photo from OAuth ONLY if they don't already have one stored
-          // This preserves manually uploaded photos for email users
           if (!existingUser.profile_photo && existingUser.auth_provider !== 'email') {
             const freshPhoto = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
             if (freshPhoto) {
@@ -109,7 +108,9 @@ export async function GET(request: Request) {
 
         if (isFacebookAuth && providerToken && workspace) {
           try {
-            const tokenExpiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
+            // Default fallback if debug fails
+            let tokenExpiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
+            console.log(`Callback: Using providerToken starting with ${providerToken.substring(0, 10)}...`);
 
             // Fetch User's Personal Photo if missing
             let userProfilePhoto = null;
@@ -131,6 +132,13 @@ export async function GET(request: Request) {
               const debugData = await debugRes.json();
               console.log('Callback: Token Debug Info:', JSON.stringify(debugData));
               granularScopes = debugData?.data?.granular_scopes || [];
+              
+              // NEW: Extract real expiry if available
+              const metaExpiry = debugData?.data?.data_access_expires_at || debugData?.data?.expires_at;
+              if (metaExpiry) {
+                tokenExpiresAt = new Date(metaExpiry * 1000).toISOString();
+                console.log(`Callback: Updated expiry from Meta debug info: ${tokenExpiresAt}`);
+              }
             } catch (de) {
               console.error('Callback: Could not debug token:', de);
             }

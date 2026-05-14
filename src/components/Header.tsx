@@ -1,62 +1,59 @@
-import { useState, useEffect } from 'react';
-import { Bell, Search, User, MapPin, Hash, MessageSquare, Share2, ChevronDown } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Bell, Search, User, MapPin, Hash, MessageSquare, Share2, ChevronDown, LogOut } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
-import styles from './Header.module.css';
 import { useBrand } from '@/contexts/BrandContext';
+import styles from './Header.module.css';
 
 export default function Header() {
-  const { businessName, logo, profilePhoto, refreshBrandData } = useBrand();
-  const [userData, setUserData] = useState<any>({
-    email: '',
-    address: 'Set your address',
-    pincode: 'Pincode',
-    instagram: '@instagram',
-    facebook: 'facebook.com'
-  });
+  const { 
+    businessName, 
+    ownerName, 
+    logo, 
+    profilePhoto, 
+    address, 
+    pincode, 
+    instagram, 
+    facebook,
+    refreshBrandData 
+  } = useBrand();
+  
+  const [email, setEmail] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
   useEffect(() => {
-    async function fetchDetails() {
+    async function fetchUser() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        setUserData(prev => ({ ...prev, email: user.email }));
-        const { data: profile } = await supabase
-          .from('users')
-          .select(`
-            workspaces (
-              address,
-              pincode,
-              brand_kits (
-                instagram_handle,
-                facebook_handle
-              )
-            )
-          `)
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.workspaces?.[0]) {
-          const workspace = profile.workspaces[0];
-          const brandKit = workspace.brand_kits?.[0];
-          setUserData(prev => ({
-            ...prev,
-            address: workspace.address || 'Set your address',
-            pincode: workspace.pincode || 'Pincode',
-            instagram: brandKit?.instagram_handle || '@instagram',
-            facebook: brandKit?.facebook_handle || 'facebook.com'
-          }));
-        }
+        setEmail(user.email || '');
       }
     }
-    fetchDetails();
-  }, [businessName]); // Refresh when context changes
+    fetchUser();
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDropdown]);
 
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
       localStorage.removeItem('brandpost_user_data');
-      window.location.href = '/';
+      window.location.href = '/auth/login';
     } catch (error) {
       console.error('Error during logout:', error);
       window.location.href = '/';
@@ -71,16 +68,16 @@ export default function Header() {
       </div>
 
       <div className={styles.actions}>
-        <button className={styles.iconBtn}>
-          <Bell size={20} />
+        <button className={styles.actionBtn}>
+          <Bell size={20} color="var(--text-main)" />
           <span className={styles.badge}></span>
         </button>
         
-        <div className={styles.profileContainer}>
+        <div className={styles.profileContainer} ref={dropdownRef}>
           <div className={styles.profile} onClick={() => setShowDropdown(!showDropdown)}>
             <div className={styles.userInfo}>
-              <span className={styles.userName}>{businessName || 'My Brand'}</span>
-              <span className={styles.userRole}>Brand Manager</span>
+              <span className={styles.userName}>{ownerName || businessName || 'My Brand'}</span>
+              <span className={styles.userRole}>{businessName}</span>
             </div>
             <div className={styles.avatar}>
               {profilePhoto ? (
@@ -91,7 +88,7 @@ export default function Header() {
                 <User size={20} />
               )}
             </div>
-            <ChevronDown size={14} className={`${styles.chevron} ${showDropdown ? styles.chevronUp : ''}`} />
+            <ChevronDown size={16} color="var(--text-muted)" className={showDropdown ? styles.rotate : ''} />
           </div>
 
           {showDropdown && (
@@ -105,33 +102,37 @@ export default function Header() {
                   <div className={styles.dropdownAvatar}><User /></div>
                 )}
                 <div>
-                  <h3>{businessName || 'My Brand'}</h3>
-                  <p>{userData.email}</p>
+                  <h3>{ownerName || businessName || 'My Brand'}</h3>
+                  <p className={styles.dropdownBizName}>{businessName || 'My Business'}</p>
+                  <p>{email}</p>
                 </div>
               </div>
               
               <div className={styles.dropdownContent}>
                 <div className={styles.detailItem}>
                   <MapPin size={16} />
-                  <span>{userData.address}</span>
+                  <span>{address || 'Set your address'}</span>
                 </div>
                 <div className={styles.detailItem}>
                   <Hash size={16} />
-                  <span>{userData.pincode}</span>
+                  <span>{pincode || 'Pincode'}</span>
                 </div>
                 <div className={styles.divider}></div>
                 <div className={styles.socialLink}>
                   <Share2 size={16} />
-                  <span>{userData.instagram}</span>
+                  <span>{instagram || '@instagram'}</span>
                 </div>
                 <div className={styles.socialLink}>
                   <MessageSquare size={16} />
-                  <span>{userData.facebook}</span>
+                  <span>{facebook || 'facebook.com'}</span>
                 </div>
               </div>
               
               <div className={styles.dropdownFooter}>
-                <button className={styles.logoutBtn} onClick={handleLogout}>Logout</button>
+                <button className={styles.logoutBtn} onClick={handleLogout}>
+                  <LogOut size={16} />
+                  <span>Logout</span>
+                </button>
               </div>
             </div>
           )}

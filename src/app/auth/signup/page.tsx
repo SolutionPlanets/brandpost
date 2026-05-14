@@ -64,7 +64,7 @@ export default function SignupPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
+        redirectTo: `${window.location.origin}/auth/callback`,
         queryParams: {
           prompt: 'select_account',
         },
@@ -111,6 +111,7 @@ export default function SignupPage() {
               required
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
+              suppressHydrationWarning
             />
           </div>
 
@@ -123,6 +124,7 @@ export default function SignupPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              suppressHydrationWarning
             />
           </div>
 
@@ -137,6 +139,7 @@ export default function SignupPage() {
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                suppressHydrationWarning
               />
               <button
                 type="button"
@@ -149,7 +152,7 @@ export default function SignupPage() {
             </div>
           </div>
 
-          <button type="submit" className={styles.submitBtn} disabled={loading}>
+          <button type="submit" className={styles.submitBtn} disabled={loading} suppressHydrationWarning>
             {loading ? <Loader2 size={18} className={styles.spinner} /> : <UserPlus size={18} />}
             Create My Account
           </button>
@@ -157,11 +160,11 @@ export default function SignupPage() {
 
         <div className={styles.divider}>or</div>
 
-        <button onClick={handleGoogleLogin} className={styles.socialBtn}>
+        <button onClick={handleGoogleLogin} className={styles.socialBtn} suppressHydrationWarning>
           <Chrome size={18} /> Sign up with Google
         </button>
 
-        <button onClick={handleFacebookLogin} className={`${styles.socialBtn} ${styles.facebookBtn}`}>
+        <button onClick={handleFacebookLogin} className={`${styles.socialBtn} ${styles.facebookBtn}`} suppressHydrationWarning>
           <Facebook size={18} /> Sign up with Facebook
         </button>
 

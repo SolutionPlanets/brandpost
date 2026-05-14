@@ -5,7 +5,15 @@ import { createClient } from '@/utils/supabase/client';
 
 interface BrandContextType {
   fullName: string;
+  ownerName: string;
   businessName: string;
+  brandKitName: string;
+  address: string;
+  pincode: string;
+  instagram: string;
+  facebook: string;
+  brandTone: string;
+  brandDescription: string;
   logo: string | null;
   profilePhoto: string | null;
   authProvider: string;
@@ -14,6 +22,13 @@ interface BrandContextType {
     secondary: string;
     accent: string;
   };
+  planId: string;
+  trialEndsAt: string | null;
+  createdAt: string | null;
+  postsUsed: number;
+  workspaceId: string | null;
+  timezone: string;
+  timing: string;
   setBusinessName: (name: string) => void;
   setLogo: (logo: string | null) => void;
   setProfilePhoto: (photo: string | null) => void;
@@ -25,7 +40,9 @@ const BrandContext = createContext<BrandContextType | undefined>(undefined);
 
 export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [fullName, setFullName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
   const [businessName, setBusinessName] = useState('');
+  const [brandKitName, setBrandKitName] = useState('');
   const [logo, setLogo] = useState<string | null>(null);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [authProvider, setAuthProvider] = useState<string>('email');
@@ -34,6 +51,19 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     secondary: '#64748b',
     accent: '#06b6d4'
   });
+  const [address, setAddress] = useState('');
+  const [pincode, setPincode] = useState('');
+  const [instagram, setInstagram] = useState('');
+  const [facebook, setFacebook] = useState('');
+  const [brandTone, setBrandTone] = useState('Professional');
+  const [brandDescription, setBrandDescription] = useState('');
+  const [planId, setPlanId] = useState('solo');
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
+  const [createdAt, setCreatedAt] = useState<string | null>(null);
+  const [postsUsed, setPostsUsed] = useState(0);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [timezone, setTimezone] = useState('Asia/Kolkata');
+  const [timing, setTiming] = useState('');
 
   const supabase = createClient();
 
@@ -44,27 +74,30 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     // Fetch user's full_name, profile_photo, and auth_provider from the users table
     const { data: userProfile } = await supabase
       .from('users')
-      .select('full_name, profile_photo, auth_provider')
+      .select('full_name, profile_photo, auth_provider, plan_id, trial_ends_at, created_at')
       .eq('id', user.id)
       .maybeSingle();
 
-    if (userProfile?.full_name) {
-      setFullName(userProfile.full_name);
-    }
+    if (userProfile) {
+      if (userProfile.full_name) setFullName(userProfile.full_name);
+      setPlanId(userProfile.plan_id || 'solo');
+      setTrialEndsAt(userProfile.trial_ends_at);
+      setCreatedAt(userProfile.created_at);
+      
+      // Determine profile photo based on auth provider
+      const storedProvider = userProfile?.auth_provider || 'email';
+      setAuthProvider(storedProvider);
 
-    // Determine profile photo based on auth provider
-    const storedProvider = userProfile?.auth_provider || 'email';
-    setAuthProvider(storedProvider);
-
-    // Priority: 1) Photo from DB (captured in callback or uploaded) 2) OAuth metadata
-    if (userProfile?.profile_photo) {
-      setProfilePhoto(userProfile.profile_photo);
-    } else if (storedProvider === 'google') {
-      setProfilePhoto(user.user_metadata?.avatar_url || user.user_metadata?.picture || null);
-    } else if (storedProvider === 'facebook') {
-      setProfilePhoto(user.user_metadata?.avatar_url || user.user_metadata?.picture || null);
-    } else {
-      setProfilePhoto(null);
+      // Priority: 1) Photo from DB (captured in callback or uploaded) 2) OAuth metadata
+      if (userProfile?.profile_photo) {
+        setProfilePhoto(userProfile.profile_photo);
+      } else if (storedProvider === 'google') {
+        setProfilePhoto(user.user_metadata?.avatar_url || user.user_metadata?.picture || null);
+      } else if (storedProvider === 'facebook') {
+        setProfilePhoto(user.user_metadata?.avatar_url || user.user_metadata?.picture || null);
+      } else {
+        setProfilePhoto(null);
+      }
     }
 
     // Fetch workspace and brand kit
@@ -73,19 +106,36 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       .select(`
         id,
         business_name,
+        owner_name,
+        address,
+        pincode,
+        timezone,
+        business_timing,
+        posts_used_this_cycle,
         brand_kits (*)
       `)
       .eq('owner_id', user.id)
       .maybeSingle();
 
     if (workspace) {
+      setWorkspaceId(workspace.id);
       const bKits = workspace.brand_kits;
       const brandKit = bKits ? (Array.isArray(bKits) ? bKits[0] : bKits) : undefined;
-      const bName = workspace.business_name && workspace.business_name !== 'My Workspace' 
-        ? workspace.business_name 
-        : '';
+      const rawBName = workspace.business_name || '';
+      const bName = rawBName.toLowerCase().includes('my workspace') ? '' : rawBName;
       setBusinessName(bName);
+      setBrandKitName(brandKit?.brand_kit_name || '');
+      setOwnerName(workspace.owner_name || '');
+      setAddress(workspace.address || '');
+      setPincode(workspace.pincode || '');
+      setPostsUsed(workspace.posts_used_this_cycle || 0);
+      setTimezone(workspace.timezone || 'Asia/Kolkata');
+      setTiming(workspace.business_timing || '');
       setLogo(brandKit?.logo_url || null);
+      setInstagram(brandKit?.instagram_handle || '');
+      setFacebook(brandKit?.facebook_handle || '');
+      setBrandTone(brandKit?.tone || 'Professional');
+      setBrandDescription(brandKit?.brand_description || '');
       if (brandKit?.primary_color) {
         setColors({
           primary: brandKit.primary_color,
@@ -97,42 +147,107 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       // Sync with localStorage for legacy components
       localStorage.setItem('brandpost_user_data', JSON.stringify({
         fullName: userProfile?.full_name || '',
+        ownerName: workspace.owner_name || '',
         businessName: bName,
+        address: workspace.address || '',
+        pincode: workspace.pincode || '',
         logo: brandKit?.logo_url || null,
         profilePhoto: userProfile?.profile_photo || null,
+        instagram: brandKit?.instagram_handle || '',
+        facebook: brandKit?.facebook_handle || '',
+        brandTone: brandKit?.tone || 'Professional',
+        brandDescription: brandKit?.brand_description || '',
+        timezone: workspace.timezone || 'Asia/Kolkata',
+        timing: workspace.business_timing || '',
       }));
     }
   };
 
   useEffect(() => {
+    const savedData = localStorage.getItem('brandpost_user_data');
+    if (savedData) {
+      try {
+        const d = JSON.parse(savedData);
+        if (d.fullName) setFullName(d.fullName);
+        if (d.ownerName) setOwnerName(d.ownerName);
+        if (d.businessName) setBusinessName(d.businessName);
+        if (d.brandKitName) setBrandKitName(d.brandKitName);
+        if (d.address) setAddress(d.address);
+        if (d.pincode) setPincode(d.pincode);
+        if (d.instagram) setInstagram(d.instagram);
+        if (d.facebook) setFacebook(d.facebook);
+        if (d.brandTone) setBrandTone(d.brandTone);
+        if (d.brandDescription) setBrandDescription(d.brandDescription);
+        if (d.planId) setPlanId(d.planId);
+        if (d.trialEndsAt) setTrialEndsAt(d.trialEndsAt);
+        if (d.createdAt) setCreatedAt(d.createdAt);
+        if (d.postsUsed !== undefined) setPostsUsed(d.postsUsed);
+        if (d.timezone) setTimezone(d.timezone);
+        if (d.timing) setTiming(d.timing);
+        if (d.logo) setLogo(d.logo);
+        if (d.profilePhoto) setProfilePhoto(d.profilePhoto);
+        if (d.colors) setColors(d.colors);
+      } catch (e) {
+        console.error('Error parsing brand data:', e);
+      }
+    }
     refreshBrandData();
   }, []);
 
-  // Update localStorage when businessName changes locally (for real-time sync with legacy components)
+  // Update localStorage when state changes
   useEffect(() => {
-    const savedData = localStorage.getItem('brandpost_user_data');
-    const parsedData = savedData ? JSON.parse(savedData) : {};
     localStorage.setItem('brandpost_user_data', JSON.stringify({
-      ...parsedData,
       fullName,
+      ownerName,
       businessName,
-      logo
+      brandKitName,
+      address,
+      pincode,
+      instagram,
+      facebook,
+      brandTone,
+      brandDescription,
+      planId,
+      trialEndsAt,
+      createdAt,
+      postsUsed,
+      timezone,
+      logo,
+      profilePhoto,
+      authProvider,
+      colors,
+      timing
     }));
-  }, [fullName, businessName, logo]);
+  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, planId, trialEndsAt, createdAt, postsUsed, timezone, logo, profilePhoto, authProvider, colors, timing]);
 
   const value = React.useMemo(() => ({
     fullName,
+    ownerName,
     businessName,
+    brandKitName,
+    address,
+    pincode,
+    instagram,
+    facebook,
+    brandTone,
+    brandDescription,
     logo,
     profilePhoto,
     authProvider,
     colors,
+    planId,
+    trialEndsAt,
+    createdAt,
+    postsUsed,
+    workspaceId,
+    timezone,
+    timing,
     setBusinessName,
     setLogo,
     setProfilePhoto,
     setColors,
     refreshBrandData
-  }), [fullName, businessName, logo, profilePhoto, authProvider, colors]);
+  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, logo, profilePhoto, authProvider, colors, planId, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing]);
 
   return (
     <BrandContext.Provider value={value}>

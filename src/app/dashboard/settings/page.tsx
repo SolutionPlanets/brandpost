@@ -214,8 +214,16 @@ export default function SettingsPage() {
   const isTokenExpiringSoon = (expiresAt: string | null) => {
     if (!expiresAt) return false;
     const expiry = new Date(expiresAt).getTime();
+    const now = Date.now();
     const sevenDays = 7 * 24 * 60 * 60 * 1000;
-    return expiry - Date.now() < sevenDays;
+    return (expiry > now) && (expiry - now < sevenDays);
+  };
+
+  // Check if token is already expired
+  const isTokenExpired = (expiresAt: string | null) => {
+    if (!expiresAt) return false;
+    const expiry = new Date(expiresAt).getTime();
+    return expiry <= Date.now();
   };
 
   const renderProfile = () => {
@@ -347,6 +355,7 @@ export default function SettingsPage() {
   const renderSocial = () => {
     const facebookPages = socialConnections.filter(c => c.platform === 'facebook');
     const instagramAccounts = socialConnections.filter(c => c.platform === 'instagram');
+    const hasAnyExpired = socialConnections.some(c => isTokenExpired(c.token_expires_at));
     const hasAnyExpiring = socialConnections.some(c => isTokenExpiringSoon(c.token_expires_at));
 
     return (
@@ -354,12 +363,16 @@ export default function SettingsPage() {
         <h2 className={styles.sectionTitle}>Social Connections</h2>
         <p className={styles.sectionDesc}>Connect your Facebook Pages and Instagram accounts to publish content.</p>
 
-        {hasAnyExpiring && (
-          <div className={styles.tokenWarning}>
+        {(hasAnyExpired || hasAnyExpiring) && (
+          <div className={`${styles.tokenWarning} ${hasAnyExpired ? styles.tokenExpired : ''}`}>
             <AlertTriangle size={18} />
             <div>
-              <strong>Token expiring soon</strong>
-              <p>One or more connections will expire within 7 days. Reconnect Facebook to refresh tokens.</p>
+              <strong>{hasAnyExpired ? 'Token expired' : 'Token expiring soon'}</strong>
+              <p>
+                {hasAnyExpired 
+                  ? 'One or more connections have expired. Please reconnect Facebook to restore posting functionality.' 
+                  : 'One or more connections will expire within 7 days. Reconnect Facebook to refresh tokens.'}
+              </p>
             </div>
             <button className={styles.reconnectBtn} onClick={handleConnectFacebook}>Reconnect</button>
           </div>
@@ -391,14 +404,15 @@ export default function SettingsPage() {
                   <div>
                     <h4>{page.page_name}</h4>
                     <p style={{ color: '#64748b', fontSize: '0.8rem' }}>Page ID: {page.page_id}</p>
-                    {isTokenExpiringSoon(page.token_expires_at) && (
+                    {isTokenExpired(page.token_expires_at) ? (
+                      <span className={`${styles.expiryBadge} ${styles.expiredBadge}`}><AlertTriangle size={12} /> Expired</span>
+                    ) : isTokenExpiringSoon(page.token_expires_at) ? (
                       <span className={styles.expiryBadge}><AlertTriangle size={12} /> Expiring soon</span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 <div className={styles.socialCardRight}>
                   <span className={styles.connectedBadge}>Connected</span>
-                  <button className={styles.disconnectBtn} onClick={() => handleDisconnect(page.id)}><Unlink size={14} /> Disconnect</button>
                 </div>
               </div>
             ))
@@ -425,14 +439,15 @@ export default function SettingsPage() {
                   <div>
                     <h4>{account.page_name}</h4>
                     <p style={{ color: '#64748b', fontSize: '0.8rem' }}>Account ID: {account.page_id}</p>
-                    {isTokenExpiringSoon(account.token_expires_at) && (
+                    {isTokenExpired(account.token_expires_at) ? (
+                      <span className={`${styles.expiryBadge} ${styles.expiredBadge}`}><AlertTriangle size={12} /> Expired</span>
+                    ) : isTokenExpiringSoon(account.token_expires_at) ? (
                       <span className={styles.expiryBadge}><AlertTriangle size={12} /> Expiring soon</span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 <div className={styles.socialCardRight}>
                   <span className={styles.connectedBadge}>Connected</span>
-                  <button className={styles.disconnectBtn} onClick={() => handleDisconnect(account.id)}><Unlink size={14} /> Disconnect</button>
                 </div>
               </div>
             ))

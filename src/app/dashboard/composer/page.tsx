@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { Suspense, useState, useEffect, useRef } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { createClient } from '@/utils/supabase/client';
 import {
   PartyPopper,
   Tag,
@@ -15,24 +16,26 @@ import {
   Share2,
   Check,
   Loader2,
-  Eye,
   Edit3,
   ToggleLeft,
   ToggleRight,
-  Download,
   CalendarClock,
   Send,
   Image as ImageIcon,
   RefreshCw,
+  Download,
 } from 'lucide-react';
+import { useBrand } from '@/contexts/BrandContext';
 import styles from './Composer.module.css';
 
 // ── Types ────────────────────────────────────────────────────────────
 type ContentType = 'festive' | 'offer' | 'informational' | 'general';
 type Platform = 'facebook' | 'instagram' | 'both';
+type GenerationState = 'generating' | 'paused' | 'stopped';
 
 interface ComposerForm {
   contentType: ContentType | null;
+  templateId: string | null;
   topic: string;
   brandKit: string;
   platform: Platform;
@@ -40,8 +43,8 @@ interface ComposerForm {
 }
 
 interface GeneratedContent {
+  images: { url: string; id: string }[];
   captions: string[];
-  images: string[];
 }
 
 // ── Content Type Cards ───────────────────────────────────────────────
@@ -52,13 +55,50 @@ const CONTENT_TYPES = [
   { type: 'general' as ContentType, label: 'General', icon: Layers, color: '#8b5cf6', desc: 'Brand awareness & engagement' },
 ];
 
-const STEP_LABELS = ['Content Type', 'Details', 'AI Generation', 'Preview & Edit'];
+const TEMPLATES: Record<ContentType, { id: string; name: string; image: string }[]> = {
+  festive: [
+    { id: 'fest-1', name: 'Traditional Glow', image: 'https://picsum.photos/seed/festive1/400/600' },
+    { id: 'fest-2', name: 'Modern Minimal', image: 'https://picsum.photos/seed/festive2/400/600' },
+    { id: 'fest-3', name: 'Vibrant Celebration', image: 'https://picsum.photos/seed/festive3/400/600' },
+    { id: 'fest-4', name: 'Elegant Script', image: 'https://picsum.photos/seed/festive4/400/600' },
+  ],
+  offer: [
+    { id: 'off-1', name: 'Big Bold Sale', image: 'https://picsum.photos/seed/offer1/400/600' },
+    { id: 'off-2', name: 'Flash Deal', image: 'https://picsum.photos/seed/offer2/400/600' },
+    { id: 'off-3', name: 'Product Spotlight', image: 'https://picsum.photos/seed/offer3/400/600' },
+    { id: 'off-4', name: 'Discount Badge', image: 'https://picsum.photos/seed/offer4/400/600' },
+  ],
+  informational: [
+    { id: 'info-1', name: 'Expert Tips', image: 'https://picsum.photos/seed/info1/400/600' },
+    { id: 'info-2', name: 'Did You Know?', image: 'https://picsum.photos/seed/info2/400/600' },
+    { id: 'info-3', name: 'Step-by-Step', image: 'https://picsum.photos/seed/info3/400/600' },
+    { id: 'info-4', name: 'Clean Listicle', image: 'https://picsum.photos/seed/info4/400/600' },
+  ],
+  general: [
+    { id: 'gen-1', name: 'Daily Quote', image: 'https://picsum.photos/seed/gen1/400/600' },
+    { id: 'gen-2', name: 'Behind the Scenes', image: 'https://picsum.photos/seed/gen2/400/600' },
+    { id: 'gen-3', name: 'Question/Poll', image: 'https://picsum.photos/seed/gen3/400/600' },
+    { id: 'gen-4', name: 'Lifestyle Focus', image: 'https://picsum.photos/seed/gen4/400/600' },
+  ],
+};
+
+const STEP_LABELS = ['Content Type', 'Template', 'Details', 'AI Generation', 'Preview & Edit'];
 
 // ── Component ────────────────────────────────────────────────────────
-export default function ComposerPage() {
+function ComposerPageContent() {
   const searchParams = useSearchParams();
+  const { 
+    brandKitName, businessName, brandTone, brandDescription, colors,
+    fullName, ownerName, address, pincode, timing, logo,
+    postsUsed, planId, trialEndsAt, refreshBrandData, workspaceId
+  } = useBrand();
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingCaptions, setIsGeneratingCaptions] = useState(false);
+  const [isGeneratingImages, setIsGeneratingImages] = useState(false);
+  const [generationState, setGenerationState] = useState<GenerationState>('generating');
+  const generationStateRef = useRef<GenerationState>('generating');
   const [selectedCaption, setSelectedCaption] = useState(0);
   const [selectedImage, setSelectedImage] = useState(0);
   const [editedCaption, setEditedCaption] = useState('');
@@ -70,6 +110,7 @@ export default function ComposerPage() {
 
   const [form, setForm] = useState<ComposerForm>({
     contentType: null,
+    templateId: null,
     topic: '',
     brandKit: 'main-brand',
     platform: 'both',
@@ -78,39 +119,259 @@ export default function ComposerPage() {
 
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
 
-  // Pre-fill from calendar link
+  // Pre-fill from calendar link or Edit/Duplicate
   useEffect(() => {
+    const editId = searchParams.get('editId');
+    const duplicateId = searchParams.get('duplicateId');
     const occasion = searchParams.get('occasion');
     const type = searchParams.get('type');
-    if (occasion) setForm((prev) => ({ ...prev, topic: occasion }));
-    if (type && ['festive', 'offer', 'informational', 'general'].includes(type)) {
-      setForm((prev) => ({ ...prev, contentType: type as ContentType }));
-      if (occasion) setStep(2);
+
+    async function fetchPost(id: string, isEdit: boolean) {
+      const supabase = createClient();
+      try {
+        const { data, error } = await supabase
+          .from('posts')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (error) throw error;
+        if (data) {
+          setForm({
+            contentType: data.content_type || 'general',
+            templateId: 'none',
+            topic: data.title || data.caption?.substring(0, 30) || 'Previous Post',
+            brandKit: 'main-brand',
+            platform: data.platform || 'both',
+            extraInstructions: '',
+          });
+
+          if (isEdit) {
+            setGenerated({
+              captions: [data.caption || ''],
+              images: [data.image_url || '']
+            });
+            setEditedCaption(data.caption || '');
+            setStep(5);
+          } else {
+            // Duplicate: Just pre-fill and go to details step
+            setStep(3);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching post for pre-fill:', err);
+      }
+    }
+
+    if (editId) {
+      fetchPost(editId, true);
+    } else if (duplicateId) {
+      fetchPost(duplicateId, false);
+    } else if (occasion) {
+      setForm((prev) => ({ ...prev, topic: occasion }));
+      if (type && ['festive', 'offer', 'informational', 'general'].includes(type)) {
+        setForm((prev) => ({ ...prev, contentType: type as ContentType }));
+        setStep(2);
+      } else {
+        setStep(1);
+      }
     }
   }, [searchParams]);
 
   const canProceedStep2 = form.contentType !== null;
-  const canProceedStep3 = form.topic.trim().length > 0;
+  const canProceedStep3 = form.templateId !== null || form.templateId === 'none';
+  const canProceedStep4 = form.topic.trim().length > 0;
 
-  const handleGenerate = async () => {
+  const handleGenerateFull = async () => {
+    // Credit check
+    const isTrial = planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date();
+    const currentLimit = isTrial ? 100 : 50;
+    if (postsUsed >= currentLimit) {
+      alert("Please upgrade your plan. You have reached your AI generation limit.");
+      return;
+    }
+
     setIsGenerating(true);
-    // Simulated AI generation (Claude + DALL-E placeholders)
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    setGenerated({
-      captions: [
-        `🎉 ${form.topic} is here! Celebrate with us and make this occasion unforgettable. Our brand brings you the best in quality and style. #${form.topic.replace(/\s/g, '')} #BrandPost`,
-        `✨ This ${form.topic}, let your brand shine brighter than ever. Discover our exclusive collection curated just for you. Tap the link in bio! #Celebrate #${form.topic.replace(/\s/g, '')}`,
-        `🌟 Wishing everyone a wonderful ${form.topic}! At our brand, we believe in celebrating every moment with style and grace. Share your celebrations with us! #${form.topic.replace(/\s/g, '')} #Joy`,
-      ],
-      images: [
-        '/api/placeholder/1024/1024',
-        '/api/placeholder/1024/1024',
-      ],
-    });
-    setSelectedCaption(0);
-    setSelectedImage(0);
-    setIsGenerating(false);
     setStep(4);
+    try {
+      const [captionsData, imagesData] = await Promise.all([
+        generateCaptions(),
+        generateImages()
+      ]);
+
+      if (captionsData.error) throw new Error(`Captions: ${captionsData.error}`);
+      if (imagesData.error) throw new Error(`Images: ${imagesData.error}`);
+
+      setGenerated({
+        captions: captionsData.captions || [],
+        images: imagesData.images || []
+      });
+      setSelectedCaption(0);
+      setSelectedImage(0);
+      setStep(5);
+      refreshBrandData(); // Update credits and history
+    } catch (error: any) {
+      console.error('Generation failed:', error);
+      alert(error.message || 'Generation failed. Please try again.');
+      setStep(3);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const generateCaptions = async () => {
+    setIsGeneratingCaptions(true);
+    try {
+      const res = await fetch('/api/generate/captions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: form.topic,
+          contentType: form.contentType,
+          platform: form.platform,
+          extraInstructions: form.extraInstructions,
+          brandDetails: { businessName, brandTone, brandDescription, colors }
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate captions');
+      return data;
+    } finally {
+      setIsGeneratingCaptions(false);
+    }
+  };
+
+  const generateImages = async () => {
+    setIsGeneratingImages(true);
+    try {
+      const res = await fetch('/api/generate/images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: form.topic,
+          contentType: form.contentType,
+          platform: form.platform,
+          extraInstructions: form.extraInstructions,
+          workspaceId: workspaceId,
+          brandDetails: { 
+            businessName, 
+            brandDescription, 
+            colors,
+            fullName: fullName || ownerName,
+            brandTone,
+            address,
+            pincode,
+            timing,
+            logo
+          }
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate images');
+      return data;
+    } finally {
+      setIsGeneratingImages(false);
+    }
+  };
+
+  const handleRegenerateCaptions = async () => {
+    try {
+      const data = await generateCaptions();
+      if (data.captions) {
+        setGenerated(prev => prev ? { ...prev, captions: data.captions } : null);
+        setSelectedCaption(0);
+      }
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  const handleRegenerateImages = async () => {
+    try {
+      const data = await generateImages();
+      if (data.images) {
+        setGenerated(prev => prev ? { ...prev, images: data.images } : null);
+        setSelectedImage(0);
+      }
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  const downloadImage = async () => {
+    if (!generated?.images[selectedImage]?.url) return;
+    try {
+      const response = await fetch(generated.images[selectedImage].url);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `brandpost-${form.topic.replace(/\s+/g, '-')}-${selectedImage + 1}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
+
+  const handleConfirmSchedule = async () => {
+    const supabase = createClient();
+    const editId = searchParams.get('editId');
+    const selectedPost = generated?.images[selectedImage];
+    
+    if (!selectedPost?.id && !editId) {
+      alert('Error: No post ID found to update. Please regenerate images.');
+      return;
+    }
+
+    setIsGenerating(true); 
+    try {
+      const postData = {
+        title: form.topic,
+        caption: editedCaption,
+        platform: form.platform,
+        content_type: form.contentType,
+        image_url: selectedPost?.url,
+        status: isImmediate ? 'published' : 'scheduled',
+        scheduled_at: isImmediate ? null : `${scheduleDate}T${scheduleTime}:00`,
+        workspace_id: workspaceId,
+        extra_instructions: form.extraInstructions, // Store the generation prompt
+      };
+
+      const targetId = editId || selectedPost?.id;
+
+      const { error } = await supabase
+        .from('posts')
+        .update(postData)
+        .eq('id', targetId);
+
+      if (error) throw error;
+
+      // If immediate, trigger the actual social media publish
+      if (isImmediate) {
+        try {
+          const pubRes = await fetch('/api/social/publish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postId: targetId })
+          });
+          const pubData = await pubRes.json();
+          if (!pubRes.ok) console.warn('Social publish failed:', pubData.error);
+        } catch (pubErr) {
+          console.error('Publish API call failed:', pubErr);
+        }
+      }
+
+      alert(isImmediate ? 'Post published successfully!' : 'Post scheduled successfully!');
+      setShowScheduleModal(false);
+      router.push('/dashboard/posts');
+    } catch (err: any) {
+      console.error('Error saving post:', err);
+      alert(err.message || 'Failed to save post.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const formatDateToDDMMYY = (dateStr: string) => {
@@ -174,8 +435,48 @@ export default function ComposerPage() {
     </div>
   );
 
-  // ── Step 2: Input Form ─────────────────────────────────────────────
-  const renderStep2 = () => (
+  // ── Step 2: Template Selector ──────────────────────────────────────
+  const renderStep2 = () => {
+    if (!form.contentType) return null;
+    const templates = TEMPLATES[form.contentType];
+    
+    return (
+      <div className={styles.stepContent}>
+        <h2 className={styles.stepTitle}>Choose a template</h2>
+        <p className={styles.stepDesc}>Select a visual style that matches your vision.</p>
+        <div className={styles.templateGrid}>
+          {templates.map((tpl) => {
+            const isSelected = form.templateId === tpl.id;
+            return (
+              <button
+                key={tpl.id}
+                className={`${styles.templateCard} ${isSelected ? styles.templateCardActive : ''}`}
+                onClick={() => setForm({ ...form, templateId: tpl.id })}
+              >
+                <div className={styles.templateImage}>
+                  <img src={tpl.image} alt={tpl.name} />
+                  {isSelected && <div className={styles.templateCheck}><Check size={18} /></div>}
+                </div>
+                <span className={styles.templateName}>{tpl.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className={styles.templateNoneWrap}>
+          <button 
+            className={`${styles.noneBtn} ${form.templateId === 'none' ? styles.noneBtnActive : ''}`}
+            onClick={() => setForm({ ...form, templateId: 'none' })}
+          >
+            None of the above
+            <p>AI will generate a custom layout for you</p>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Step 3: Input Form ─────────────────────────────────────────────
+  const renderStep3 = () => (
     <div className={styles.stepContent}>
       <h2 className={styles.stepTitle}>Tell us about your post</h2>
       <p className={styles.stepDesc}>Provide details so AI can generate the perfect content.</p>
@@ -201,7 +502,7 @@ export default function ComposerPage() {
               value={form.brandKit}
               onChange={(e) => setForm({ ...form, brandKit: e.target.value })}
             >
-              <option value="main-brand">Main Brand</option>
+              <option value="main-brand">{brandKitName || businessName || 'Main Brand'}</option>
             </select>
           </div>
 
@@ -224,7 +525,7 @@ export default function ComposerPage() {
         </div>
 
         <div className={styles.formGroup}>
-          <label htmlFor="extra">Extra Instructions (optional)</label>
+          <label htmlFor="extra">Post Generation Prompt</label>
           <textarea
             id="extra"
             placeholder="Any specific tone, hashtags, or details you want included..."
@@ -237,36 +538,63 @@ export default function ComposerPage() {
     </div>
   );
 
-  // ── Step 3: AI Generation Loading ──────────────────────────────────
-  const renderStep3 = () => (
+  // ── Step 4: AI Generation Loading ──────────────────────────────────
+  const renderStep4 = () => (
     <div className={styles.stepContent}>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '1.5rem' }}>
+        <button 
+          onClick={() => {
+            generationStateRef.current = 'stopped';
+            setGenerationState('stopped');
+            setIsGenerating(false);
+            setStep(3);
+          }}
+          style={{ 
+            display: 'flex', alignItems: 'center', gap: '0.5rem', 
+            background: 'none', border: 'none', color: 'var(--text-muted)', 
+            cursor: 'pointer', fontWeight: 500, padding: 0 
+          }}
+        >
+          <ArrowLeft size={16} /> Back to Details
+        </button>
+      </div>
+
       <div className={styles.generatingContainer}>
         <div className={styles.generatingAnimation}>
           <div className={styles.generatingRing}>
-            <Sparkles size={40} className={styles.generatingIcon} />
+            {generationState === 'paused' || generationState === 'stopped' ? (
+              <Loader2 size={40} className={styles.generatingIcon} style={{ animation: 'none', opacity: 0.5 }} />
+            ) : (
+              <Sparkles size={40} className={styles.generatingIcon} />
+            )}
           </div>
         </div>
-        <h2 className={styles.generatingTitle}>Generating your content...</h2>
+        <h2 className={styles.generatingTitle}>
+          {generationState === 'stopped' ? 'Generation Stopped' : 
+           generationState === 'paused' ? 'Generation Paused' : 
+           'Generating your content...'}
+        </h2>
         <p className={styles.generatingDesc}>
-          AI is crafting 3 caption variants and 2 image options based on your brand kit.
+          {generationState === 'stopped' ? 'You stopped the AI generation process.' : 
+           'AI is crafting 3 caption variants and 2 image options based on your brand kit.'}
         </p>
         <div className={styles.generatingSteps}>
-          <div className={`${styles.genStep} ${styles.genStepActive}`}>
-            <Loader2 size={16} className={styles.spinner} /> Analyzing brand tone &amp; style...
+          <div className={`${styles.genStep} ${generationState !== 'stopped' ? styles.genStepActive : ''}`}>
+            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: generationState === 'paused' || generationState === 'stopped' ? 'paused' : 'running' }} /> Analyzing brand tone &amp; style...
           </div>
           <div className={styles.genStep}>
-            <Loader2 size={16} className={styles.spinner} /> Generating captions via Claude AI...
+            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: (isGenerating || isGeneratingCaptions) ? 'running' : 'paused' }} /> Generating captions via OpenAI...
           </div>
           <div className={styles.genStep}>
-            <Loader2 size={16} className={styles.spinner} /> Creating images via DALL·E 3...
+            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: (isGenerating || isGeneratingImages) ? 'running' : 'paused' }} /> Creating images via DALL·E 3...
           </div>
         </div>
       </div>
     </div>
   );
 
-  // ── Step 4: Preview & Edit ─────────────────────────────────────────
-  const renderStep4 = () => {
+  // ── Step 5: Preview & Edit ─────────────────────────────────────────
+  const renderStep5 = () => {
     if (!generated) return null;
     return (
       <div className={styles.stepContent}>
@@ -277,11 +605,29 @@ export default function ComposerPage() {
           {/* Left: Image Preview */}
           <div className={styles.previewImageSection}>
             <div className={styles.previewImageFrame}>
-              <div className={styles.placeholderImage}>
-                <ImageIcon size={64} />
-                <span>AI Generated Image {selectedImage + 1}</span>
-                <span className={styles.imageSize}>1024 × 1024</span>
-              </div>
+              {generated.images[selectedImage] ? (
+                <>
+                  <img 
+                    src={generated.images[selectedImage].url} 
+                    alt={`AI Generated ${selectedImage + 1}`} 
+                    className={styles.previewImage}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  <button 
+                    className={styles.downloadBtn}
+                    onClick={downloadImage}
+                    title="Download Image"
+                  >
+                    <Download size={20} />
+                  </button>
+                </>
+              ) : (
+                <div className={styles.placeholderImage}>
+                  <ImageIcon size={64} />
+                  <span>AI Generated Image {selectedImage + 1}</span>
+                  <span className={styles.imageSize}>1024 × 1024</span>
+                </div>
+              )}
               {showLogoOverlay && (
                 <div className={styles.logoOverlay}>
                   <div className={styles.overlayLogo}>B</div>
@@ -299,6 +645,15 @@ export default function ComposerPage() {
                   Option {i + 1}
                 </button>
               ))}
+              <button 
+                className={styles.regenerateBtn} 
+                onClick={handleRegenerateImages}
+                disabled={isGeneratingImages}
+                style={{ marginLeft: 'auto' }}
+              >
+                {isGeneratingImages ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
+                Regen Image
+              </button>
             </div>
             <button
               className={styles.logoToggle}
@@ -312,7 +667,17 @@ export default function ComposerPage() {
           {/* Right: Caption Editor */}
           <div className={styles.previewCaptionSection}>
             <div className={styles.captionVariants}>
-              <span className={styles.optionLabel}>Caption Variants:</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className={styles.optionLabel}>Caption Variants:</span>
+                <button 
+                  className={styles.regenerateBtn} 
+                  onClick={handleRegenerateCaptions}
+                  disabled={isGeneratingCaptions}
+                >
+                  {isGeneratingCaptions ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
+                  Regen Captions
+                </button>
+              </div>
               <div className={styles.variantTabs}>
                 {generated.captions.map((_, i) => (
                   <button
@@ -420,11 +785,17 @@ export default function ComposerPage() {
             <button className={styles.modalCancel} onClick={() => setShowScheduleModal(false)}>
               Cancel
             </button>
-            <button className={styles.modalConfirm}>
-              {isImmediate ? (
-                <><Send size={16} /> Publish Now</>
-              ) : (
-                <><CalendarClock size={16} /> Schedule Post</>
+            <button 
+              className={styles.modalConfirm} 
+              onClick={handleConfirmSchedule}
+              disabled={isGenerating}
+            >
+              {isGenerating ? <Loader2 size={16} className={styles.spinner} /> : (
+                isImmediate ? (
+                  <><Send size={16} /> Publish Now</>
+                ) : (
+                  <><CalendarClock size={16} /> Schedule Post</>
+                )
               )}
             </button>
           </div>
@@ -449,12 +820,13 @@ export default function ComposerPage() {
         {step === 2 && renderStep2()}
         {step === 3 && renderStep3()}
         {step === 4 && renderStep4()}
+        {step === 5 && renderStep5()}
       </div>
 
       {/* Footer Navigation */}
       <div className={styles.composerFooter}>
-        {step > 1 && step !== 3 && (
-          <button className={styles.backBtn} onClick={() => setStep(step - 1)}>
+        {step > 1 && step !== 4 && (
+          <button className={styles.backBtn} onClick={() => setStep(step === 5 ? 3 : step - 1)}>
             <ArrowLeft size={18} /> Back
           </button>
         )}
@@ -470,18 +842,24 @@ export default function ComposerPage() {
           )}
           {step === 2 && (
             <button
-              className={styles.generateBtn}
+              className={styles.nextBtn}
               disabled={!canProceedStep3}
-              onClick={() => { setStep(3); handleGenerate(); }}
+              onClick={() => setStep(3)}
+            >
+              Next <ArrowRight size={18} />
+            </button>
+          )}
+          {step === 3 && (
+            <button
+              className={styles.generateBtn}
+              disabled={!canProceedStep4}
+              onClick={handleGenerateFull}
             >
               <Sparkles size={18} /> Generate with AI
             </button>
           )}
-          {step === 4 && (
+          {step === 5 && (
             <>
-              <button className={styles.regenerateBtn} onClick={() => { setStep(3); handleGenerate(); }}>
-                <RefreshCw size={16} /> Regenerate
-              </button>
               <button className={styles.scheduleBtn} onClick={() => setShowScheduleModal(true)}>
                 <CalendarClock size={18} /> Schedule / Publish
               </button>
@@ -492,5 +870,13 @@ export default function ComposerPage() {
 
       {renderScheduleModal()}
     </div>
+  );
+}
+
+export default function ComposerPage() {
+  return (
+    <Suspense fallback={null}>
+      <ComposerPageContent />
+    </Suspense>
   );
 }

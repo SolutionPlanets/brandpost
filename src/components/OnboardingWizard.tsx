@@ -404,7 +404,7 @@ export default function OnboardingWizard() {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent('/onboarding?step=5&provider=facebook')}`,
         scopes: 'public_profile,email,pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish',
         queryParams: {
-          config_id: '1280830517526784'
+          config_id: '1667330407871780'
         }
       },
     });
@@ -415,14 +415,28 @@ export default function OnboardingWizard() {
   };
 
   const nextStep = async () => {
-    if (currentStep === 1 && !formData.businessName.trim()) {
-      setErrors({ businessName: 'Business Name is required' });
-      return;
+    if (currentStep === 1) {
+      const newErrors: Record<string, string> = {};
+      if (!formData.businessName.trim()) newErrors.businessName = 'Business Name is required';
+      if (!formData.ownerName.trim()) newErrors.ownerName = 'Owner Name is required';
+      if (!formData.pincode.trim()) newErrors.pincode = 'Pincode is required';
+      
+      if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors);
+        return;
+      }
     }
     
     if (currentStep === 2) {
       if (!formData.logoUrl && !formData.logo && !formData.logoFile) {
         setErrors({ logo: 'Please upload a logo to continue' });
+        return;
+      }
+    }
+
+    if (currentStep === 4) {
+      if (!formData.brandKitName.trim()) {
+        setErrors({ brandKitName: 'Brand Kit Name is required' });
         return;
       }
     }
@@ -533,13 +547,19 @@ export default function OnboardingWizard() {
             </div>
             <div className={styles.inputGrid}>
               <div className={styles.inputGroup}>
-                <label>Pincode</label>
+                <label>Pincode <span style={{color: 'red'}}>*</span></label>
                 <input 
                   type="text" 
                   placeholder="6-digit code" 
                   value={formData.pincode}
-                  onChange={(e) => setFormData({...formData, pincode: e.target.value})}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                    setFormData({...formData, pincode: val});
+                    if (errors.pincode) setErrors({...errors, pincode: ''});
+                  }}
+                  style={errors.pincode ? { borderColor: 'red' } : {}}
                 />
+                {errors.pincode && <span style={{color: 'red', fontSize: '12px', marginTop: '4px', display: 'block'}}>{errors.pincode}</span>}
               </div>
               <div className={styles.inputGroup}>
                 <label>Business Timing</label>
@@ -831,13 +851,18 @@ export default function OnboardingWizard() {
             <p>How should your brand speak to its audience?</p>
             
             <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
-              <label>Brand Kit Name</label>
+              <label>Brand Kit Name <span style={{color: 'red'}}>*</span></label>
               <input 
                 type="text" 
                 placeholder="e.g. Main Brand" 
                 value={formData.brandKitName}
-                onChange={(e) => setFormData({...formData, brandKitName: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, brandKitName: e.target.value});
+                  if (errors.brandKitName) setErrors({...errors, brandKitName: ''});
+                }}
+                style={errors.brandKitName ? { borderColor: 'red' } : {}}
               />
+              {errors.brandKitName && <span style={{color: 'red', fontSize: '12px', marginTop: '4px', display: 'block'}}>{errors.brandKitName}</span>}
             </div>
 
             <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
