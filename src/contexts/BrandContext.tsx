@@ -3,11 +3,30 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 
+interface BrandKit {
+  id: string;
+  workspace_id: string;
+  brand_kit_name: string;
+  logo_url: string | null;
+  logo_dark_url: string | null;
+  primary_color: string;
+  secondary_color: string;
+  accent_color: string;
+  heading_font: string;
+  body_font: string;
+  brand_description: string;
+  tone: string;
+  instagram_handle: string;
+  facebook_handle: string;
+  created_at: string;
+}
+
 interface BrandContextType {
   fullName: string;
   ownerName: string;
   businessName: string;
   brandKitName: string;
+  brandKits: BrandKit[];
   logo: string | null;
   profilePhoto: string | null;
   authProvider: string;
@@ -29,12 +48,32 @@ interface BrandContextType {
   workspaceId: string | null;
   timezone: string;
   timing: string;
+  isLimitReached: boolean;
+  currentLimit: number;
+  brandKitLimit: number;
   setBusinessName: (name: string) => void;
   setLogo: (logo: string | null) => void;
   setProfilePhoto: (photo: string | null) => void;
   setColors: (colors: { primary: string; secondary: string; accent: string }) => void;
   refreshBrandData: () => Promise<void>;
+  checkLimitAndRedirect: () => boolean;
 }
+
+const PLAN_LIMITS: Record<string, number> = {
+  'solo': 30,
+  'smb': 100,
+  'agency': 10000,
+  'franchise': 10000,
+  'trial': 100
+};
+
+const BRAND_KIT_LIMITS: Record<string, number> = {
+  'solo': 1,
+  'smb': 3,
+  'agency': 15,
+  'franchise': 1000,
+  'trial': 3
+};
 
 const BrandContext = createContext<BrandContextType | undefined>(undefined);
 
@@ -43,6 +82,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [ownerName, setOwnerName] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [brandKitName, setBrandKitName] = useState('');
+  const [brandKits, setBrandKits] = useState<BrandKit[]>([]);
   const [logo, setLogo] = useState<string | null>(null);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [authProvider, setAuthProvider] = useState<string>('email');
@@ -97,7 +137,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Fetch workspace and brand kit
+    // Fetch workspace and brand kits
     const { data: workspace } = await supabase
       .from('workspaces')
       .select(`
@@ -109,15 +149,20 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         timezone,
         business_timing,
         posts_used_this_cycle,
-        brand_kits (*)
+        brand_kits (*),
+        social_connections (*)
       `)
       .eq('owner_id', user.id)
       .maybeSingle();
 
     if (workspace) {
       setWorkspaceId(workspace.id);
-      const bKits = workspace.brand_kits;
-      const brandKit = bKits ? (Array.isArray(bKits) ? bKits[0] : bKits) : undefined;
+      const bKits = (workspace.brand_kits || []) as BrandKit[];
+      // Sort by creation date to keep slots consistent
+      bKits.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      setBrandKits(bKits);
+      
+      const brandKit = bKits.length > 0 ? bKits[0] : undefined;
       const rawBName = workspace.business_name || '';
       const bName = rawBName.toLowerCase().includes('my workspace') ? '' : rawBName;
       setBusinessName(bName);
@@ -129,8 +174,13 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       setTimezone(workspace.timezone || 'Asia/Kolkata');
       setTiming(workspace.business_timing || '');
       setLogo(brandKit?.logo_url || null);
-      setInstagram(brandKit?.instagram_handle || '');
-      setFacebook(brandKit?.facebook_handle || '');
+
+      const socialConns = workspace.social_connections || [];
+      const instaConn = Array.isArray(socialConns) ? socialConns.find((c: any) => c.platform === 'instagram') : null;
+      const fbConn = Array.isArray(socialConns) ? socialConns.find((c: any) => c.platform === 'facebook') : null;
+
+      setInstagram(instaConn?.page_name || brandKit?.instagram_handle || '');
+      setFacebook(fbConn?.page_name || brandKit?.facebook_handle || '');
       setBrandTone(brandKit?.tone || 'Professional');
       setBrandDescription(brandKit?.brand_description || '');
       if (brandKit?.primary_color) {
@@ -201,11 +251,26 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, planId, trialEndsAt, createdAt, postsUsed, timezone, logo, colors, timing, profilePhoto, authProvider]);
 
+  const isTrial = planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date();
+  const currentLimit = isTrial ? PLAN_LIMITS['trial'] : (PLAN_LIMITS[planId] || 30);
+  const brandKitLimit = isTrial ? BRAND_KIT_LIMITS['trial'] : (BRAND_KIT_LIMITS[planId] || 1);
+  const isLimitReached = postsUsed >= currentLimit;
+
+  const checkLimitAndRedirect = () => {
+    if (isLimitReached) {
+      alert(`Your AI generation limit (${currentLimit} posts) has been reached. Please upgrade your plan to continue creating amazing content!`);
+      window.location.href = '/pricing?from=limit_reached';
+      return true;
+    }
+    return false;
+  };
+
   const value = React.useMemo(() => ({
     fullName,
     ownerName,
     businessName,
     brandKitName,
+    brandKits,
     address,
     pincode,
     instagram,
@@ -223,12 +288,16 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     workspaceId,
     timezone,
     timing,
+    isLimitReached,
+    currentLimit,
+    brandKitLimit,
     setBusinessName,
     setLogo,
     setProfilePhoto,
     setColors,
-    refreshBrandData
-  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, logo, colors, planId, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, profilePhoto, authProvider]);
+    refreshBrandData,
+    checkLimitAndRedirect
+  }), [fullName, ownerName, businessName, brandKitName, brandKits, address, pincode, instagram, facebook, brandTone, brandDescription, logo, colors, planId, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, profilePhoto, authProvider, isLimitReached, currentLimit, brandKitLimit]);
 
   return (
     <BrandContext.Provider value={value}>

@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Check, X, ArrowLeft, Info } from 'lucide-react';
 import Link from 'next/link';
 import { getUSDToINRRate, formatINR, formatUSD } from '@/utils/currency';
+import { createClient } from '@/utils/supabase/client';
 import styles from './Pricing.module.css';
 
 const plans = [
@@ -87,12 +88,64 @@ function PricingPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const from = searchParams.get('from');
+  const supabase = createClient();
 
   const handleBack = () => {
-    if (from === 'dashboard') {
+    if (from === 'dashboard' || from === 'limit_reached') {
       router.push('/dashboard');
+    } else if (from === 'brandkit') {
+      router.push('/dashboard/brand-kit');
     } else {
-      router.push('/');
+      router.push('/dashboard');
+    }
+  };
+
+  const handleUpgrade = async (planName: string) => {
+    console.log('Upgrading to plan:', planName);
+    const planId = planName.toLowerCase().split(' ')[0]; // 'solo', 'smb', 'agency', 'franchise'
+    console.log('Target planId:', planId);
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('No user found, redirecting to login');
+        router.push('/auth/login?from=pricing');
+        return;
+      }
+
+      console.log('Updating user:', user.id, 'with plan:', planId);
+      const { data, error } = await supabase
+        .from('users')
+        .update({ plan_id: planId })
+        .eq('id', user.id)
+        .select();
+
+      if (error) {
+        console.error('Update error:', error);
+        alert('Error updating plan: ' + error.message);
+      } else {
+        console.log('Update success:', data);
+        // Clear local storage to force a fresh data fetch on next dashboard load
+        localStorage.removeItem('brandpost_user_data');
+        alert(`Plan "${planName}" successfully applied! Redirecting back...`);
+        
+        // Get 'from' parameter
+        const searchParams = new URLSearchParams(window.location.search);
+        const fromParam = searchParams.get('from');
+        
+        if (fromParam === 'limit_reached' || fromParam === 'dashboard') {
+          router.push('/dashboard');
+        } else {
+          router.push('/dashboard/brand-kit');
+        }
+
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
+      }
+    } catch (err) {
+      console.error('Fatal upgrade error:', err);
+      alert('An unexpected error occurred. Please try again.');
     }
   };
 
@@ -109,7 +162,7 @@ function PricingPageContent() {
   return (
     <div className={styles.container}>
       <button onClick={handleBack} className={styles.backLink}>
-        <ArrowLeft size={20} /> Back to {from === 'dashboard' ? 'Dashboard' : 'Home'}
+        <ArrowLeft size={20} /> Back to Dashboard
       </button>
 
       <header className={styles.header}>
@@ -166,7 +219,10 @@ function PricingPageContent() {
                 )}
               </div>
 
-              <button className={`${styles.ctaButton} ${styles.primaryCta}`}>
+              <button 
+                onClick={() => handleUpgrade(plan.name)}
+                className={`${styles.ctaButton} ${styles.primaryCta}`}
+              >
                 Get Started
               </button>
 

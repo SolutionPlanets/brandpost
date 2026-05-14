@@ -258,19 +258,27 @@ export async function GET(request: Request) {
           }
         }
 
+        const isNewUser = !existingUser;
         const brandKits = workspace?.brand_kits;
         const hasBrandKit = brandKits ? (Array.isArray(brandKits) ? brandKits.length > 0 : Object.keys(brandKits).length > 0) : false;
         
         let redirectPath = next;
+        
+        // Social login connections handling
         if (next.includes('provider=facebook')) {
           if (next.includes('/dashboard/settings')) {
             redirectPath = '/dashboard/settings?tab=social&fb_connected=1';
           } else if (next.includes('/onboarding')) {
             redirectPath = next;
           }
-        } else if (!hasBrandKit) {
+        } 
+        // Logic for First-time vs Returning users
+        else if (isNewUser && !hasBrandKit) {
+          // Only force onboarding for brand new accounts that don't have a kit
           redirectPath = '/onboarding';
         }
+        // If it's a returning user (existingUser is true), we let them go to /dashboard (default)
+        // even if they haven't finished onboarding yet, as per user request.
         
         console.log(`Callback: Success. Redirecting to ${redirectPath}`);
         return NextResponse.redirect(`${origin}${redirectPath}`);

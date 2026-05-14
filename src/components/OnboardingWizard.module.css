@@ -1,13 +1,14 @@
 .wizard {
+  width: 100%;
   max-width: 800px;
-  margin: 2rem auto;
-  padding: 0 1.5rem;
+  margin: 0.5rem auto;
+  padding: 0 1rem;
 }
 
 .progressContainer {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
   position: relative;
 }
 
@@ -22,8 +23,8 @@
 }
 
 .iconCircle {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background-color: var(--surface);
   border: 2px solid var(--border);
@@ -47,7 +48,7 @@
 }
 
 .stepTitle {
-  font-size: 0.875rem;
+  font-size: 1rem;
   font-weight: 500;
   color: var(--text-muted);
 }
@@ -74,7 +75,7 @@
 .mainCard {
   background-color: var(--surface);
   border-radius: var(--radius-lg);
-  padding: 2rem;
+  padding: 1.5rem;
   box-shadow: var(--shadow-lg);
   min-height: 400px;
   display: flex;
@@ -99,7 +100,7 @@
 }
 
 .stepContent h2 {
-  font-size: 1.75rem;
+  font-size: 2rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
   color: var(--text);
@@ -107,7 +108,8 @@
 
 .stepContent p {
   color: var(--text-muted);
-  margin-bottom: 1.5rem;
+  font-size: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .inputGroup {
@@ -123,9 +125,9 @@
 
 .inputGroup label {
   display: block;
-  font-size: 0.875rem;
+  font-size: 1.125rem;
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
   color: var(--text);
 }
 
@@ -133,10 +135,10 @@
 .inputGroup select,
 .inputGroup textarea {
   width: 100%;
-  padding: 0.875rem 1.125rem;
+  padding: 1rem 1.25rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  font-size: 1rem;
+  font-size: 1.125rem;
   outline: none;
   transition: border-color 0.2s ease;
 }
@@ -236,8 +238,8 @@
 
 .colorSelection {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
 }
 
 .colorPicker {
@@ -252,7 +254,7 @@
   overflow: hidden;
   background-color: white;
   transition: all 0.2s ease;
-  height: 52px;
+  height: 60px;
 }
 
 .colorInput:focus-within {
@@ -415,20 +417,23 @@
   box-shadow: 0 4px 12px var(--primary-light);
 }
 
+
+
 .footer {
-  margin-top: 2rem;
+  margin-top: 1.5rem;
   display: flex;
   justify-content: space-between;
-  padding-top: 2rem;
+  padding-top: 1.5rem;
   border-top: 1px solid var(--border);
 }
 
 .nextBtn {
   background-color: var(--primary);
   color: white;
-  padding: 0.875rem 2rem;
+  padding: 1rem 2.5rem;
   border-radius: var(--radius-md);
   font-weight: 600;
+  font-size: 1.125rem;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -804,13 +809,25 @@
 }
 
 @keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 /* AI Color Button Styles */
@@ -848,9 +865,17 @@
 }
 
 @keyframes pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.6; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+
+  100% {
+    opacity: 1;
+  }
 }
 
 @media (max-width: 640px) {

@@ -63,7 +63,12 @@ const HOURS = [
   '12 PM', '1 PM', '2 PM', '3 PM', '4 PM', '5 PM', '6 PM', '7 PM', '8 PM', '9 PM', '10 PM', '11 PM'
 ];
 
-export default function OnboardingWizard() {
+interface OnboardingWizardProps {
+  brandKitId?: string;
+  onComplete?: () => void;
+}
+
+export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingWizardProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -138,35 +143,72 @@ export default function OnboardingWizard() {
             instagram: workspace.social_connections.some((c: any) => c.platform === 'instagram'),
           });
         }
-        const brandKit = workspace.brand_kits?.[0];
         
-        dbData = {
-          ownerName: workspace.owner_name || '',
-          businessName: ((workspace.business_name || workspace.name || '').toLowerCase().includes('my workspace')) ? '' : (workspace.business_name || workspace.name || ''),
-          address: workspace.address || '',
-          pincode: workspace.pincode || '',
-          timing: workspace.business_timing || '',
-          logo: brandKit?.logo_url || null,
-          logoUrl: brandKit?.logo_url || null,
-          logoDark: brandKit?.logo_dark_url || null,
-          logoDarkUrl: brandKit?.logo_dark_url || null,
-          colors: brandKit ? {
-            primary: brandKit.primary_color || '#4f46e5',
-            secondary: brandKit.secondary_color || '#64748b',
-            accent: brandKit.accent_color || '#fbbf24',
-          } : { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
-          tone: brandKit?.tone ? brandKit.tone.toLowerCase() : 'professional',
-          description: brandKit?.brand_description || '',
-          brandKitName: brandKit?.brand_kit_name || '',
-          headingFont: brandKit?.heading_font || 'Inter',
-          bodyFont: brandKit?.body_font || 'Inter',
-          instagram: brandKit?.instagram_handle || '',
-          facebook: brandKit?.facebook_handle || '',
-          timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
-        };
+        // Determine if we are creating a new kit (supplementary) or doing initial onboarding
+        const isInitialOnboarding = (workspace.brand_kits || []).length === 0;
+        const isAddingNewKit = !brandKitId && !isInitialOnboarding;
+        
+        // Find the specific brand kit
+        const brandKit = brandKitId 
+          ? workspace.brand_kits?.find((k: any) => k.id === brandKitId)
+          : null; // Don't fallback to first kit if adding new
+
+        const socialConns = workspace.social_connections || [];
+        const instaConn = Array.isArray(socialConns) ? socialConns.find((c: any) => c.platform === 'instagram') : null;
+        const fbConn = Array.isArray(socialConns) ? socialConns.find((c: any) => c.platform === 'facebook') : null;
+        
+        if (isAddingNewKit) {
+          // If adding a NEW kit, start with BLANK data
+          dbData = {
+            ownerName: '',
+            businessName: '',
+            address: '',
+            pincode: '',
+            timing: '',
+            logo: null,
+            logoUrl: null,
+            logoDark: null,
+            logoDarkUrl: null,
+            colors: { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
+            tone: 'professional',
+            description: '',
+            brandKitName: '',
+            headingFont: 'Inter',
+            bodyFont: 'Inter',
+            instagram: '',
+            facebook: '',
+            timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+          };
+        } else {
+          // Editing existing or initial onboarding
+          dbData = {
+            ownerName: workspace.owner_name || '',
+            businessName: brandKit?.brand_kit_name || ((workspace.business_name || workspace.name || '').toLowerCase().includes('my workspace') ? '' : (workspace.business_name || workspace.name || '')),
+            address: workspace.address || '',
+            pincode: workspace.pincode || '',
+            timing: workspace.business_timing || '',
+            logo: brandKit?.logo_url || null,
+            logoUrl: brandKit?.logo_url || null,
+            logoDark: brandKit?.logo_dark_url || null,
+            logoDarkUrl: brandKit?.logo_dark_url || null,
+            colors: brandKit ? {
+              primary: brandKit.primary_color || '#4f46e5',
+              secondary: brandKit.secondary_color || '#64748b',
+              accent: brandKit.accent_color || '#fbbf24',
+            } : { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
+            tone: brandKit?.tone ? brandKit.tone.toLowerCase() : 'professional',
+            description: brandKit?.brand_description || '',
+            brandKitName: brandKit?.brand_kit_name || '',
+            headingFont: brandKit?.heading_font || 'Inter',
+            bodyFont: brandKit?.body_font || 'Inter',
+            instagram: instaConn?.page_name || brandKit?.instagram_handle || '',
+            facebook: fbConn?.page_name || brandKit?.facebook_handle || '',
+            timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+          };
+        }
 
         const bNameToCheck = workspace.business_name || workspace.name || '';
-        if (bNameToCheck && !bNameToCheck.toLowerCase().includes('my workspace')) {
+        if (bNameToCheck && !bNameToCheck.toLowerCase().includes('my workspace') && !isAddingNewKit) {
           setIsEditMode(true);
         }
       } else {
@@ -176,19 +218,24 @@ export default function OnboardingWizard() {
         }
       }
 
-      // 2. Load from localStorage (priority for draft data)
-      const savedState = localStorage.getItem('onboarding_formData');
-      if (savedState) {
-        try {
-          const parsed = JSON.parse(savedState);
-          setFormData(prev => ({ ...prev, ...dbData, ...parsed }));
-          
-          const savedStep = localStorage.getItem('onboarding_currentStep');
-          if (savedStep && !searchParams.get('step')) {
-            setCurrentStep(parseInt(savedStep, 10));
+      // 2. Load from localStorage (ONLY for initial onboarding draft)
+      const isInitialOnboarding = !brandKitId && (!workspace || (workspace.brand_kits || []).length === 0);
+      if (isInitialOnboarding) {
+        const savedState = localStorage.getItem('onboarding_formData');
+        if (savedState) {
+          try {
+            const parsed = JSON.parse(savedState);
+            setFormData(prev => ({ ...prev, ...dbData, ...parsed }));
+            
+            const savedStep = localStorage.getItem('onboarding_currentStep');
+            if (savedStep && !searchParams.get('step')) {
+              setCurrentStep(parseInt(savedStep, 10));
+            }
+          } catch (e) {
+            console.error('Error parsing onboarding state:', e);
+            setFormData(prev => ({ ...prev, ...dbData }));
           }
-        } catch (e) {
-          console.error('Error parsing onboarding state:', e);
+        } else {
           setFormData(prev => ({ ...prev, ...dbData }));
         }
       } else {
@@ -198,19 +245,25 @@ export default function OnboardingWizard() {
       setIsRefreshing(false);
     }
     fetchExistingData();
-  }, []);
+  }, [brandKitId, refreshBrandData]);
 
   // Save to localStorage whenever formData or currentStep changes
   useEffect(() => {
     if (isRefreshing) return;
     
     const stateToSave = { ...formData };
-    // Don't save File objects
+    // Don't save File objects or large base64 strings in localStorage
     delete (stateToSave as any).logoFile;
     delete (stateToSave as any).logoDarkFile;
+    delete (stateToSave as any).logo;
+    delete (stateToSave as any).logoDark;
     
-    localStorage.setItem('onboarding_formData', JSON.stringify(stateToSave));
-    localStorage.setItem('onboarding_currentStep', currentStep.toString());
+    try {
+      localStorage.setItem('onboarding_formData', JSON.stringify(stateToSave));
+      localStorage.setItem('onboarding_currentStep', currentStep.toString());
+    } catch (e) {
+      console.warn('Failed to save to localStorage:', e);
+    }
   }, [formData, currentStep, isRefreshing]);
 
   const { data: palette } = usePalette(formData.logo || '', 5, 'hex', {
@@ -247,17 +300,44 @@ export default function OnboardingWizard() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // Check existing workspace and kits
+    const { data: workspace } = await supabase
+      .from('workspaces')
+      .select('id, business_name, brand_kits(id)')
+      .eq('owner_id', user.id)
+      .maybeSingle();
+
+    if (!workspace) return;
+
+    const bKits = workspace.brand_kits || [];
+    const isInitialOnboarding = bKits.length === 0;
+    
+    // We ONLY update global workspace info during initial setup 
+    // or when explicitly editing the VERY FIRST brand kit.
+    // Supplementary kits (Kit 2, 3) should NOT touch global workspace settings.
+    const isFirstKit = bKits.length > 0 && brandKitId === bKits[0].id;
+
+    if (!isInitialOnboarding && !isFirstKit && !(!brandKitId && isInitialOnboarding)) {
+      // If we are adding Kit 2/3 or editing Kit 2/3, we skip workspace global updates
+      return;
+    }
+
+    const updatePayload: any = {
+      owner_name: formData.ownerName,
+      address: formData.address,
+      pincode: formData.pincode,
+      business_timing: formData.timing,
+      timezone: formData.timezone
+    };
+
+    if (isInitialOnboarding || isFirstKit) {
+      updatePayload.business_name = formData.businessName;
+    }
+
     const { error } = await supabase
       .from('workspaces')
-      .update({
-        business_name: formData.businessName,
-        owner_name: formData.ownerName,
-        address: formData.address,
-        pincode: formData.pincode,
-        business_timing: formData.timing,
-        timezone: formData.timezone
-      })
-      .eq('owner_id', user.id);
+      .update(updatePayload)
+      .eq('id', workspace.id);
 
     if (error) {
       console.error('Workspace update error:', JSON.stringify(error, null, 2));
@@ -277,15 +357,13 @@ export default function OnboardingWizard() {
 
       if (wsError || !workspace) return;
 
-      const { data: existingBrandKit } = await supabase
-        .from('brand_kits')
-        .select('id')
-        .eq('workspace_id', workspace.id)
-        .maybeSingle();
+      // If brandKitId was provided, we use it for update.
+      // If NOT provided, we let Supabase insert a new row.
+      const targetId = brandKitId;
 
       const payload: Record<string, any> = {
         workspace_id: workspace.id,
-        brand_kit_name: formData.brandKitName || `${formData.businessName} Brand Kit`,
+        brand_kit_name: formData.brandKitName || formData.businessName || 'My Brand Kit',
         logo_url: logoUrlOverride || formData.logoUrl || null,
         logo_dark_url: logoDarkUrlOverride || formData.logoDarkUrl || null,
         primary_color: formData.colors.primary,
@@ -295,10 +373,12 @@ export default function OnboardingWizard() {
         body_font: formData.bodyFont,
         brand_description: formData.description,
         tone: formData.tone,
+        instagram_handle: formData.instagram,
+        facebook_handle: formData.facebook,
       };
 
-      if (existingBrandKit?.id) {
-        payload.id = existingBrandKit.id;
+      if (targetId) {
+        payload.id = targetId;
       }
 
       await supabase.from('brand_kits').upsert(payload);
@@ -378,11 +458,15 @@ export default function OnboardingWizard() {
       localStorage.removeItem('onboarding_formData');
       localStorage.removeItem('onboarding_currentStep');
       
-      if (isEditMode) {
-        alert('Changes done successfully');
+      if (isEditMode || brandKitId) {
+        alert('Changes saved successfully');
       }
       
-      router.push('/dashboard');
+      if (onComplete) {
+        onComplete();
+      } else {
+        router.push('/dashboard');
+      }
     } catch (err: any) {
       console.error('Final submit error:', err);
       setLoading(false);
@@ -496,8 +580,9 @@ export default function OnboardingWizard() {
                   placeholder="e.g. Pixel Agency"
                   value={formData.businessName || ''}
                   onChange={(e) => {
-                    setFormData({ ...formData, businessName: e.target.value });
-                    if (errors.businessName) setErrors({ ...errors, businessName: '' });
+                    const val = e.target.value;
+                    setFormData(prev => ({ ...prev, businessName: val }));
+                    if (errors.businessName) setErrors(prev => ({ ...prev, businessName: '' }));
                   }}
                   style={errors.businessName ? { borderColor: 'red' } : {}}
                 />
@@ -510,8 +595,9 @@ export default function OnboardingWizard() {
                   placeholder="e.g. Chirag Mutha"
                   value={formData.ownerName || ''}
                   onChange={(e) => {
-                    setFormData({ ...formData, ownerName: e.target.value });
-                    if (errors.ownerName) setErrors({ ...errors, ownerName: '' });
+                    const val = e.target.value;
+                    setFormData(prev => ({ ...prev, ownerName: val }));
+                    if (errors.ownerName) setErrors(prev => ({ ...prev, ownerName: '' }));
                   }}
                   style={errors.ownerName ? { borderColor: 'red' } : {}}
                 />
@@ -524,7 +610,10 @@ export default function OnboardingWizard() {
                 type="text"
                 placeholder="Shop/Office location"
                 value={formData.address || ''}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData(prev => ({ ...prev, address: val }));
+                }}
               />
             </div>
             <div className={styles.inputGrid}>
@@ -536,13 +625,13 @@ export default function OnboardingWizard() {
                   value={formData.pincode || ''}
                   onChange={(e) => {
                     const rawVal = e.target.value;
-                    const val = rawVal.replace(/\D/g, '');
-                    if (rawVal.length > 6 || val.length > 6) {
-                      setErrors({ ...errors, pincode: 'Pincode cannot be more than 6 digits' });
+                    const val = rawVal.replace(/\D/g, '').slice(0, 6);
+                    if (rawVal.length > 6) {
+                      setErrors(prev => ({ ...prev, pincode: 'Pincode cannot be more than 6 digits' }));
                     } else {
-                      if (errors.pincode) setErrors({ ...errors, pincode: '' });
+                      if (errors.pincode) setErrors(prev => ({ ...prev, pincode: '' }));
                     }
-                    setFormData({ ...formData, pincode: val.slice(0, 6) });
+                    setFormData(prev => ({ ...prev, pincode: val }));
                   }}
                   style={errors.pincode ? { borderColor: 'red' } : {}}
                 />
@@ -659,7 +748,7 @@ export default function OnboardingWizard() {
               <div className={styles.inputGroup}>
                 <label>Timezone</label>
                 <select
-                  value={formData.timezone}
+                  value={formData.timezone || 'Asia/Kolkata'}
                   disabled
                   className={styles.timezoneSelect}
                 >

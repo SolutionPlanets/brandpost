@@ -88,7 +88,7 @@ const STEP_LABELS = ['Content Type', 'Template', 'Details', 'AI Generation', 'Pr
 function ComposerPageContent() {
   const searchParams = useSearchParams();
   const { 
-    brandKitName, businessName, brandTone, brandDescription, colors,
+    brandKitName, brandKits, businessName, brandTone, brandDescription, colors,
     fullName, ownerName, address, pincode, timing, logo,
     postsUsed, planId, trialEndsAt, refreshBrandData, workspaceId
   } = useBrand();
@@ -112,10 +112,17 @@ function ComposerPageContent() {
     contentType: null,
     templateId: null,
     topic: '',
-    brandKit: 'main-brand',
+    brandKit: brandKits[0]?.id || 'main-brand',
     platform: 'both',
     extraInstructions: '',
   });
+
+  // Update form if brandKits load later
+  useEffect(() => {
+    if (brandKits.length > 0 && form.brandKit === 'main-brand') {
+      setForm(prev => ({ ...prev, brandKit: brandKits[0].id }));
+    }
+  }, [brandKits]);
 
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
 
@@ -222,6 +229,7 @@ function ComposerPageContent() {
   const generateCaptions = async () => {
     setIsGeneratingCaptions(true);
     try {
+      const selectedKit = brandKits.find(k => k.id === form.brandKit) || brandKits[0];
       const res = await fetch('/api/generate/captions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -230,7 +238,16 @@ function ComposerPageContent() {
           contentType: form.contentType,
           platform: form.platform,
           extraInstructions: form.extraInstructions,
-          brandDetails: { businessName, brandTone, brandDescription, colors }
+          brandDetails: { 
+            businessName: selectedKit?.brand_kit_name || businessName, 
+            brandTone: selectedKit?.tone || brandTone, 
+            brandDescription: selectedKit?.brand_description || brandDescription, 
+            colors: selectedKit ? {
+              primary: selectedKit.primary_color,
+              secondary: selectedKit.secondary_color,
+              accent: selectedKit.accent_color
+            } : colors 
+          }
         }),
       });
       const data = await res.json();
@@ -244,6 +261,7 @@ function ComposerPageContent() {
   const generateImages = async () => {
     setIsGeneratingImages(true);
     try {
+      const selectedKit = brandKits.find(k => k.id === form.brandKit) || brandKits[0];
       const res = await fetch('/api/generate/images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -254,15 +272,19 @@ function ComposerPageContent() {
           extraInstructions: form.extraInstructions,
           workspaceId: workspaceId,
           brandDetails: { 
-            businessName, 
-            brandDescription, 
-            colors,
+            businessName: selectedKit?.brand_kit_name || businessName, 
+            brandDescription: selectedKit?.brand_description || brandDescription, 
+            colors: selectedKit ? {
+              primary: selectedKit.primary_color,
+              secondary: selectedKit.secondary_color,
+              accent: selectedKit.accent_color
+            } : colors,
             fullName: fullName || ownerName,
-            brandTone,
+            brandTone: selectedKit?.tone || brandTone,
             address,
             pincode,
             timing,
-            logo
+            logo: selectedKit?.logo_url || logo
           }
         }),
       });
@@ -485,7 +507,13 @@ function ComposerPageContent() {
               value={form.brandKit}
               onChange={(e) => setForm({ ...form, brandKit: e.target.value })}
             >
-              <option value="main-brand">{brandKitName || businessName || 'Main Brand'}</option>
+              {brandKits.length > 0 ? (
+                brandKits.map(kit => (
+                  <option key={kit.id} value={kit.id}>{kit.brand_kit_name}</option>
+                ))
+              ) : (
+                <option value="main-brand">{brandKitName || businessName || 'Main Brand'}</option>
+              )}
             </select>
           </div>
 

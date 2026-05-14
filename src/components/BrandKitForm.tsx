@@ -58,7 +58,10 @@ export default function BrandKitForm() {
         .from('brand_kits')
         .select(`
           *,
-          workspaces!inner (owner_id)
+          workspaces!inner (
+            owner_id,
+            social_connections (*)
+          )
         `)
         .eq('workspaces.owner_id', user.id)
         .limit(1)
@@ -77,9 +80,20 @@ export default function BrandKitForm() {
           bodyFont: brandKit.body_font || 'Inter',
           tone: brandKit.tone ? brandKit.tone.charAt(0).toUpperCase() + brandKit.tone.slice(1) : 'Professional',
           description: brandKit.brand_description || '',
-          instagram: brandKit.instagram_handle || '',
-          facebook: brandKit.facebook_handle || '',
+          instagram: '',
+          facebook: '',
         };
+
+        if (brandKit.workspaces?.social_connections) {
+          const conns = brandKit.workspaces.social_connections;
+          const insta = conns.find((c: any) => c.platform === 'instagram');
+          const fb = conns.find((c: any) => c.platform === 'facebook');
+          newData.instagram = insta?.page_name || brandKit.instagram_handle || '';
+          newData.facebook = fb?.page_name || brandKit.facebook_handle || '';
+        } else {
+          newData.instagram = brandKit.instagram_handle || '';
+          newData.facebook = brandKit.facebook_handle || '';
+        }
         setFormData(newData);
         
         // Update context too

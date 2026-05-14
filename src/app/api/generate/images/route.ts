@@ -100,7 +100,7 @@ export async function POST(req: Request) {
         2. CENTER: A breathtaking, high-definition visual representation of "${topic}".
         3. BOTTOM: A professional, clean footer area with contact info and address in sharp fonts.
 
-        Respond with a JSON object: {"expandedPrompts": ["detailed prompt for SINGLE poster Option 1", "detailed prompt for SINGLE poster Option 2"]}
+        Respond with a JSON object: {"expandedPrompts": ["detailed prompt for Option 1", "detailed prompt for Option 2"]}
       `;
 
       const expansionResponse = await openai.chat.completions.create({
@@ -137,7 +137,7 @@ export async function POST(req: Request) {
     }
 
     // 2. Generate Images
-    console.log('Generating images for prompts...');
+    console.log('Generating images for prompts using DALL-E 3...');
     const imagePromises = expandedPrompts.map(async (p, i) => {
       try {
         console.log(`Starting generation for Option ${i + 1}...`);
