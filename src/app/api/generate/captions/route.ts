@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { getCaptionPrompt } from './prompts';
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY || '');
+const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY || '' });
 
 export async function POST(req: Request) {
   try {
@@ -19,9 +19,7 @@ export async function POST(req: Request) {
       console.log('🚧 DEVELOPER MODE ACTIVE: Skipping Gemini caption generation.');
       return NextResponse.json({ 
         captions: [
-          `Dummy Caption 1 for ${topic}: Enhance your brand with our premium ${contentType} services! #BrandBoost`,
-          `Dummy Caption 2 for ${topic}: Discover why everyone is talking about ${brandDetails.businessName}. Quality you can trust.`,
-          `Dummy Caption 3 for ${topic}: Limited time offer on all ${contentType} posts! DM us to get started with ${brandDetails.businessName}.`
+          `Dummy Caption for ${topic}: Enhance your brand with our premium ${contentType} services! #BrandBoost #AI #Marketing`
         ] 
       });
     }
@@ -30,14 +28,24 @@ export async function POST(req: Request) {
       throw new Error('GOOGLE_GEMINI_API_KEY is not set');
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
     const captionPrompt = getCaptionPrompt(brandDetails, topic, contentType, platform, extraInstructions);
 
-    // Requesting without responseMimeType to avoid 400 errors on some v1 endpoints
-    const result = await model.generateContent(captionPrompt);
-    const response = await result.response;
-    let text = response.text();
+    // Use Gemini 2.5 Flash for caption generation
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: captionPrompt,
+    });
+
+    // LOG TOKEN USAGE: Captions
+    const usage = result.usageMetadata;
+    console.log('📊 TOKEN USAGE [Caption Generation]:', {
+      cause: `Creating highly engaging ${contentType} caption for ${platform}`,
+      inputTokens: usage?.promptTokenCount,
+      outputTokens: usage?.candidatesTokenCount,
+      totalTokens: usage?.totalTokenCount
+    });
+
+    let text = result.text || '';
     
     // Clean markdown blocks if present (e.g., ```json ... ```)
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -49,15 +57,16 @@ export async function POST(req: Request) {
     } catch (parseErr) {
       console.error('Gemini JSON Parse Error. Raw text:', text);
       // Fallback: If JSON parsing fails, try to extract lines as captions
-      captions = text.split('\n').filter(line => line.length > 5).slice(0, 3);
+      captions = text.split('\n').filter(line => line.length > 5).slice(0, 1);
     }
 
     return NextResponse.json({ captions });
   } catch (error: any) {
-    console.error('Gemini Caption generation error:', error);
+    console.error('❌ Gemini Caption generation error:', error);
     return NextResponse.json({ 
       error: error.message,
-      details: error.stack
+      details: error.stack,
+      code: error.status || 500
     }, { status: 500 });
   }
 }

@@ -12,10 +12,10 @@ import {
   ArrowRight,
   ArrowLeft,
   Sparkles,
-  MessageSquare,
-  Share2,
   Check,
   Loader2,
+  Facebook,
+  Instagram,
   Edit3,
   ToggleLeft,
   ToggleRight,
@@ -234,7 +234,10 @@ function ComposerPageContent() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to generate captions');
+      if (!res.ok) {
+        const errMsg = data.code ? `[Error ${data.code}] ${data.error}` : data.error;
+        throw new Error(errMsg || 'Failed to generate captions');
+      }
       return data;
     } finally {
       setIsGeneratingCaptions(false);
@@ -267,7 +270,10 @@ function ComposerPageContent() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to generate images');
+      if (!res.ok) {
+        const errMsg = data.code ? `[Error ${data.code}] ${data.error}` : data.error;
+        throw new Error(errMsg || 'Failed to generate images');
+      }
       return data;
     } finally {
       setIsGeneratingImages(false);
@@ -515,8 +521,8 @@ function ComposerPageContent() {
                   className={`${styles.platformBtn} ${form.platform === p ? styles.platformBtnActive : ''}`}
                   onClick={() => setForm({ ...form, platform: p })}
                 >
-                  {p === 'facebook' && <><MessageSquare size={16} /> Facebook</>}
-                  {p === 'instagram' && <><Share2 size={16} /> Instagram</>}
+                  {p === 'facebook' && <><Facebook size={16} /> Facebook</>}
+                  {p === 'instagram' && <><Instagram size={16} /> Instagram</>}
                   {p === 'both' && <>Both</>}
                 </button>
               ))}
@@ -525,7 +531,7 @@ function ComposerPageContent() {
         </div>
 
         <div className={styles.formGroup}>
-          <label htmlFor="extra">Post Generation Prompt</label>
+          <label htmlFor="extra">Extra Instructions</label>
           <textarea
             id="extra"
             placeholder="Any specific tone, hashtags, or details you want included..."
@@ -576,7 +582,7 @@ function ComposerPageContent() {
         </h2>
         <p className={styles.generatingDesc}>
           {generationState === 'stopped' ? 'You stopped the AI generation process.' : 
-           'AI is crafting 3 caption variants and 2 image options based on your brand kit.'}
+           'AI is crafting your caption and image based on your brand kit.'}
         </p>
         <div className={styles.generatingSteps}>
           <div className={`${styles.genStep} ${generationState !== 'stopped' ? styles.genStepActive : ''}`}>
@@ -634,25 +640,14 @@ function ComposerPageContent() {
                 </div>
               )}
             </div>
-            <div className={styles.imageOptions}>
-              <span className={styles.optionLabel}>Image Options:</span>
-              {generated.images.map((_, i) => (
-                <button
-                  key={i}
-                  className={`${styles.imageOptionBtn} ${selectedImage === i ? styles.imageOptionActive : ''}`}
-                  onClick={() => setSelectedImage(i)}
-                >
-                  Option {i + 1}
-                </button>
-              ))}
+            <div className={styles.imageOptions} style={{ justifyContent: 'flex-end' }}>
               <button 
                 className={styles.regenerateBtn} 
                 onClick={handleRegenerateImages}
                 disabled={isGeneratingImages}
-                style={{ marginLeft: 'auto' }}
               >
                 {isGeneratingImages ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
-                Regen Image
+                Regenerate Image
               </button>
             </div>
             <button
@@ -667,27 +662,15 @@ function ComposerPageContent() {
           {/* Right: Caption Editor */}
           <div className={styles.previewCaptionSection}>
             <div className={styles.captionVariants}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className={styles.optionLabel}>Caption Variants:</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                 <button 
                   className={styles.regenerateBtn} 
                   onClick={handleRegenerateCaptions}
                   disabled={isGeneratingCaptions}
                 >
                   {isGeneratingCaptions ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
-                  Regen Captions
+                  Regenerate Caption
                 </button>
-              </div>
-              <div className={styles.variantTabs}>
-                {generated.captions.map((_, i) => (
-                  <button
-                    key={i}
-                    className={`${styles.variantTab} ${selectedCaption === i ? styles.variantTabActive : ''}`}
-                    onClick={() => setSelectedCaption(i)}
-                  >
-                    Variant {i + 1}
-                  </button>
-                ))}
               </div>
             </div>
             <div className={styles.captionEditor}>
@@ -706,9 +689,9 @@ function ComposerPageContent() {
               <div className={styles.metaItem}>
                 <span className={styles.metaLabel}>Platform</span>
                 <span className={styles.metaValue}>
-                  {form.platform === 'facebook' && <><MessageSquare size={14} /> Facebook</>}
-                  {form.platform === 'instagram' && <><Share2 size={14} /> Instagram</>}
-                  {form.platform === 'both' && <><MessageSquare size={14} /> <Share2 size={14} /> Both</>}
+                  {form.platform === 'facebook' && <><Facebook size={14} /> Facebook</>}
+                  {form.platform === 'instagram' && <><Instagram size={14} /> Instagram</>}
+                  {form.platform === 'both' && <><Facebook size={14} /> <Instagram size={14} /> Both</>}
                 </span>
               </div>
               <div className={styles.metaItem}>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, Search, User, MapPin, Hash, MessageSquare, Share2, ChevronDown, LogOut } from 'lucide-react';
+import { Bell, Search, User, MapPin, Hash, Facebook, Instagram, ChevronDown, LogOut } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { useBrand } from '@/contexts/BrandContext';
 import styles from './Header.module.css';
@@ -119,11 +119,11 @@ export default function Header() {
                 </div>
                 <div className={styles.divider}></div>
                 <div className={styles.socialLink}>
-                  <Share2 size={16} />
+                  <Instagram size={16} />
                   <span>{instagram || '@instagram'}</span>
                 </div>
                 <div className={styles.socialLink}>
-                  <MessageSquare size={16} />
+                  <Facebook size={16} />
                   <span>{facebook || 'facebook.com'}</span>
                 </div>
               </div>

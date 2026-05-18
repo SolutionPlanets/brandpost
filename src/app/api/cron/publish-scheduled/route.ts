@@ -3,6 +3,12 @@ import { createAdminClient } from '@/utils/supabase/admin';
 
 // This endpoint should be triggered by a Cron service (e.g. Vercel Cron, GitHub Actions)
 export async function GET(req: Request) {
+  // 1. Security Check: Ensure this is only called by our trusted cron job
+  const authHeader = req.headers.get('authorization');
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const adminSupabase = createAdminClient();
     const now = new Date().toISOString();

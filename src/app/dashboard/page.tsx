@@ -10,6 +10,8 @@ import {
   CalendarDays,
   TrendingUp,
   Users,
+  Facebook,
+  Instagram,
   MessageSquare,
   Image as ImageIcon,
   MoreHorizontal,
@@ -22,7 +24,6 @@ import {
   Flame,
   Leaf,
   ChevronRight,
-  Share2,
   ExternalLink,
   CheckCircle2,
 } from 'lucide-react';
@@ -338,8 +339,8 @@ export default function DashboardHome() {
                       <span className={styles.postTitle}>{post.title}</span>
                     </div>
                     <div className={styles.platformCell}>
-                      {(post.platform === 'facebook' || post.platform === 'both') && <MessageSquare size={16} className={styles.fbIcon} />}
-                      {(post.platform === 'instagram' || post.platform === 'both') && <Share2 size={16} className={styles.igIcon} />}
+                      {(post.platform === 'facebook' || post.platform === 'both') && <Facebook size={16} className={styles.fbIcon} />}
+                      {(post.platform === 'instagram' || post.platform === 'both') && <Instagram size={16} className={styles.igIcon} />}
                     </div>
                     <div>
                       <span className={`${styles.statusBadge} ${getStatusStyle(post.status)}`}>
