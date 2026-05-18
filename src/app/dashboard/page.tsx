@@ -11,6 +11,8 @@ import {
   CalendarDays,
   TrendingUp,
   Users,
+  Facebook,
+  Instagram,
   MessageSquare,
   Image as ImageIcon,
   MoreHorizontal,
@@ -23,7 +25,6 @@ import {
   Flame,
   Leaf,
   ChevronRight,
-  Share2,
   ExternalLink,
   CheckCircle2,
 } from 'lucide-react';

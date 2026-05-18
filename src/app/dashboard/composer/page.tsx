@@ -12,8 +12,6 @@ import {
   ArrowRight,
   ArrowLeft,
   Sparkles,
-  MessageSquare,
-  Share2,
   Check,
   Loader2,
   Edit3,
@@ -45,8 +43,8 @@ interface ComposerForm {
 }
 
 interface GeneratedContent {
+  images: { url: string; id: string }[];
   captions: string[];
-  images: string[];
 }
 
 // ── Content Type Cards ───────────────────────────────────────────────
@@ -586,8 +584,8 @@ function ComposerPageContent() {
                   className={`${styles.platformBtn} ${form.platform === p ? styles.platformBtnActive : ''}`}
                   onClick={() => setForm({ ...form, platform: p })}
                 >
-                  {p === 'facebook' && <><MessageSquare size={16} /> Facebook</>}
-                  {p === 'instagram' && <><Share2 size={16} /> Instagram</>}
+                  {p === 'facebook' && <><Facebook size={16} /> Facebook</>}
+                  {p === 'instagram' && <><Instagram size={16} /> Instagram</>}
                   {p === 'both' && <>Both</>}
                 </button>
               ))}
@@ -596,7 +594,7 @@ function ComposerPageContent() {
         </div>
 
         <div className={styles.formGroup}>
-          <label htmlFor="extra">Extra Instructions (optional)</label>
+          <label htmlFor="extra">Extra Instructions</label>
           <textarea
             id="extra"
             placeholder="Any specific tone, hashtags, or details you want included..."
@@ -801,9 +799,9 @@ function ComposerPageContent() {
               <div className={styles.metaItem}>
                 <span className={styles.metaLabel}>Platform</span>
                 <span className={styles.metaValue}>
-                  {form.platform === 'facebook' && <><MessageSquare size={14} /> Facebook</>}
-                  {form.platform === 'instagram' && <><Share2 size={14} /> Instagram</>}
-                  {form.platform === 'both' && <><MessageSquare size={14} /> <Share2 size={14} /> Both</>}
+                  {form.platform === 'facebook' && <><Facebook size={14} /> Facebook</>}
+                  {form.platform === 'instagram' && <><Instagram size={14} /> Instagram</>}
+                  {form.platform === 'both' && <><Facebook size={14} /> <Instagram size={14} /> Both</>}
                 </span>
               </div>
               <div className={styles.metaItem}>

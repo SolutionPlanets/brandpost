@@ -190,7 +190,7 @@ export default function Header() {
     try {
       await supabase.auth.signOut();
       localStorage.removeItem('brandpost_user_data');
-      window.location.href = '/';
+      window.location.href = '/auth/login';
     } catch (error) {
       console.error('Error during logout:', error);
       window.location.href = '/';
@@ -281,7 +281,7 @@ export default function Header() {
                 </div>
               )}
             </div>
-            <ChevronDown size={14} className={`${styles.chevron} ${showDropdown ? styles.chevronUp : ''}`} />
+            <ChevronDown size={16} color="var(--text-muted)" className={showDropdown ? styles.rotate : ''} />
           </div>
 
           {showDropdown && (

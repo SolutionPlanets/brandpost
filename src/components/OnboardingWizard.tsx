@@ -97,6 +97,7 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
   const [formData, setFormData] = useState({
     ownerName: '',
     businessName: '',
+    ownerName: '',
     address: '',
     pincode: '',
     timing: '',

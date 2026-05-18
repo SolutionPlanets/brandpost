@@ -15,8 +15,13 @@ function LoginPageContent() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   const supabase = createClient();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const message = searchParams.get('message');
@@ -111,6 +116,7 @@ function LoginPageContent() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              suppressHydrationWarning
             />
           </div>
 
@@ -124,6 +130,7 @@ function LoginPageContent() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                suppressHydrationWarning
               />
               <button
                 type="button"
@@ -136,7 +143,7 @@ function LoginPageContent() {
             </div>
           </div>
 
-          <button type="submit" className={styles.submitBtn} disabled={loading}>
+          <button type="submit" className={styles.submitBtn} disabled={loading} suppressHydrationWarning>
             {loading ? <Loader2 size={18} className={styles.spinner} /> : <LogIn size={18} />}
             Log In
           </button>
@@ -144,7 +151,7 @@ function LoginPageContent() {
 
         <div className={styles.divider}>or</div>
 
-        <button onClick={handleGoogleLogin} className={styles.socialBtn}>
+        <button onClick={handleGoogleLogin} className={styles.socialBtn} suppressHydrationWarning>
           <Chrome size={18} /> Continue with Google
         </button>
 
