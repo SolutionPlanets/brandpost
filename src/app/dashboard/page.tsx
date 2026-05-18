@@ -27,6 +27,7 @@ import {
   ChevronRight,
   ExternalLink,
   CheckCircle2,
+  Share2,
 } from 'lucide-react';
 import styles from './DashboardHome.module.css';
 
