@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 import {
   PartyPopper,
+  Bookmark,
   Tag,
   BookOpen,
   Layers,
@@ -23,6 +24,8 @@ import {
   RefreshCw,
   Download,
   Edit2,
+  Facebook,
+  Instagram,
 } from 'lucide-react';
 import { useBrand } from '@/contexts/BrandContext';
 import { ImageEditor } from '@/components/ImageEditor';
@@ -43,7 +46,7 @@ interface ComposerForm {
 }
 
 interface GeneratedContent {
-  images: { url: string; id: string }[];
+  images: string[];
   captions: string[];
 }
 
@@ -126,6 +129,7 @@ function ComposerPageContent() {
   }, [brandKits]);
 
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
+  const [generatedPostIds, setGeneratedPostIds] = useState<number[]>([]);
 
   // Daily attempts state & local storage tracking
   const [imageRegenAttempts, setImageRegenAttempts] = useState(3);
@@ -248,6 +252,7 @@ function ComposerPageContent() {
         captions: captionsData.captions || [],
         images: imagesData.images || []
       });
+      setGeneratedPostIds(imagesData.postIds || []);
       setSelectedCaption(0);
       setSelectedImage(0);
       setStep(5);
@@ -363,10 +368,70 @@ function ComposerPageContent() {
           setSelectedImage(newImages.length - 1);
           return { ...prev, images: newImages };
         });
+        if (data.postIds && data.postIds.length > 0) {
+          setGeneratedPostIds(prev => [...prev, data.postIds[0]]);
+        }
         decrementImageRegen();
       }
     } catch (error: any) {
       alert(error.message);
+    }
+  };
+
+  const [isSavingImage, setIsSavingImage] = useState(false);
+
+  const handleSaveImage = async () => {
+    if (!generated || generated.images.length === 0) return;
+    const currentImageUrl = generated.images[selectedImage];
+    const generatedPostId = generatedPostIds[selectedImage];
+    
+    setIsSavingImage(true);
+    try {
+      const supabase = createClient();
+      
+      // If we have an existing post ID (from the generated draft), update it to be 'saved'
+      if (generatedPostId) {
+        const { error } = await supabase
+          .from('posts')
+          .update({ is_saved: true })
+          .eq('id', generatedPostId);
+          
+        if (error) throw error;
+      } else {
+        // If no post ID exists yet (unlikely, but just in case), create a new draft flagged as 'saved'
+        const postData = {
+          title: form.topic,
+          caption: editedCaption,
+          platform: form.platform,
+          content_type: form.contentType,
+          image_url: currentImageUrl,
+          brand_kit_id: form.brandKit === 'main-brand' ? null : form.brandKit,
+          status: 'draft',
+          is_saved: true,
+          workspace_id: workspaceId,
+        };
+        
+        const { data, error } = await supabase
+          .from('posts')
+          .insert([postData])
+          .select();
+          
+        if (error) throw error;
+        if (data && data[0]) {
+          setGeneratedPostIds(prev => {
+            const copy = [...prev];
+            copy[selectedImage] = data[0].id;
+            return copy;
+          });
+        }
+      }
+      
+      alert('Image saved to library successfully!');
+    } catch (error: any) {
+      console.error('Error saving image:', error);
+      alert('Failed to save image: ' + error.message);
+    } finally {
+      setIsSavingImage(false);
     }
   };
 
@@ -407,31 +472,56 @@ function ComposerPageContent() {
         platform: form.platform,
         content_type: form.contentType,
         image_url: generated?.images[selectedImage],
-        status: isImmediate ? 'published' : 'scheduled',
-        scheduled_at: isImmediate ? null : `${scheduleDate}T${scheduleTime}:00`,
+        brand_kit_id: form.brandKit === 'main-brand' ? null : form.brandKit,
+        status: 'scheduled',
+        scheduled_at: isImmediate ? new Date().toISOString() : `${scheduleDate}T${scheduleTime}:00`,
         workspace_id: workspaceId,
       };
 
-      if (editId) {
+      const generatedPostId = generatedPostIds[selectedImage];
+      let savedPostId = editId || (generatedPostId ? String(generatedPostId) : null);
+
+      if (savedPostId) {
         const { error } = await supabase
           .from('posts')
           .update(postData)
-          .eq('id', editId);
+          .eq('id', savedPostId);
         if (error) throw error;
-        alert('Post updated successfully!');
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('posts')
-          .insert([postData]);
+          .insert([postData])
+          .select();
         if (error) throw error;
-        alert('Post saved successfully!');
+        if (data && data[0]) {
+          savedPostId = data[0].id;
+        }
+      }
+
+      if (isImmediate && savedPostId) {
+        console.log('Publishing post immediately via API...');
+        const pubRes = await fetch('/api/social/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ postId: savedPostId })
+        });
+        
+        const pubData = await pubRes.json();
+        if (!pubRes.ok || !pubData.success) {
+          const errMsg = pubData.errors ? pubData.errors.join(', ') : (pubData.error || 'Unknown error');
+          throw new Error(`Post saved, but publishing to social media failed: ${errMsg}`);
+        }
+        
+        alert('Post published successfully to social media!');
+      } else {
+        alert(isImmediate ? 'Post published successfully!' : 'Post scheduled successfully!');
       }
       
       setShowScheduleModal(false);
       router.push('/dashboard/posts');
     } catch (err: any) {
-      console.error('Error saving post:', err);
-      alert(err.message || 'Failed to save post.');
+      console.error('Error saving/publishing post:', err);
+      alert(err.message || 'Failed to save or publish post.');
     } finally {
       setIsGenerating(false);
     }
@@ -755,7 +845,28 @@ function ComposerPageContent() {
             <div className={styles.captionVariants}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span className={styles.optionLabel}>Caption Variants:</span>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                  <button 
+                    onClick={handleSaveImage}
+                    disabled={isSavingImage}
+                    style={{ 
+                      backgroundColor: '#10b981', 
+                      color: 'white', 
+                      border: 'none', 
+                      padding: '6px 12px', 
+                      borderRadius: '6px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '4px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      marginBottom: '4px'
+                    }}
+                  >
+                    {isSavingImage ? <Loader2 size={14} className={styles.spinner} /> : <Bookmark size={14} fill="none" />}
+                    Save Image
+                  </button>
                   <button 
                     className={styles.regenerateBtn} 
                     onClick={handleRegenerateCaptions}

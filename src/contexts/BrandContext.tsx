@@ -1,5 +1,16 @@
 'use client';
 
+import * as Sentry from "@sentry/nextjs";
+
+if (typeof window !== "undefined") {
+  console.log("Explicit Sentry initialization on client side with:", process.env.NEXT_PUBLIC_SENTRY_DSN);
+  Sentry.init({
+    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN || "https://ea83f38ceb195bc8d536f10586f52b8d@o4511410644451328.ingest.de.sentry.io/4511410650677328",
+    tracesSampleRate: 1.0,
+    debug: true,
+  });
+}
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 

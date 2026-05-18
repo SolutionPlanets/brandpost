@@ -6,16 +6,23 @@ import { cookies } from 'next/headers';
 
 // Route for generating AI images with Demo Mode fallback
 export async function POST(req: Request) {
+  let targetWorkspaceId: string | null = null;
+  let brandKitId: string | null = null;
+  let topic = 'AI Image Generation';
+  let contentType = 'general';
+  let platform = 'both';
+
   try {
+    const body = await req.json();
+    topic = body.topic || topic;
+    contentType = body.contentType || contentType;
+    platform = body.platform || platform;
     const {
-      topic,
-      contentType,
-      platform,
       extraInstructions,
       brandDetails,
       workspaceId: bodyWorkspaceId,
       single
-    } = await req.json();
+    } = body;
 
     // Initialize Supabase for getting user email
     const cookieStore = await cookies();
@@ -25,7 +32,7 @@ export async function POST(req: Request) {
     // 1. Resolve Workspace ID (Body or UID fallback)
     const { data: userData } = await supabase.auth.getUser();
     const uid = userData?.user?.id;
-    let targetWorkspaceId = bodyWorkspaceId;
+    targetWorkspaceId = bodyWorkspaceId;
     let workspaceData = null;
 
     if (targetWorkspaceId) {
@@ -51,8 +58,9 @@ export async function POST(req: Request) {
       console.error('CRITICAL: Could not resolve workspace for UID:', uid);
       throw new Error('Workspace identification failed. Please ensure you are logged in.');
     }
-
     const workspace = workspaceData;
+    const bKits: any = workspace.brand_kits;
+    brandKitId = Array.isArray(bKits) ? bKits[0]?.id : bKits?.id;
 
     // DEMO MODE: If no API key, return static high-quality mockups
     if (!process.env.OPENAI_API_KEY) {
@@ -71,15 +79,34 @@ export async function POST(req: Request) {
         .update({ posts_used_this_cycle: (workspace.posts_used_this_cycle || 0) + 1 })
         .eq('id', targetWorkspaceId);
 
-      return NextResponse.json({ images: demoImages });
+      // Save demo images as drafts
+      const postIds: number[] = [];
+      for (const imgUrl of demoImages) {
+        try {
+          const insertData = {
+            workspace_id: targetWorkspaceId,
+            brand_kit_id: brandKitId || null,
+            title: topic,
+            caption: `Generated for ${topic} on ${platform} (Demo Mode)`,
+            image_url: imgUrl,
+            status: 'draft',
+            platform: platform === 'both' ? 'both' : platform,
+            content_type: contentType
+          };
+          const { data, error } = await adminSupabase
+            .from('posts')
+            .insert([insertData])
+            .select();
+          if (data && data[0]) {
+            postIds.push(data[0].id);
+          }
+        } catch (dbErr) {
+          console.error('Demo Mode DB Save error:', dbErr);
+        }
+      }
+
+      return NextResponse.json({ images: demoImages, postIds });
     }
-
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-
-    const bKits: any = workspace.brand_kits;
-    const brandKitId = Array.isArray(bKits) ? bKits[0]?.id : bKits?.id;
 
     console.log('Final Target Workspace:', targetWorkspaceId, 'UID:', uid);
 
@@ -238,7 +265,7 @@ export async function POST(req: Request) {
 
     const tempUrls = finalTempUrls;
 
-    const finalUrls = await Promise.all(tempUrls.map(async (url, index) => {
+    const finalResults = await Promise.all(tempUrls.map(async (url, index) => {
       try {
         // 1. Fetch the image from OpenAI
         const response = await fetch(url);
@@ -262,7 +289,7 @@ export async function POST(req: Request) {
 
         if (uploadError) {
           console.error('Supabase upload error:', uploadError);
-          return url; // Fallback to OpenAI URL
+          return { url, postId: null }; // Fallback to OpenAI URL
         }
 
         // 4. Get Public URL
@@ -271,13 +298,15 @@ export async function POST(req: Request) {
           .getPublicUrl(filePath);
 
         // 3. Save to database (posts table)
+        let createdPostId = null;
         try {
           const insertData = {
             workspace_id: targetWorkspaceId,
             brand_kit_id: brandKitId || null,
+            title: topic,
             caption: `Generated for ${topic} on ${platform}`,
             image_url: publicUrl,
-            status: 'published',
+            status: 'draft',
             platform: platform === 'both' ? 'both' : platform,
             content_type: contentType
           };
@@ -292,18 +321,22 @@ export async function POST(req: Request) {
           if (postInsertError) {
             console.error('CRITICAL POST INSERT ERROR:', postInsertError.message, postInsertError.details, postInsertError.hint);
           } else {
-            console.log('POST SAVED SUCCESS! ID:', postInsertData && postInsertData[0]?.id);
+            createdPostId = postInsertData?.[0]?.id;
+            console.log('POST SAVED SUCCESS! ID:', createdPostId);
           }
         } catch (dbErr: any) {
           console.error('DB INSERT EXCEPTION:', dbErr.message);
         }
 
-        return publicUrl;
+        return { url: publicUrl, postId: createdPostId };
       } catch (uploadErr) {
         console.error('Storage processing error:', uploadErr);
-        return url; // Fallback to OpenAI URL
+        return { url, postId: null }; // Fallback to OpenAI URL
       }
     }));
+
+    const finalUrls = finalResults.map(r => r.url);
+    const finalPostIds = finalResults.map(r => r.postId).filter((id): id is number => id !== null);
 
     // Update usage in workspace
     await adminSupabase
@@ -311,9 +344,32 @@ export async function POST(req: Request) {
       .update({ posts_used_this_cycle: (workspace.posts_used_this_cycle || 0) + 1 })
       .eq('id', targetWorkspaceId);
 
-    return NextResponse.json({ images: finalUrls });
+    return NextResponse.json({ images: finalUrls, postIds: finalPostIds });
   } catch (error: any) {
     console.error('Fatal Image generation error:', error);
+    
+    // Save failed post to database if workspace ID is available
+    if (targetWorkspaceId) {
+      try {
+        const adminSupabase = createAdminClient();
+        const failedInsert = {
+          workspace_id: targetWorkspaceId,
+          brand_kit_id: brandKitId || null,
+          title: topic || 'AI Image Generation',
+          caption: `Generation failed for ${topic} on ${platform}`,
+          status: 'failed',
+          error_message: error.message || 'Unknown error during image generation',
+          platform: platform === 'both' ? 'both' : platform,
+          content_type: contentType
+        };
+        
+        console.log('Inserting Failed Post record:', failedInsert);
+        await adminSupabase.from('posts').insert([failedInsert]);
+      } catch (dbErr) {
+        console.error('Failed to save failed post record to DB:', dbErr);
+      }
+    }
+
     return NextResponse.json({
       error: error.message,
       details: 'Check server logs for full stack trace'

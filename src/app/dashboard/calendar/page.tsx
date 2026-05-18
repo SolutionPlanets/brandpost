@@ -189,7 +189,21 @@ export default function CalendarPage() {
                 return (
                   <div 
                     key={event.id} 
-                    className={`${styles.eventItem} ${event.source === 'Google' ? styles.eventItemGoogle : event.source === 'Calendarific' ? styles.eventItemCalendarific : ''}`}
+                    className={`${styles.eventItem} ${
+                      event.source === 'Google' 
+                        ? styles.eventItemGoogle 
+                        : event.source === 'Calendarific' 
+                          ? styles.eventItemCalendarific 
+                          : ''
+                    }`}
+                    style={
+                      event.source !== 'Google' && event.source !== 'Calendarific' && event.color
+                        ? { 
+                            borderLeftColor: event.color, 
+                            backgroundColor: `${event.color}0a` 
+                          } 
+                        : undefined
+                    }
                   >
                     <div className={styles.eventDate}>
                       <span className={styles.eventDay}>{eventDate.getDate()}</span>

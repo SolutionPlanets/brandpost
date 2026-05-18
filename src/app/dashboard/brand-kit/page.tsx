@@ -80,9 +80,11 @@ export default function BrandKitPage() {
     });
   });
 
-  // 2. Add ONE "Add New" slot if limit not reached
+  // 2. Add ONE "Add New" slot if limit not reached, otherwise show a locked upgrade card
   if (brandKits.length < brandKitLimit) {
     items.push({ type: 'new', index: brandKits.length });
+  } else {
+    items.push({ type: 'locked', index: brandKits.length });
   }
 
   // 3. Padding to ensure at least 3 slots are shown (showing locked ones if necessary)
