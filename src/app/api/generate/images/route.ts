@@ -4,10 +4,7 @@ import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { cookies } from 'next/headers';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
+// Route for generating AI images with Demo Mode fallback
 export async function POST(req: Request) {
   try {
     const {
@@ -16,12 +13,9 @@ export async function POST(req: Request) {
       platform,
       extraInstructions,
       brandDetails,
-      workspaceId: bodyWorkspaceId
+      workspaceId: bodyWorkspaceId,
+      single
     } = await req.json();
-
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY is not set');
-    }
 
     // Initialize Supabase for getting user email
     const cookieStore = await cookies();
@@ -59,6 +53,31 @@ export async function POST(req: Request) {
     }
 
     const workspace = workspaceData;
+
+    // DEMO MODE: If no API key, return static high-quality mockups
+    if (!process.env.OPENAI_API_KEY) {
+      console.log('OPENAI_API_KEY is not set. Running in Demo Mode.');
+      
+      const demoImages = single
+        ? ["/post3.jpg"]
+        : [
+            "/post3.jpg", 
+            "/post1.png"
+          ];
+
+      // Update usage in workspace even in demo mode
+      await adminSupabase
+        .from('workspaces')
+        .update({ posts_used_this_cycle: (workspace.posts_used_this_cycle || 0) + 1 })
+        .eq('id', targetWorkspaceId);
+
+      return NextResponse.json({ images: demoImages });
+    }
+
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+
     const bKits: any = workspace.brand_kits;
     const brandKitId = Array.isArray(bKits) ? bKits[0]?.id : bKits?.id;
 
@@ -68,7 +87,43 @@ export async function POST(req: Request) {
     console.log('Starting prompt expansion...');
     let expandedPrompts: string[] = [];
     try {
-      const promptExpansionMsg = `
+      const promptExpansionMsg = single
+      ? `
+        You are an Elite Creative Strategist and Graphic Designer. 
+        Your goal is to design exactly ONE BESPOKE AND DISTINCT "Brand Post" marketing template (Option 1).
+
+        CRITICAL: QUALITY & TEXT
+        - IMAGE QUALITY: Ultra-HD, 8k resolution, photorealistic, sharp focus, NO BLUR, NO NOISE.
+        - TEXT CLARITY: Every letter MUST be sharp, crisp, and perfectly legible.
+        - SPELLING: The business name "${brandDetails.businessName}" and the topic "${topic}" MUST be spelled 100% correctly.
+        - LANGUAGE: All text in the image MUST be in CLEAR, FLUENT ENGLISH.
+
+        USER INPUTS:
+        - Topic: "${topic}"
+        - Goal: "${contentType}"
+        - Platform: "${platform}"
+        - Instructions: "${extraInstructions || 'No extra instructions'}"
+        - SPECIFIC BRAND NAME TO USE: "${brandDetails.businessName}" (VERY IMPORTANT: USE THIS EXACT NAME)
+        - SPECIFIC TOPIC: "${topic}"
+
+        BRAND DATABASE:
+        - Business Name: "${brandDetails.businessName}"
+        - Logo Reference: ${brandDetails.logo ? "IMPORTANT: Perfectly integrate the visual style, symbol, and colors of this logo into the header: " + brandDetails.logo : 'No logo, use premium professional typography for branding.'}
+        - Palette: ${brandDetails.colors.primary}, ${brandDetails.colors.secondary}, ${brandDetails.colors.accent}
+
+        DESIGN OPTION (GENERATE 1 INDEPENDENT PROMPT):
+        - Option 1 (Minimalist & Modern): Describe a SINGLE, ISOLATED poster with a clean, high-contrast background, razor-sharp typography, and a cinematic focal visual of "${topic}".
+
+        IMPORTANT: The prompt in the "expandedPrompts" array must describe ONE SINGLE isolated poster. NO side-by-side. NO comparisons. Use keywords like "Sharp focus", "Highly detailed", "Crisp text".
+
+        POSTER STRUCTURE:
+        1. TOP: Premium branding area with "${brandDetails.businessName}" and the user's logo.
+        2. CENTER: A breathtaking, high-definition visual representation of "${topic}".
+        3. BOTTOM: A professional, clean footer area with contact info and address in sharp fonts.
+
+        Respond with a JSON object: {"expandedPrompts": ["detailed prompt for Option 1"]}
+      `
+      : `
         You are an Elite Creative Strategist and Graphic Designer. 
         Your goal is to design exactly TWO BESPOKE AND DISTINCT "Brand Post" marketing templates (Option 1 and Option 2).
 
@@ -83,10 +138,12 @@ export async function POST(req: Request) {
         - Goal: "${contentType}"
         - Platform: "${platform}"
         - Instructions: "${extraInstructions || 'No extra instructions'}"
+        - SPECIFIC BRAND NAME TO USE: "${brandDetails.businessName}" (VERY IMPORTANT: USE THIS EXACT NAME)
+        - SPECIFIC TOPIC: "${topic}"
 
         BRAND DATABASE:
         - Business Name: "${brandDetails.businessName}"
-        - Logo Reference: ${brandDetails.logo ? `IMPORTANT: Perfectly integrate the visual style, symbol, and colors of this logo into the header: ${brandDetails.logo}` : 'No logo, use premium professional typography for branding.'}
+        - Logo Reference: ${brandDetails.logo ? "IMPORTANT: Perfectly integrate the visual style, symbol, and colors of this logo into the header: " + brandDetails.logo : 'No logo, use premium professional typography for branding.'}
         - Palette: ${brandDetails.colors.primary}, ${brandDetails.colors.secondary}, ${brandDetails.colors.accent}
 
         DESIGN OPTIONS (GENERATE 2 INDEPENDENT PROMPTS):
@@ -119,13 +176,21 @@ export async function POST(req: Request) {
       expandedPrompts = JSON.parse(expansionContent || '{"expandedPrompts":[]}').expandedPrompts;
       console.log('Expanded Prompts count:', expandedPrompts.length);
 
-      if (!expandedPrompts || expandedPrompts.length < 2) {
-        console.warn('GPT returned fewer than 2 prompts, adding fallback variation.');
-        const basePrompt = expandedPrompts[0] || `Professional marketing poster for ${brandDetails.businessName} about ${topic}`;
-        expandedPrompts = [
-          basePrompt,
-          `${basePrompt} - vibrant cinematic style, high impact`
-        ];
+      if (single) {
+        if (!expandedPrompts || expandedPrompts.length < 1) {
+          expandedPrompts = [`Professional marketing poster for ${brandDetails.businessName} about ${topic}`];
+        } else {
+          expandedPrompts = [expandedPrompts[0]];
+        }
+      } else {
+        if (!expandedPrompts || expandedPrompts.length < 2) {
+          console.warn('GPT returned fewer than 2 prompts, adding fallback variation.');
+          const basePrompt = expandedPrompts[0] || `Professional marketing poster for ${brandDetails.businessName} about ${topic}`;
+          expandedPrompts = [
+            basePrompt,
+            `${basePrompt} - vibrant cinematic style, high impact`
+          ];
+        }
       }
     } catch (err: any) {
       console.error('Prompt expansion error:', err);
@@ -243,7 +308,7 @@ export async function POST(req: Request) {
     // Update usage in workspace
     await adminSupabase
       .from('workspaces')
-      .update({ posts_used_this_cycle: (workspace.posts_used_this_cycle || 0) + finalUrls.length })
+      .update({ posts_used_this_cycle: (workspace.posts_used_this_cycle || 0) + 1 })
       .eq('id', targetWorkspaceId);
 
     return NextResponse.json({ images: finalUrls });

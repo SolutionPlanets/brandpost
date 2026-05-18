@@ -183,7 +183,8 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
           // Editing existing or initial onboarding
           dbData = {
             ownerName: workspace.owner_name || '',
-            businessName: brandKit?.brand_kit_name || ((workspace.business_name || workspace.name || '').toLowerCase().includes('my workspace') ? '' : (workspace.business_name || workspace.name || '')),
+            businessName: (workspace.business_name || '').toLowerCase().includes('my workspace') ? '' : (workspace.business_name || ''),
+            brandKitName: brandKit?.brand_kit_name || '',
             address: workspace.address || '',
             pincode: workspace.pincode || '',
             timing: workspace.business_timing || '',
@@ -198,11 +199,8 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
             } : { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
             tone: brandKit?.tone ? brandKit.tone.toLowerCase() : 'professional',
             description: brandKit?.brand_description || '',
-            brandKitName: brandKit?.brand_kit_name || '',
-            headingFont: brandKit?.heading_font || 'Inter',
-            bodyFont: brandKit?.body_font || 'Inter',
-            instagram: instaConn?.page_name || brandKit?.instagram_handle || '',
-            facebook: fbConn?.page_name || brandKit?.facebook_handle || '',
+            instagram: brandKit?.instagram_handle || '',
+            facebook: brandKit?.facebook_handle || '',
             timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
           };
         }

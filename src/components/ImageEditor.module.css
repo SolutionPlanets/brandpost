@@ -1,0 +1,354 @@
+.editorOverlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.2s ease;
+}
+
+.editorContainer {
+  background-color: #ffffff;
+  width: 95%;
+  max-width: 1200px;
+  height: 90vh;
+  border-radius: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.editorHeader {
+  padding: 1.25rem 2rem;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editorTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.editorSubtitle {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin: 0.125rem 0 0 0;
+}
+
+.headerActions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.editorMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #f8fafc;
+  overflow: hidden;
+}
+
+.topToolbar {
+  height: 72px;
+  background-color: #ffffff;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  padding: 0 1.5rem;
+  gap: 1.5rem;
+}
+
+.toolGroup {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.toolActionBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background-color: #ffffff;
+  color: #475569;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toolActionBtn:hover {
+  border-color: #4f46e5;
+  color: #4f46e5;
+  background-color: #f5f3ff;
+}
+
+.vDivider {
+  width: 1px;
+  height: 40px;
+  background-color: #e2e8f0;
+}
+
+.contextControls {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.controlRow {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.controlItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.controlItem label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.controlItem button {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #e2e8f0;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.controlItem input[type="range"] {
+  width: 100px;
+}
+
+.valueLabel {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #475569;
+  min-width: 24px;
+  text-align: center;
+}
+
+.deleteBtn {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background-color: #fef2f2;
+  color: #ef4444;
+  border: 1px solid #fee2e2;
+  cursor: pointer;
+}
+
+.canvasArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+  background-color: #f1f5f9;
+}
+
+.canvasShadow {
+  box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.4);
+  background-color: white;
+  display: inline-block;
+  line-height: 0;
+}
+
+.canvasHint {
+  margin-top: 1.5rem;
+  font-size: 0.8125rem;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cancelBtn {
+  padding: 0.625rem 1.25rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+}
+
+.saveBtn {
+  padding: 0.625rem 1.5rem;
+  background-color: #4f46e5;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.askAIBtn {
+  position: absolute;
+  bottom: 2rem;
+  right: 2rem;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  border-radius: 2rem;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
+  transition: all 0.2s ease;
+  z-index: 100;
+}
+
+.askAIBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 30px -5px rgba(79, 70, 229, 0.5);
+}
+
+.aiPromptBox {
+  position: absolute;
+  bottom: 2rem;
+  right: 2rem;
+  width: 320px;
+  background-color: white;
+  border-radius: 1rem;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.aiPromptHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(to right, #f8fafc, #f1f5f9);
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.aiSparkleIcon {
+  color: #7c3aed;
+  margin-right: 0.5rem;
+}
+
+.closeAiBtn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  display: flex;
+}
+
+.closeAiBtn:hover {
+  background-color: #e2e8f0;
+  color: #475569;
+}
+
+.aiInputArea {
+  display: flex;
+  padding: 0.5rem;
+  gap: 0.5rem;
+  background-color: white;
+  align-items: flex-end;
+}
+
+.aiInputArea textarea {
+  flex: 1;
+  border: none;
+  resize: none;
+  height: 80px;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  color: #334155;
+  font-family: inherit;
+  outline: none;
+  line-height: 1.4;
+}
+
+.aiInputArea textarea::placeholder {
+  color: #94a3b8;
+}
+
+.sendAiBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 0.5rem;
+  background-color: #4f46e5;
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+}
+
+.sendAiBtn:hover:not(:disabled) {
+  background-color: #4338ca;
+}
+
+.sendAiBtn:disabled {
+  background-color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.spinIcon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+

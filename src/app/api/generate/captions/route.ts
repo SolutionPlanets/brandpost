@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export async function POST(req: Request) {
   try {
     const { 
@@ -15,9 +11,22 @@ export async function POST(req: Request) {
       brandDetails 
     } = await req.json();
 
+    // DEMO MODE: If no API key, return static captions
     if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY is not set');
+      console.log('OPENAI_API_KEY is not set. Running in Demo Mode for captions.');
+      
+      const demoCaptions = [
+        `✨ Elevate your brand with our latest ${topic}! 🚀 #BrandPost #Marketing`,
+        `Don't miss out on the best ${topic} in town! Check it out now. 👇`,
+        `Why choose anyone else? Our ${topic} is designed for YOU. 💎`
+      ];
+
+      return NextResponse.json({ captions: demoCaptions });
     }
+
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
 
     const captionPrompt = `
       Create 3 engaging social media captions for a ${contentType} post about "${topic}".

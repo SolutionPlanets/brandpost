@@ -148,7 +148,7 @@ export default function DashboardHome() {
     { label: 'Total Posts', value: totalPosts.toString(), icon: CalendarDays, color: '#4f46e5' },
     { label: 'Audience Reach', value: '0', icon: TrendingUp, color: '#10b981' },
     { label: 'Engagement', value: '0%', icon: Users, color: '#f59e0b' },
-    { label: 'AI Credits Left', value: Math.max(0, currentLimit - postsUsed).toString(), icon: Sparkles, color: '#06b6d4' },
+    { label: 'AI Credits Left', value: currentLimit >= 10000 ? '∞' : Math.max(0, currentLimit - postsUsed).toString(), icon: Sparkles, color: '#06b6d4' },
   ];
 
   return (
@@ -269,7 +269,9 @@ export default function DashboardHome() {
             <div className={styles.usageContainer}>
               <div className={styles.usageHeader}>
                 <span className={styles.usageLabel}>AI Posts Generated</span>
-                <span className={styles.usageCount}>{postsUsed} <span>/ {currentLimit}</span></span>
+                <span className={styles.usageCount}>
+                  {postsUsed} <span>/ {currentLimit >= 10000 ? '∞' : currentLimit}</span>
+                </span>
               </div>
               <div className={styles.usageBarTrack}>
                 <div
@@ -281,7 +283,7 @@ export default function DashboardHome() {
                 />
               </div>
               <p className={styles.usageFooter}>
-                {currentLimit - postsUsed} posts remaining this cycle. Resets on {getNextResetDate(createdAt)}.
+                {currentLimit >= 10000 ? 'Unlimited' : (currentLimit - postsUsed)} posts remaining this cycle. Resets on {getNextResetDate(createdAt)}.
               </p>
             </div>
           </div>

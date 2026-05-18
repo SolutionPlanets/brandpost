@@ -24,8 +24,10 @@ import {
   Image as ImageIcon,
   RefreshCw,
   Download,
+  Edit2,
 } from 'lucide-react';
 import { useBrand } from '@/contexts/BrandContext';
+import { ImageEditor } from '@/components/ImageEditor';
 import styles from './Composer.module.css';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -107,6 +109,7 @@ function ComposerPageContent() {
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   const [isImmediate, setIsImmediate] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
 
   const [form, setForm] = useState<ComposerForm>({
     contentType: null,
@@ -125,6 +128,40 @@ function ComposerPageContent() {
   }, [brandKits]);
 
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
+
+  // Daily attempts state & local storage tracking
+  const [imageRegenAttempts, setImageRegenAttempts] = useState(3);
+  const [captionRegenAttempts, setCaptionRegenAttempts] = useState(3);
+
+  useEffect(() => {
+    const now = Date.now();
+    const storedLastReset = localStorage.getItem('brandpost_regen_last_reset');
+    const storedImageRegen = localStorage.getItem('brandpost_image_regen_attempts');
+    const storedCaptionRegen = localStorage.getItem('brandpost_caption_regen_attempts');
+
+    if (!storedLastReset || now - parseInt(storedLastReset) > 24 * 60 * 60 * 1000) {
+      localStorage.setItem('brandpost_regen_last_reset', now.toString());
+      localStorage.setItem('brandpost_image_regen_attempts', '3');
+      localStorage.setItem('brandpost_caption_regen_attempts', '3');
+      setImageRegenAttempts(3);
+      setCaptionRegenAttempts(3);
+    } else {
+      setImageRegenAttempts(storedImageRegen ? parseInt(storedImageRegen) : 3);
+      setCaptionRegenAttempts(storedCaptionRegen ? parseInt(storedCaptionRegen) : 3);
+    }
+  }, []);
+
+  const decrementImageRegen = () => {
+    const newVal = Math.max(0, imageRegenAttempts - 1);
+    setImageRegenAttempts(newVal);
+    localStorage.setItem('brandpost_image_regen_attempts', newVal.toString());
+  };
+
+  const decrementCaptionRegen = () => {
+    const newVal = Math.max(0, captionRegenAttempts - 1);
+    setCaptionRegenAttempts(newVal);
+    localStorage.setItem('brandpost_caption_regen_attempts', newVal.toString());
+  };
 
   // Pre-fill from calendar link or Edit/Duplicate
   useEffect(() => {
@@ -258,7 +295,7 @@ function ComposerPageContent() {
     }
   };
 
-  const generateImages = async () => {
+  const generateImages = async (single = false) => {
     setIsGeneratingImages(true);
     try {
       const selectedKit = brandKits.find(k => k.id === form.brandKit) || brandKits[0];
@@ -271,6 +308,7 @@ function ComposerPageContent() {
           platform: form.platform,
           extraInstructions: form.extraInstructions,
           workspaceId: workspaceId,
+          single,
           brandDetails: { 
             businessName: selectedKit?.brand_kit_name || businessName, 
             brandDescription: selectedKit?.brand_description || brandDescription, 
@@ -297,11 +335,16 @@ function ComposerPageContent() {
   };
 
   const handleRegenerateCaptions = async () => {
+    if (captionRegenAttempts <= 0) {
+      alert("You have exceeded today's regeneration limit.");
+      return;
+    }
     try {
       const data = await generateCaptions();
       if (data.captions) {
         setGenerated(prev => prev ? { ...prev, captions: data.captions } : null);
         setSelectedCaption(0);
+        decrementCaptionRegen();
       }
     } catch (error: any) {
       alert(error.message);
@@ -309,15 +352,32 @@ function ComposerPageContent() {
   };
 
   const handleRegenerateImages = async () => {
+    if (imageRegenAttempts <= 0) {
+      alert("You have exceeded today's regeneration limit.");
+      return;
+    }
     try {
-      const data = await generateImages();
-      if (data.images) {
-        setGenerated(prev => prev ? { ...prev, images: data.images } : null);
-        setSelectedImage(0);
+      const data = await generateImages(true);
+      if (data.images && data.images.length > 0) {
+        setGenerated(prev => {
+          if (!prev) return null;
+          const newImages = [...prev.images, data.images[0]];
+          setSelectedImage(newImages.length - 1);
+          return { ...prev, images: newImages };
+        });
+        decrementImageRegen();
       }
     } catch (error: any) {
       alert(error.message);
     }
+  };
+
+  const handleSaveEditedImage = (editedImageUrl: string) => {
+    if (!generated) return;
+    const newImages = [...generated.images];
+    newImages[selectedImage] = editedImageUrl;
+    setGenerated({ ...generated, images: newImages });
+    setShowEditor(false);
   };
 
   const downloadImage = async () => {
@@ -624,13 +684,23 @@ function ComposerPageContent() {
                     className={styles.previewImage}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
-                  <button 
-                    className={styles.downloadBtn}
-                    onClick={downloadImage}
-                    title="Download Image"
-                  >
-                    <Download size={20} />
-                  </button>
+                  <div className={styles.imageActionButtons}>
+                    <button 
+                      className={styles.editBtn}
+                      onClick={() => setShowEditor(true)}
+                      title="Edit Image"
+                    >
+                      <Edit2 size={18} />
+                      <span>Edit</span>
+                    </button>
+                    <button 
+                      className={styles.downloadBtn}
+                      onClick={downloadImage}
+                      title="Download Image"
+                    >
+                      <Download size={18} />
+                    </button>
+                  </div>
                 </>
               ) : (
                 <div className={styles.placeholderImage}>
@@ -656,15 +726,22 @@ function ComposerPageContent() {
                   Option {i + 1}
                 </button>
               ))}
-              <button 
-                className={styles.regenerateBtn} 
-                onClick={handleRegenerateImages}
-                disabled={isGeneratingImages}
-                style={{ marginLeft: 'auto' }}
-              >
-                {isGeneratingImages ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
-                Regen Image
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', marginLeft: 'auto' }}>
+                <button 
+                  className={styles.regenerateBtn} 
+                  onClick={handleRegenerateImages}
+                  disabled={isGeneratingImages || imageRegenAttempts <= 0}
+                  style={{ width: 'fit-content' }}
+                >
+                  {isGeneratingImages ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
+                  Regen Image
+                </button>
+                <span className={styles.regenAttemptsLabel}>
+                  {imageRegenAttempts > 0 
+                    ? `${imageRegenAttempts} ${imageRegenAttempts === 1 ? 'attempt' : 'attempts'} remaining today` 
+                    : "Today's limit has been exceeded"}
+                </span>
+              </div>
             </div>
             <button
               className={styles.logoToggle}
@@ -680,14 +757,21 @@ function ComposerPageContent() {
             <div className={styles.captionVariants}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span className={styles.optionLabel}>Caption Variants:</span>
-                <button 
-                  className={styles.regenerateBtn} 
-                  onClick={handleRegenerateCaptions}
-                  disabled={isGeneratingCaptions}
-                >
-                  {isGeneratingCaptions ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
-                  Regen Captions
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                  <button 
+                    className={styles.regenerateBtn} 
+                    onClick={handleRegenerateCaptions}
+                    disabled={isGeneratingCaptions || captionRegenAttempts <= 0}
+                  >
+                    {isGeneratingCaptions ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
+                    Regen Captions
+                  </button>
+                  <span className={styles.regenAttemptsLabel}>
+                    {captionRegenAttempts > 0 
+                      ? `${captionRegenAttempts} ${captionRegenAttempts === 1 ? 'attempt' : 'attempts'} remaining today` 
+                      : "Today's limit has been exceeded"}
+                  </span>
+                </div>
               </div>
               <div className={styles.variantTabs}>
                 {generated.captions.map((_, i) => (
@@ -880,6 +964,16 @@ function ComposerPageContent() {
       </div>
 
       {renderScheduleModal()}
+
+      {showEditor && generated && (
+        <ImageEditor
+          key={`editor-${selectedImage}-${generated.images[selectedImage]}`}
+          imageUrl={generated.images[selectedImage]}
+          logoUrl={logo || undefined}
+          onSave={handleSaveEditedImage}
+          onClose={() => setShowEditor(false)}
+        />
+      )}
     </div>
   );
 }

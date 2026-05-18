@@ -91,7 +91,9 @@ function PricingPageContent() {
   const supabase = createClient();
 
   const handleBack = () => {
-    if (from === 'dashboard' || from === 'limit_reached') {
+    if (from === 'home') {
+      router.push('/');
+    } else if (from === 'dashboard' || from === 'limit_reached') {
       router.push('/dashboard');
     } else if (from === 'brandkit') {
       router.push('/dashboard/brand-kit');
@@ -133,7 +135,7 @@ function PricingPageContent() {
         const searchParams = new URLSearchParams(window.location.search);
         const fromParam = searchParams.get('from');
         
-        if (fromParam === 'limit_reached' || fromParam === 'dashboard') {
+        if (fromParam === 'limit_reached' || fromParam === 'dashboard' || fromParam === 'home') {
           router.push('/dashboard');
         } else {
           router.push('/dashboard/brand-kit');
@@ -162,7 +164,7 @@ function PricingPageContent() {
   return (
     <div className={styles.container}>
       <button onClick={handleBack} className={styles.backLink}>
-        <ArrowLeft size={20} /> Back to Dashboard
+        <ArrowLeft size={20} /> Back to {from === 'home' ? 'Home' : 'Dashboard'}
       </button>
 
       <header className={styles.header}>
