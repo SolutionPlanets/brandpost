@@ -1,0 +1,707 @@
+.container {
+  min-height: 100vh;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding: 1rem;
+}
+
+.modalOverlay {
+  background: white;
+  width: 100%;
+  max-width: 860px;
+  height: 520px;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  display: flex;
+}
+
+@media (max-width: 768px) {
+  .modalOverlay {
+    flex-direction: column;
+    height: auto;
+    max-width: 480px;
+  }
+}
+
+/* Left Sidebar (Teal) */
+.leftSidebar {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: white;
+  width: 35%;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+@media (max-width: 768px) {
+  .leftSidebar {
+    width: 100%;
+    gap: 20px;
+  }
+}
+
+.brandHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brandLogo {
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.brandName {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.priceCard {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  color: #1e293b;
+  margin-top: 20px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.priceLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.05em;
+}
+
+.priceValue {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-top: 4px;
+}
+
+.infoRow {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  cursor: pointer;
+  margin-top: 12px;
+}
+
+.infoRowText {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.illustrationContainer {
+  margin-top: auto;
+  display: flex;
+  justify-content: center;
+  padding-top: 20px;
+}
+
+.cricketGraphic {
+  width: 130px;
+  opacity: 0.95;
+}
+
+.securedLabel {
+  font-size: 0.7rem;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+/* Right Content Area */
+.rightContent {
+  width: 65%;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+@media (max-width: 768px) {
+  .rightContent {
+    width: 100%;
+    height: 400px;
+  }
+}
+
+.rightHeader {
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.rightHeaderTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.headerIcons {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.mainBody {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Payment Methods List */
+.methodsList {
+  width: 40%;
+  border-right: 1px solid #f1f5f9;
+  overflow-y: auto;
+}
+
+.methodItem {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f8fafc;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.methodItem:hover {
+  background: #f8fafc;
+}
+
+.methodItemActive {
+  background: #f5f3ff;
+  border-left-color: #4f46e5;
+}
+
+.methodTitle {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.methodSubtitle {
+  font-size: 0.68rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Details Panel */
+.detailsPanel {
+  width: 60%;
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionHeading {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 16px;
+}
+
+/* Offer Banner */
+.offerBanner {
+  background: #eeebff;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #4f46e5;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* UPI QR Section */
+.qrContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: auto 0;
+}
+
+.qrCodeWrapper {
+  width: 140px;
+  height: 140px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.qrImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.appIconsRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.appIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5rem;
+  font-weight: 800;
+  color: #475569;
+}
+
+/* Card Form CSS */
+.cardForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.formLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.formInput {
+  padding: 8px 12px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #1e293b;
+  outline: none;
+}
+
+.formInput:focus {
+  border-color: #4f46e5;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 10px;
+}
+
+/* Footer Section */
+.footerArea {
+  padding: 16px 24px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.payButton {
+  background: #4f46e5;
+  color: white;
+  font-weight: 700;
+  padding: 10px 24px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);
+  transition: all 0.2s;
+}
+
+.payButton:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.payButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Styled Radio Buttons for Netbanking & Wallets */
+.radioLabel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.radioLabel:hover {
+  background: #f8fafc;
+}
+
+.radioLabel input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  outline: none;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.radioLabel input[type="radio"]:checked {
+  border-color: #4f46e5;
+  background-color: white;
+}
+
+.radioLabel input[type="radio"]:checked::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  background-color: #4f46e5;
+  border-radius: 50%;
+  display: block;
+}
+
+/* Success Overlay */
+.successOverlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  width: 100%;
+  height: 100%;
+  gap: 16px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.successCircle {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #f5f3ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4f46e5;
+}
+
+/* Edit Contact Details Modal */
+.contactModalContainer {
+  min-height: 100vh;
+  width: 100vw;
+  background: radial-gradient(circle at 10% 20%, rgba(248, 250, 252, 1) 0%, rgba(238, 242, 255, 0.6) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Inter', sans-serif;
+  padding: 1.5rem;
+}
+
+.contactModal {
+  background: white;
+  width: 100%;
+  max-width: 440px;
+  padding: 40px;
+  border-radius: 20px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02), 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.contactTitle {
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.03em;
+  margin-bottom: 6px;
+}
+
+.contactSubtitle {
+  font-size: 0.95rem;
+  color: #64748b;
+  margin-bottom: 28px;
+}
+
+.inputFieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.phoneInputWrapper {
+  display: flex;
+  align-items: center;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  background: #ffffff;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.phoneInputWrapper:focus-within {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+}
+
+.countrySelector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #0f172a;
+  border-right: 1.5px solid #e2e8f0;
+  padding-right: 12px;
+  margin-right: 12px;
+  user-select: none;
+  min-width: 58px;
+}
+
+.flag {
+  font-size: 1.1rem;
+}
+
+.emailInputWrapper {
+  display: flex;
+  align-items: center;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  background: #ffffff;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.emailInputWrapper:focus-within {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+}
+
+.mailIconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1.5px solid #e2e8f0;
+  padding-right: 12px;
+  margin-right: 12px;
+  user-select: none;
+  min-width: 58px;
+}
+
+.contactInput {
+  border: none;
+  outline: none;
+  width: 100%;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #0f172a;
+  padding: 0;
+  background: transparent;
+}
+
+.contactInput::placeholder {
+  color: #94a3b8;
+}
+
+.continueButton {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: white;
+  font-weight: 700;
+  font-size: 0.95rem;
+  width: 100%;
+  padding: 14px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  margin-top: 24px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+  text-align: center;
+}
+
+.continueButton:hover {
+  background: linear-gradient(135deg, #4338ca, #6d28d9);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.35);
+  transform: translateY(-1px);
+}
+
+.continueButton:active {
+  transform: translateY(0);
+}
+
+.errorLabel {
+  font-size: 0.8rem;
+  color: #ef4444;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.upiIdSection {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.upiIdDivider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.upiIdDivider::before,
+.upiIdDivider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.upiIdDivider:not(:empty)::before {
+  margin-right: 1em;
+}
+
+.upiIdDivider:not(:empty)::after {
+  margin-left: 1em;
+}
+
+.upiInputWrapper {
+  display: flex;
+  align-items: center;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 6px 6px 12px;
+  background: #ffffff;
+  transition: all 0.2s;
+}
+
+.upiInputWrapper:focus-within {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.upiInput {
+  border: none;
+  outline: none;
+  width: 100%;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #0f172a;
+  padding: 0;
+  background: transparent;
+}
+
+.upiInput::placeholder {
+  color: #cbd5e1;
+}
+
+.upiSubmitBtn {
+  background: #4f46e5;
+  color: white;
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+
+.upiSubmitBtn:hover {
+  background: #4338ca;
+}
+
+.upiErrorLabel {
+  font-size: 0.75rem;
+  color: #ef4444;
+  font-weight: 600;
+  margin-top: -4px;
+}
+
+/* Initial checking state styling */
+.loadingScreen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: sans-serif;
+  color: #4f46e5;
+  gap: 16px;
+  background: #f8fafc;
+}

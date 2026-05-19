@@ -493,34 +493,68 @@ export default function SettingsPage() {
     );
   };
 
-  const renderBilling = () => (
-    <div className={styles.section}>
-      <h2 className={styles.sectionTitle}>Billing & Plan</h2>
-      <p className={styles.sectionDesc}>Manage your subscription and payment details.</p>
+  const renderBilling = () => {
+    const isPaidPlan = planId !== 'solo';
+    const isTrial = planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date();
 
-      <div className={styles.newPlansSection}>
-        {planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date() ? (
-          <>
-            <div className={styles.trialBadgeActive}>Active: 14-Day Free Trial</div>
-            <h3>You are currently on a Free Trial</h3>
-            <p>Your trial ends on {new Date(trialEndsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}. 
-               Upgrade to a pro plan anytime to keep your premium features.</p>
-          </>
-        ) : (
-          <>
-            <h3>You haven't purchased a plan yet</h3>
-            <p>Choose a professional plan to unlock all features and grow your business.</p>
-          </>
-        )}
-        <button 
-          className={styles.viewPlansBtn}
-          onClick={() => window.location.href = '/pricing?from=dashboard'}
-        >
-          {planId === 'solo' ? 'Upgrade Plan' : 'Change Plan'}
-        </button>
+    const planNames: Record<string, string> = {
+      solo: 'Solo Starter',
+      smb: 'SMB Growth',
+      agency: 'Agency Pro',
+      franchise: 'Franchise'
+    };
+
+    return (
+      <div className={styles.section}>
+        <h2 className={styles.sectionTitle}>Billing & Plan</h2>
+        <p className={styles.sectionDesc}>Manage your subscription and payment details.</p>
+
+        <div className={styles.newPlansSection}>
+          {isPaidPlan ? (
+            <>
+              <div className={styles.trialBadgeActive} style={{ backgroundColor: '#e0e7ff', color: '#4f46e5', borderColor: '#c7d2fe' }}>
+                Active Plan: {planNames[planId.toLowerCase()] || planId}
+              </div>
+              <h3>Manage your subscription details</h3>
+              <p>Your subscription is active. View your transaction receipts, update billing address, or adjust your payment details directly in the Customer Portal.</p>
+              <button 
+                className={styles.viewPlansBtn}
+                onClick={() => window.location.href = '/api/billing/portal'}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+              >
+                <span>Customer Portal</span>
+                <ExternalLink size={14} />
+              </button>
+            </>
+          ) : isTrial ? (
+            <>
+              <div className={styles.trialBadgeActive}>Active: 14-Day Free Trial</div>
+              <h3>You are currently on a Free Trial</h3>
+              <p>Your trial ends on {new Date(trialEndsAt!).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}. 
+                 Upgrade to a pro plan anytime to keep your premium features.</p>
+              <button 
+                className={styles.viewPlansBtn}
+                onClick={() => window.location.href = '/pricing?from=dashboard'}
+              >
+                Upgrade Plan
+              </button>
+            </>
+          ) : (
+            <>
+              <h3>You are on the Solo Starter Tier</h3>
+              <p>Get started with basic features or upgrade to a professional plan to unlock team member access, higher limits, and additional brand kits.</p>
+              <button 
+                className={styles.viewPlansBtn}
+                onClick={() => window.location.href = '/pricing?from=dashboard'}
+              >
+                Upgrade Plan
+              </button>
+            </>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderNotifications = () => (
     <div className={styles.section}>

@@ -69,7 +69,7 @@ export default function PostsPage() {
 
   const handleView = (post: any) => {
     if (post.image_url) {
-      window.open(post.image_url, '_blank');
+      setSelectedViewerImage(post.image_url);
     } else {
       alert('No image available for this post.');
     }
@@ -413,21 +413,63 @@ export default function PostsPage() {
             left: 0,
             width: '100vw',
             height: '100vh',
-            backgroundColor: 'rgba(15, 23, 42, 0.85)',
-            backdropFilter: 'blur(8px)',
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            backdropFilter: 'blur(10px)',
             zIndex: 9999,
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
             padding: '24px'
           }}
           onClick={() => setSelectedViewerImage(null)}
         >
+          {/* Header Bar with prominent Back to History button */}
+          <div style={{
+            width: '100%',
+            maxWidth: '90%',
+            display: 'flex',
+            justifyContent: 'flex-start',
+            marginBottom: '16px'
+          }}>
+            <button
+              onClick={() => setSelectedViewerImage(null)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                color: 'white',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                padding: '10px 20px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                transition: 'all 0.2s',
+                backdropFilter: 'blur(4px)',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+                e.currentTarget.style.transform = 'translateX(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                e.currentTarget.style.transform = 'none';
+              }}
+            >
+              <span>← Back to History</span>
+            </button>
+          </div>
+
           <div 
             style={{
               position: 'relative',
               maxWidth: '90%',
-              maxHeight: '90%',
+              maxHeight: '80vh',
               borderRadius: '16px',
               overflow: 'hidden',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
@@ -443,37 +485,11 @@ export default function PostsPage() {
               alt="Preview" 
               style={{
                 maxWidth: '100%',
-                maxHeight: '85vh',
+                maxHeight: '75vh',
                 objectFit: 'contain',
                 display: 'block'
               }} 
             />
-            <button
-              onClick={() => setSelectedViewerImage(null)}
-              style={{
-                position: 'absolute',
-                top: '16px',
-                right: '16px',
-                backgroundColor: 'rgba(15, 23, 42, 0.6)',
-                color: 'white',
-                border: 'none',
-                width: '36px',
-                height: '36px',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                fontSize: '18px',
-                fontWeight: 'bold',
-                backdropFilter: 'blur(4px)',
-                transition: 'background-color 0.2s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.8)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(15, 23, 42, 0.6)'}
-            >
-              ✕
-            </button>
           </div>
         </div>
       )}

@@ -115,36 +115,8 @@ function PricingPageContent() {
         return;
       }
 
-      console.log('Updating user:', user.id, 'with plan:', planId);
-      const { data, error } = await supabase
-        .from('users')
-        .update({ plan_id: planId })
-        .eq('id', user.id)
-        .select();
-
-      if (error) {
-        console.error('Update error:', error);
-        alert('Error updating plan: ' + error.message);
-      } else {
-        console.log('Update success:', data);
-        // Clear local storage to force a fresh data fetch on next dashboard load
-        localStorage.removeItem('brandpost_user_data');
-        alert(`Plan "${planName}" successfully applied! Redirecting back...`);
-        
-        // Get 'from' parameter
-        const searchParams = new URLSearchParams(window.location.search);
-        const fromParam = searchParams.get('from');
-        
-        if (fromParam === 'limit_reached' || fromParam === 'dashboard' || fromParam === 'home') {
-          router.push('/dashboard');
-        } else {
-          router.push('/dashboard/brand-kit');
-        }
-
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
-      }
+      // Redirect to unified checkout endpoint which handles both Stripe and Mock checkout flows
+      router.push(`/api/billing/checkout?planId=${planId}&period=${isYearly ? 'yearly' : 'monthly'}`);
     } catch (err) {
       console.error('Fatal upgrade error:', err);
       alert('An unexpected error occurred. Please try again.');

@@ -146,7 +146,6 @@
   background-color: var(--surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
-  overflow: hidden;
 }
 
 .tableHeaderRow {
@@ -161,6 +160,8 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
 }
 
 .tableDataRow {
@@ -175,6 +176,8 @@
 
 .tableDataRow:last-child {
   border-bottom: none;
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
 }
 
 .tableDataRow:hover {
