@@ -31,6 +31,7 @@ export async function POST(request: Request) {
     }
 
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
     if (!keySecret) {
       return NextResponse.json({ error: 'Razorpay keys not configured on server' }, { status: 500 });
     }
@@ -46,6 +47,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Payment verification failed' }, { status: 400 });
     }
 
+    // Fetch payment details directly from Razorpay to get the actual user phone and email
+    let paymentDetails: any = null;
+    if (keyId) {
+      try {
+        const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+        const rzpRes = await fetch(`https://api.razorpay.com/v1/payments/${razorpay_payment_id}`, {
+          headers: {
+            'Authorization': authHeader
+          }
+        });
+        if (rzpRes.ok) {
+          paymentDetails = await rzpRes.json();
+        } else {
+          console.warn(`Razorpay payment fetch failed with status ${rzpRes.status}`);
+        }
+      } catch (fetchErr) {
+        console.error('Error fetching Razorpay payment details:', fetchErr);
+      }
+    }
+
     const gatewayCustId = `rzp_cust_${user.id.substring(0, 8)}`;
 
     // Update user plan in DB
@@ -55,12 +76,12 @@ export async function POST(request: Request) {
     await logPayment({
       userId: user.id,
       planId: planId.toLowerCase(),
-      amount: amount || 0,
-      currency: currency || 'INR',
+      amount: paymentDetails ? paymentDetails.amount / 100 : (amount || 0),
+      currency: paymentDetails ? paymentDetails.currency : (currency || 'INR'),
       orderId: razorpay_order_id,
       gatewayCustomerId: gatewayCustId,
-      phoneNo: phone_no || '',
-      paymentSource: payment_source || 'razorpay',
+      phoneNo: paymentDetails?.contact || phone_no || '',
+      paymentSource: paymentDetails ? `${paymentDetails.method}${paymentDetails.vpa ? ' (' + paymentDetails.vpa + ')' : ''}` : (payment_source || 'razorpay'),
       paymentStatus: 'completed'
     });
 
