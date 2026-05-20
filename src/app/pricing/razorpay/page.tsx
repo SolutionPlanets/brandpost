@@ -131,10 +131,7 @@ function RazorpayCheckoutContent() {
 
                 if (verifyRes.ok) {
                   localStorage.removeItem('brandpost_user_data');
-                  router.push('/dashboard?payment_success=true');
-                  setTimeout(() => {
-                    window.location.reload();
-                  }, 500);
+                  window.location.href = '/dashboard?payment_success=true';
                 } else {
                   throw new Error('Payment verification failed');
                 }
@@ -240,10 +237,7 @@ function RazorpayCheckoutContent() {
 
       // Redirect to dashboard with success parameter
       setTimeout(() => {
-        router.push('/dashboard?payment_success=true');
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+        window.location.href = '/dashboard?payment_success=true';
       }, 2500);
 
     } catch (err) {
@@ -299,10 +293,7 @@ function RazorpayCheckoutContent() {
 
       // Redirect to dashboard with success parameter
       setTimeout(() => {
-        router.push('/dashboard?payment_success=true');
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+        window.location.href = '/dashboard?payment_success=true';
       }, 2500);
 
     } catch (err) {

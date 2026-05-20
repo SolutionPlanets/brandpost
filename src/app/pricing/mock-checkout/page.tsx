@@ -185,11 +185,7 @@ function MockCheckoutContent() {
       localStorage.removeItem('brandpost_user_data');
       
       // Redirect to dashboard with success query param
-      router.push('/dashboard?payment_success=true');
-      
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
+      window.location.href = '/dashboard?payment_success=true';
     } catch (err: any) {
       console.error(err);
       alert(err.message || 'Payment confirmation failed. Please try again.');
