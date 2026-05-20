@@ -97,7 +97,6 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
   const [formData, setFormData] = useState({
     ownerName: '',
     businessName: '',
-    ownerName: '',
     address: '',
     pincode: '',
     timing: '',
@@ -798,6 +797,7 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <input
+                      key="primary-logo-input"
                       type="file"
                       ref={fileInputRef}
                       onChange={(e) => e.target.files && handleFile(e.target.files[0])}
@@ -830,6 +830,7 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
                     onClick={() => darkFileInputRef.current?.click()}
                   >
                     <input
+                      key="dark-logo-input"
                       type="file"
                       ref={darkFileInputRef}
                       onChange={(e) => e.target.files && handleDarkFile(e.target.files[0])}
@@ -1042,7 +1043,9 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
         ))}
       </div>
       <div className={styles.mainCard}>
-        {renderStep()}
+        <div key={currentStep}>
+          {renderStep()}
+        </div>
         <div className={styles.footer}>
           <button
             className={styles.backBtn}
