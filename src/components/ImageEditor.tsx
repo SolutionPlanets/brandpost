@@ -8,6 +8,7 @@ import {
   Check, 
   Move,
   Minus,
+  Plus,
   RotateCcw,
   Palette,
   Sparkles,
