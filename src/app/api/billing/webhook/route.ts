@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import { createAdminClient } from '@/utils/supabase/admin';
-import { updateUserPlan } from '@/services/billing';
+import { updateUserPlan, logPayment } from '@/services/billing';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -57,6 +57,19 @@ export async function POST(request: Request) {
         if (userId && planId) {
           console.log(`Checkout completed. Upgrading user ${userId} to plan ${planId}`);
           await updateUserPlan(userId, planId, customerId);
+
+          // Log payment in DB
+          await logPayment({
+            userId: userId,
+            planId: planId,
+            amount: session.amount_total ? session.amount_total / 100 : 0,
+            currency: session.currency?.toUpperCase() || 'USD',
+            orderId: session.id,
+            gatewayCustomerId: customerId,
+            phoneNo: session.customer_details?.phone || '',
+            paymentSource: 'stripe_checkout',
+            paymentStatus: 'completed'
+          });
         } else {
           console.warn('Checkout completed but metadata (userId/planId) is missing.');
         }

@@ -121,7 +121,11 @@ function RazorpayCheckoutContent() {
                     razorpay_payment_id: response.razorpay_payment_id,
                     razorpay_order_id: response.razorpay_order_id,
                     razorpay_signature: response.razorpay_signature,
-                    planId: planId
+                    planId: planId,
+                    amount: inrPrice,
+                    currency: 'INR',
+                    phone_no: contactPhone,
+                    payment_source: 'razorpay'
                   })
                 });
 
@@ -219,7 +223,11 @@ function RazorpayCheckoutContent() {
         },
         body: JSON.stringify({
           planId,
-          billingPeriod: period
+          billingPeriod: period,
+          amount: inrPrice,
+          currency: 'INR',
+          phone_no: contactPhone,
+          payment_source: 'razorpay_mock_card'
         })
       });
 
@@ -274,7 +282,11 @@ function RazorpayCheckoutContent() {
         },
         body: JSON.stringify({
           planId,
-          billingPeriod: period
+          billingPeriod: period,
+          amount: inrPrice,
+          currency: 'INR',
+          phone_no: contactPhone,
+          payment_source: `razorpay_mock_upi (${upiId})`
         })
       });
 

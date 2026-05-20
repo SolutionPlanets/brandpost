@@ -168,7 +168,11 @@ function MockCheckoutContent() {
         },
         body: JSON.stringify({
           planId: planId,
-          billingPeriod: period
+          billingPeriod: period,
+          amount: usdPrice,
+          currency: 'USD',
+          phone_no: '',
+          payment_source: 'stripe_mock_card'
         })
       });
 

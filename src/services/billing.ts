@@ -33,3 +33,63 @@ export async function updateUserPlan(userId: string, planId: string, stripeCusto
   console.log(`Successfully upgraded user ${userId} and their workspaces to plan ${planId}`);
   return true;
 }
+
+const planIdToName: Record<string, string> = {
+  solo: 'Solo Starter',
+  smb: 'SMB Growth',
+  agency: 'Agency Pro',
+  franchise: 'Franchise'
+};
+
+export async function logPayment(details: {
+  userId: string;
+  planId: string;
+  planName?: string;
+  amount: number;
+  currency: string;
+  orderId?: string;
+  gatewayCustomerId?: string;
+  phoneNo?: string;
+  paymentSource?: string;
+  paymentStatus: 'completed' | 'failed' | 'pending';
+}) {
+  const adminSupabase = createAdminClient();
+
+  let workspaceId: string | null = null;
+  try {
+    const { data: workspaces } = await adminSupabase
+      .from('workspaces')
+      .select('id')
+      .eq('owner_id', details.userId)
+      .limit(1);
+    if (workspaces && workspaces.length > 0) {
+      workspaceId = workspaces[0].id;
+    }
+  } catch (e) {
+    console.error('Error fetching workspace ID for logging payment:', e);
+  }
+
+  const mappedPlanName = details.planName || planIdToName[details.planId.toLowerCase()] || details.planId;
+
+  const { error } = await adminSupabase
+    .from('payments')
+    .insert({
+      user_id: details.userId,
+      workspace_id: workspaceId,
+      plan_id: details.planId,
+      plan_name: mappedPlanName,
+      amount: details.amount,
+      currency: details.currency,
+      order_id: details.orderId || null,
+      gateway_customer_id: details.gatewayCustomerId || null,
+      phone_no: details.phoneNo || null,
+      payment_source: details.paymentSource || null,
+      payment_status: details.paymentStatus
+    });
+
+  if (error) {
+    console.error('Error inserting payment log into database:', error);
+  } else {
+    console.log(`Payment successfully logged for user ${details.userId}: ${mappedPlanName} (${details.amount} ${details.currency}) - Status: ${details.paymentStatus}`);
+  }
+}
