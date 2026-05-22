@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   Unlink,
   ExternalLink,
+  Clock,
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { useBrand } from '@/contexts/BrandContext';
@@ -117,7 +118,8 @@ export default function SettingsPage() {
       if (workspace) {
         setProfileData(prev => ({
           ...prev,
-          fullName: workspace.owner_name || prev.fullName
+          fullName: workspace.owner_name || prev.fullName,
+          timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
         }));
         setWorkspaceData({
           name: workspace.business_name === 'My Workspace' ? '' : (workspace.business_name || ''),
@@ -154,7 +156,8 @@ export default function SettingsPage() {
           .from('workspaces')
           .update({ 
             business_name: businessName,
-            owner_name: profileData.fullName
+            owner_name: profileData.fullName,
+            timezone: profileData.timezone
           })
           .eq('id', workspace.id);
         
@@ -346,6 +349,18 @@ export default function SettingsPage() {
             <option value="playful">Playful</option>
             <option value="authoritative">Authoritative</option>
           </select>
+        </div>
+        <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
+          <label><Clock size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />Timezone</label>
+          <select
+            value={profileData.timezone}
+            onChange={(e) => setProfileData({...profileData, timezone: e.target.value})}
+          >
+            {Intl.supportedValuesOf('timeZone').map(tz => (
+              <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+            ))}
+          </select>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>Used for scheduling posts at the correct local time.</p>
         </div>
       </div>
 

@@ -84,6 +84,7 @@ export default function OnboardingWizard() {
     address: '',
     pincode: '',
     timing: '9 AM - 6 PM',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     logo: null as string | null,
     logoUrl: null as string | null,
     logoFile: null as File | null,
@@ -147,9 +148,11 @@ export default function OnboardingWizard() {
         const brandKit = workspace.brand_kits?.[0];
         dbData = {
           businessName: workspace.business_name || '',
+          ownerName: workspace.owner_name || '',
           address: workspace.address || '',
           pincode: workspace.pincode || '',
           timing: workspace.business_timing || '',
+          timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
           logo: brandKit?.logo_url || null,
           logoUrl: brandKit?.logo_url || null,
           colors: brandKit ? {
@@ -231,7 +234,8 @@ export default function OnboardingWizard() {
         owner_name: formData.ownerName,
         address: formData.address,
         pincode: formData.pincode,
-        business_timing: formData.timing
+        business_timing: formData.timing,
+        timezone: formData.timezone
       })
       .eq('owner_id', user.id);
 
@@ -675,6 +679,20 @@ export default function OnboardingWizard() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Timezone Dropdown */}
+            <div className={styles.inputGroup}>
+              <label>Timezone</label>
+              <select
+                value={formData.timezone}
+                onChange={(e) => setFormData({...formData, timezone: e.target.value})}
+                style={{ width: '100%', padding: '10px 12px', fontSize: '1rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'white' }}
+              >
+                {Intl.supportedValuesOf('timeZone').map(tz => (
+                  <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
             </div>
           </div>
         );

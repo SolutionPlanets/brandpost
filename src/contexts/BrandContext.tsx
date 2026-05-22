@@ -29,11 +29,13 @@ interface BrandContextType {
   workspaceId: string | null;
   timezone: string;
   timing: string;
+  isLoading: boolean;
+  hasBrandKit: boolean | null;
   setBusinessName: (name: string) => void;
   setLogo: (logo: string | null) => void;
   setProfilePhoto: (photo: string | null) => void;
   setColors: (colors: { primary: string; secondary: string; accent: string }) => void;
-  refreshBrandData: () => Promise<void>;
+  refreshBrandData: (silent?: boolean) => Promise<void>;
 }
 
 const BrandContext = createContext<BrandContextType | undefined>(undefined);
@@ -64,12 +66,18 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [timing, setTiming] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasBrandKit, setHasBrandKit] = useState<boolean | null>(null);
 
   const supabase = createClient();
 
-  const refreshBrandData = async () => {
+  const refreshBrandData = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
 
     // Fetch user's full_name, profile_photo, and auth_provider from the users table
     const { data: userProfile } = await supabase
@@ -121,6 +129,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       setWorkspaceId(workspace.id);
       const bKits = workspace.brand_kits;
       const brandKit = bKits ? (Array.isArray(bKits) ? bKits[0] : bKits) : undefined;
+      setHasBrandKit(!!brandKit);
       const rawBName = workspace.business_name || '';
       const bName = rawBName.toLowerCase().includes('my workspace') ? '' : rawBName;
       setBusinessName(bName);
@@ -160,7 +169,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         timezone: workspace.timezone || 'Asia/Kolkata',
         timing: workspace.business_timing || '',
       }));
+    } else {
+      setHasBrandKit(false);
     }
+    
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -246,8 +259,10 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     setLogo,
     setProfilePhoto,
     setColors,
-    refreshBrandData
-  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, logo, profilePhoto, authProvider, colors, planId, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing]);
+    refreshBrandData,
+    isLoading,
+    hasBrandKit
+  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, logo, profilePhoto, authProvider, colors, planId, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, isLoading, hasBrandKit]);
 
   return (
     <BrandContext.Provider value={value}>

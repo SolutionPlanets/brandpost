@@ -7,6 +7,49 @@ import { getImageExpansionPrompt } from './prompts';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY || '' });
 
+interface ModelSetup {
+  apiType: 'generateContent' | 'generateImages';
+  modelId: string;
+  config: any;
+}
+
+const IMAGE_MODEL_REGISTRY: Record<string, ModelSetup> = {
+  GEMINI_BANANA: {
+    apiType: 'generateContent',
+    modelId: 'gemini-2.5-flash-image',
+    config: {
+      responseModalities: [Modality.IMAGE],
+    },
+  },
+  IMAGEN_FAST: {
+    apiType: 'generateImages',
+    modelId: 'imagen-4.0-fast-generate-001',
+    config: {
+      numberOfImages: 1,
+      aspectRatio: '1:1',
+      outputMimeType: 'image/png',
+    },
+  },
+  IMAGEN_STANDARD: {
+    apiType: 'generateImages',
+    modelId: 'imagen-4.0-generate-001',
+    config: {
+      numberOfImages: 1,
+      aspectRatio: '1:1',
+      outputMimeType: 'image/png',
+    },
+  },
+  IMAGEN_ULTRA: {
+    apiType: 'generateImages',
+    modelId: 'imagen-4.0-ultra-generate-001',
+    config: {
+      numberOfImages: 1,
+      aspectRatio: '1:1',
+      outputMimeType: 'image/png',
+    },
+  },
+};
+
 export async function POST(req: Request) {
   try {
     const {
@@ -89,8 +132,8 @@ export async function POST(req: Request) {
       const dummyUrls = [
         `https://picsum.photos/seed/${topic.replace(/\s+/g, '')}1/1024/1024`
       ];
-      
-      return await processAndStoreImages(dummyUrls, targetWorkspaceId, uid, topic, platform, contentType, brandKitId, workspace, extraInstructions);
+
+      return await processAndStoreImages(dummyUrls, targetWorkspaceId, uid, topic, platform, contentType, brandKitId, workspace, extraInstructions, draftId);
     }
 
     // 3. Expand Prompt using Gemini 2.5 Flash (text-only, cheap & fast)
@@ -128,42 +171,66 @@ export async function POST(req: Request) {
       expandedPrompt = `Professional marketing poster for ${brandDetails.businessName} about ${topic}, high quality typography, premium brand design, sharp focus`;
     }
 
-    // 4. Generate Image using Gemini 3.1 Flash Image (native image generation)
-    console.log('Generating image with Gemini 3.1 Flash Image...');
+    // 4. Resolve active model configuration from registry
+    const activeKey = process.env.ACTIVE_IMAGE_MODEL || 'IMAGEN_FAST';
+    const setup = IMAGE_MODEL_REGISTRY[activeKey] || IMAGE_MODEL_REGISTRY.IMAGEN_FAST;
+
+    console.log(`Generating image with ${activeKey} (model: ${setup.modelId})...`);
     let imageBuffer: Buffer | null = null;
     try {
-      const imageResult = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-image-preview',
-        contents: expandedPrompt,
-        config: {
-          responseModalities: [Modality.IMAGE],
-        },
-      });
+      if (setup.apiType === 'generateContent') {
+        const imageResult = await ai.models.generateContent({
+          model: setup.modelId,
+          contents: expandedPrompt,
+          config: setup.config,
+        });
 
-      // LOG TOKEN USAGE: Image Generation
-      const imgUsage = imageResult.usageMetadata;
-      console.log('📊 TOKEN USAGE [Image Generation]:', {
-        cause: 'Generating native high-resolution image',
-        inputTokens: imgUsage?.promptTokenCount,
-        outputTokens: imgUsage?.candidatesTokenCount, // This represents the image data tokens
-        totalTokens: imgUsage?.totalTokenCount
-      });
+        // Log token usage for content generation model
+        const imgUsage = imageResult.usageMetadata;
+        console.log('📊 TOKEN USAGE [Image Generation]:', {
+          cause: `Generating native image with ${activeKey}`,
+          inputTokens: imgUsage?.promptTokenCount,
+          outputTokens: imgUsage?.candidatesTokenCount,
+          totalTokens: imgUsage?.totalTokenCount
+        });
 
-      // Extract base64 image data from response parts
-      const parts = imageResult.candidates?.[0]?.content?.parts || [];
-      for (const part of parts) {
-        if (part.inlineData?.data) {
-          imageBuffer = Buffer.from(part.inlineData.data, 'base64');
-          console.log('Image generated successfully. Buffer size:', imageBuffer.length);
-          break;
+        // Extract base64 image data from response parts
+        const parts = imageResult.candidates?.[0]?.content?.parts || [];
+        for (const part of parts) {
+          if (part.inlineData?.data) {
+            imageBuffer = Buffer.from(part.inlineData.data, 'base64');
+            console.log(`Image generated successfully via ${activeKey}. Buffer size:`, imageBuffer.length);
+            break;
+          }
+        }
+      } else {
+        const imageResult = await ai.models.generateImages({
+          model: setup.modelId,
+          prompt: expandedPrompt,
+          config: setup.config,
+        });
+
+        // Imagen uses per-image pricing rather than token-based pricing
+        console.log('📊 IMAGEN USAGE:', {
+          cause: `Generating high-resolution image via ${activeKey}`,
+          model: setup.modelId,
+          numberOfImages: setup.config.numberOfImages,
+          aspectRatio: setup.config.aspectRatio
+        });
+
+        // Extract base64 image data from generated images
+        const generatedImage = imageResult.generatedImages?.[0];
+        if (generatedImage?.image?.imageBytes) {
+          imageBuffer = Buffer.from(generatedImage.image.imageBytes, 'base64');
+          console.log(`Image generated successfully via ${activeKey}. Buffer size:`, imageBuffer.length);
         }
       }
 
       if (!imageBuffer) {
-        throw new Error('Gemini returned no image data in the response.');
+        throw new Error(`${activeKey} returned no image data in the response.`);
       }
     } catch (imgErr: any) {
-      console.error('❌ Gemini Image generation failed:', imgErr.message);
+      console.error(`❌ ${activeKey} Image generation failed:`, imgErr.message);
       // Update draft with error info if possible
       if (draftId) {
         await adminSupabase
@@ -284,19 +351,19 @@ async function processAndStoreBuffer(
 
 // Helper function to process URLs (for dev mode dummy images)
 async function processAndStoreImages(
-  urls: string[], 
-  targetWorkspaceId: string, 
-  uid: string | undefined, 
-  topic: string, 
-  platform: string, 
-  contentType: string, 
-  brandKitId: any, 
+  urls: string[],
+  targetWorkspaceId: string,
+  uid: string | undefined,
+  topic: string,
+  platform: string,
+  contentType: string,
+  brandKitId: any,
   workspace: any,
   extraInstructions: string,
   draftId?: string
 ) {
   const adminSupabase = createAdminClient();
-  
+
   const finalUrls = await Promise.all(urls.map(async (url, index) => {
     try {
       // 1. Fetch the image
@@ -320,7 +387,7 @@ async function processAndStoreImages(
 
       if (uploadError) {
         console.error('Supabase upload error:', uploadError);
-        return { url, id: null }; 
+        return { url, id: null };
       }
 
       // 4. Get Public URL
@@ -369,7 +436,7 @@ async function processAndStoreImages(
           console.error('CRITICAL POST INSERT ERROR:', postError.message);
           return { url: publicUrl, id: draftId || null };
         }
-        
+
         return { url: publicUrl, id: postData?.id };
       } catch (dbErr: any) {
         console.error('DB INSERT EXCEPTION:', dbErr.message);
@@ -377,7 +444,7 @@ async function processAndStoreImages(
       }
     } catch (uploadErr) {
       console.error('Storage processing error:', uploadErr);
-      return { url, id: null }; 
+      return { url, id: null };
     }
   }));
 

@@ -141,15 +141,15 @@ function ComposerPageContent() {
             contentType: data.content_type || 'general',
             templateId: 'none',
             topic: data.title || data.caption?.substring(0, 30) || 'Previous Post',
-            brandKit: 'main-brand',
+            brandKit: data.brand_kit_id || 'main-brand',
             platform: data.platform || 'both',
-            extraInstructions: '',
+            extraInstructions: data.extra_instructions || '',
           });
 
           if (isEdit) {
             setGenerated({
               captions: [data.caption || ''],
-              images: [data.image_url || '']
+              images: [{ url: data.image_url || '', id: data.id }]
             });
             setEditedCaption(data.caption || '');
             setStep(5);
@@ -182,7 +182,8 @@ function ComposerPageContent() {
   const canProceedStep3 = form.templateId !== null || form.templateId === 'none';
   const canProceedStep4 = form.topic.trim().length > 0;
 
-  const handleGenerateFull = async () => {
+  const handleGenerateFull = async (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
     // Credit check
     const isTrial = planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date();
     const currentLimit = isTrial ? 100 : 50;
@@ -208,8 +209,11 @@ function ComposerPageContent() {
       });
       setSelectedCaption(0);
       setSelectedImage(0);
+      if (captionsData.captions && captionsData.captions.length > 0) {
+        setEditedCaption(captionsData.captions[0]);
+      }
       setStep(5);
-      refreshBrandData(); // Update credits and history
+      refreshBrandData(true); // Silently update credits and history
     } catch (error: any) {
       console.error('Generation failed:', error);
       alert(error.message || 'Generation failed. Please try again.');
@@ -256,7 +260,8 @@ function ComposerPageContent() {
           platform: form.platform,
           extraInstructions: form.extraInstructions,
           workspaceId: workspaceId,
-          brandDetails: { 
+          brandKitId: form.brandKit === 'none' ? null : undefined, // Explicit null if none selected
+          brandDetails: form.brandKit === 'none' ? null : { 
             businessName, 
             brandDescription, 
             colors,
@@ -340,7 +345,7 @@ function ComposerPageContent() {
         content_type: form.contentType,
         image_url: selectedPost?.url,
         status: isImmediate ? 'published' : 'scheduled',
-        scheduled_at: isImmediate ? null : `${scheduleDate}T${scheduleTime}:00`,
+        scheduled_at: isImmediate ? null : new Date(`${scheduleDate}T${scheduleTime}:00`).toISOString(),
         workspace_id: workspaceId,
         extra_instructions: form.extraInstructions, // Store the generation prompt
       };
@@ -509,6 +514,7 @@ function ComposerPageContent() {
               onChange={(e) => setForm({ ...form, brandKit: e.target.value })}
             >
               <option value="main-brand">{brandKitName || businessName || 'Main Brand'}</option>
+              <option value="none">No Brand Kit</option>
             </select>
           </div>
 
@@ -531,10 +537,10 @@ function ComposerPageContent() {
         </div>
 
         <div className={styles.formGroup}>
-          <label htmlFor="extra">Extra Instructions</label>
+          <label htmlFor="extra">Post Description</label>
           <textarea
             id="extra"
-            placeholder="Any specific tone, hashtags, or details you want included..."
+            placeholder="Explain exactly what the post is about, any specific tone, details, offers, or context..."
             rows={3}
             value={form.extraInstructions}
             onChange={(e) => setForm({ ...form, extraInstructions: e.target.value })}
@@ -834,6 +840,7 @@ function ComposerPageContent() {
           )}
           {step === 3 && (
             <button
+              type="button"
               className={styles.generateBtn}
               disabled={!canProceedStep4}
               onClick={handleGenerateFull}
