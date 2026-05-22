@@ -14,6 +14,11 @@ interface BrandContextType {
   facebook: string;
   brandTone: string;
   brandDescription: string;
+  industry: string;
+  brandAudience: string;
+  websiteUrl: string;
+  phrasesToInclude: string;
+  phrasesToAvoid: string;
   logo: string | null;
   profilePhoto: string | null;
   authProvider: string;
@@ -59,6 +64,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [facebook, setFacebook] = useState('');
   const [brandTone, setBrandTone] = useState('Professional');
   const [brandDescription, setBrandDescription] = useState('');
+  const [industry, setIndustry] = useState('');
+  const [brandAudience, setBrandAudience] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [phrasesToInclude, setPhrasesToInclude] = useState('');
+  const [phrasesToAvoid, setPhrasesToAvoid] = useState('');
   const [planId, setPlanId] = useState('solo');
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState<string | null>(null);
@@ -145,6 +155,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       setFacebook(brandKit?.facebook_handle || '');
       setBrandTone(brandKit?.tone || 'Professional');
       setBrandDescription(brandKit?.brand_description || '');
+      setIndustry(brandKit?.industry || '');
+      setBrandAudience(brandKit?.brand_audience || '');
+      setWebsiteUrl(brandKit?.website_url || '');
+      setPhrasesToInclude(brandKit?.phrases_to_include || '');
+      setPhrasesToAvoid(brandKit?.phrases_to_avoid || '');
       if (brandKit?.primary_color) {
         setColors({
           primary: brandKit.primary_color,
@@ -166,6 +181,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         facebook: brandKit?.facebook_handle || '',
         brandTone: brandKit?.tone || 'Professional',
         brandDescription: brandKit?.brand_description || '',
+        industry: brandKit?.industry || '',
+        brandAudience: brandKit?.brand_audience || '',
+        websiteUrl: brandKit?.website_url || '',
+        phrasesToInclude: brandKit?.phrases_to_include || '',
+        phrasesToAvoid: brandKit?.phrases_to_avoid || '',
         timezone: workspace.timezone || 'Asia/Kolkata',
         timing: workspace.business_timing || '',
       }));
@@ -191,6 +211,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         if (d.facebook) setFacebook(d.facebook);
         if (d.brandTone) setBrandTone(d.brandTone);
         if (d.brandDescription) setBrandDescription(d.brandDescription);
+        if (d.industry) setIndustry(d.industry);
+        if (d.brandAudience) setBrandAudience(d.brandAudience);
+        if (d.websiteUrl) setWebsiteUrl(d.websiteUrl);
+        if (d.phrasesToInclude) setPhrasesToInclude(d.phrasesToInclude);
+        if (d.phrasesToAvoid) setPhrasesToAvoid(d.phrasesToAvoid);
         if (d.planId) setPlanId(d.planId);
         if (d.trialEndsAt) setTrialEndsAt(d.trialEndsAt);
         if (d.createdAt) setCreatedAt(d.createdAt);
@@ -220,6 +245,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       facebook,
       brandTone,
       brandDescription,
+      industry,
+      brandAudience,
+      websiteUrl,
+      phrasesToInclude,
+      phrasesToAvoid,
       planId,
       trialEndsAt,
       createdAt,
@@ -231,7 +261,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       colors,
       timing
     }));
-  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, planId, trialEndsAt, createdAt, postsUsed, timezone, logo, profilePhoto, authProvider, colors, timing]);
+  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid, planId, trialEndsAt, createdAt, postsUsed, timezone, logo, profilePhoto, authProvider, colors, timing]);
 
   const value = React.useMemo(() => ({
     fullName,
@@ -244,6 +274,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     facebook,
     brandTone,
     brandDescription,
+    industry,
+    brandAudience,
+    websiteUrl,
+    phrasesToInclude,
+    phrasesToAvoid,
     logo,
     profilePhoto,
     authProvider,
@@ -262,7 +297,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     refreshBrandData,
     isLoading,
     hasBrandKit
-  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, logo, profilePhoto, authProvider, colors, planId, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, isLoading, hasBrandKit]);
+  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid, logo, profilePhoto, authProvider, colors, planId, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, isLoading, hasBrandKit]);
 
   return (
     <BrandContext.Provider value={value}>

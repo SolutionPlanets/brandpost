@@ -97,6 +97,11 @@ export default function OnboardingWizard() {
     brandKitName: '',
     headingFont: 'Inter',
     bodyFont: 'Inter',
+    industry: '',
+    brandAudience: '',
+    websiteUrl: '',
+    phrasesToInclude: '',
+    phrasesToAvoid: '',
     selectedPost: 1,
     selectedPlatforms: [] as string[],
     platforms: [],
@@ -196,10 +201,8 @@ export default function OnboardingWizard() {
   useEffect(() => {
     if (isRefreshing) return;
     
-    const stateToSave = { ...formData };
     // Don't save File objects
-    delete stateToSave.logoFile;
-    delete stateToSave.logoDarkFile;
+    const { logoFile, logoDarkFile, ...stateToSave } = formData;
     
     localStorage.setItem('onboarding_formData', JSON.stringify(stateToSave));
     localStorage.setItem('onboarding_currentStep', currentStep.toString());
@@ -291,6 +294,11 @@ export default function OnboardingWizard() {
         body_font: formData.bodyFont,
         brand_description: formData.description,
         tone: formData.tone,
+        industry: formData.industry,
+        brand_audience: formData.brandAudience,
+        website_url: formData.websiteUrl,
+        phrases_to_include: formData.phrasesToInclude,
+        phrases_to_avoid: formData.phrasesToAvoid,
       };
 
       if (existingBrandKit?.id) {
@@ -443,6 +451,10 @@ export default function OnboardingWizard() {
         setErrors({ brandKitName: 'Brand Kit Name is required' });
         return;
       }
+      if (formData.websiteUrl && !/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/.test(formData.websiteUrl.trim())) {
+        setErrors({ websiteUrl: 'Please enter a valid URL' });
+        return;
+      }
     }
 
     if (currentStep < steps.length) {
@@ -549,6 +561,28 @@ export default function OnboardingWizard() {
                 onChange={(e) => setFormData({...formData, address: e.target.value})}
               />
             </div>
+            
+            <div className={styles.inputGrid}>
+              <div className={styles.inputGroup}>
+                <label>Industry (Optional)</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Bakery, Tech, Real Estate" 
+                  value={formData.industry}
+                  onChange={(e) => setFormData({...formData, industry: e.target.value})}
+                />
+              </div>
+              <div className={styles.inputGroup}>
+                <label>Brand Audience (Optional)</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Gen-Z, Parents, Local Residents" 
+                  value={formData.brandAudience}
+                  onChange={(e) => setFormData({...formData, brandAudience: e.target.value})}
+                />
+              </div>
+            </div>
+
             <div className={styles.inputGrid}>
               <div className={styles.inputGroup}>
                 <label>Pincode <span style={{color: 'red'}}>*</span></label>
@@ -884,6 +918,27 @@ export default function OnboardingWizard() {
             </div>
 
             <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
+              <label>Brand / Product Website (Optional)</label>
+              <input 
+                type="url" 
+                placeholder="https://www.example.com" 
+                value={formData.websiteUrl}
+                onChange={(e) => {
+                  setFormData({...formData, websiteUrl: e.target.value});
+                  if (errors.websiteUrl) setErrors({...errors, websiteUrl: ''});
+                }}
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  if (val && !/^https?:\/\//i.test(val)) {
+                    setFormData({...formData, websiteUrl: `https://${val}`});
+                  }
+                }}
+                style={errors.websiteUrl ? { borderColor: 'red' } : {}}
+              />
+              {errors.websiteUrl && <span style={{color: 'red', fontSize: '12px', marginTop: '4px', display: 'block'}}>{errors.websiteUrl}</span>}
+            </div>
+
+            <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
               <label>Tone</label>
               <select value={formData.tone} onChange={(e) => setFormData({...formData, tone: e.target.value})}>
                 <option value="professional">Professional</option>
@@ -911,6 +966,29 @@ export default function OnboardingWizard() {
                   value={fontOptions.find(opt => opt.value === formData.bodyFont) || fontOptions[1]}
                   onChange={(selected: any) => setFormData({...formData, bodyFont: selected.value})}
                 />
+              </div>
+            </div>
+
+            <div className={styles.inputGrid} style={{ marginBottom: '15px' }}>
+              <div className={styles.inputGroup}>
+                <label>Phrases to Include (Optional)</label>
+                <textarea 
+                  className={styles.descriptionTextarea}
+                  placeholder="e.g. Call now, Limited Time"
+                  value={formData.phrasesToInclude}
+                  onChange={(e) => setFormData({...formData, phrasesToInclude: e.target.value})}
+                  rows={2}
+                ></textarea>
+              </div>
+              <div className={styles.inputGroup}>
+                <label>Phrases to Avoid (Optional)</label>
+                <textarea 
+                  className={styles.descriptionTextarea}
+                  placeholder="e.g. Cheap, Fake"
+                  value={formData.phrasesToAvoid}
+                  onChange={(e) => setFormData({...formData, phrasesToAvoid: e.target.value})}
+                  rows={2}
+                ></textarea>
               </div>
             </div>
 
