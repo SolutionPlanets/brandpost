@@ -494,8 +494,8 @@ export default function SettingsPage() {
   };
 
   const renderBilling = () => {
-    const isPaidPlan = planId !== 'solo';
-    const isTrial = planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date();
+    const isPaidPlan = trialEndsAt === null;
+    const isTrial = planId === 'solo' && trialEndsAt !== null && new Date(trialEndsAt) > new Date();
 
     const planNames: Record<string, string> = {
       solo: 'Solo Starter',
@@ -516,7 +516,7 @@ export default function SettingsPage() {
                 Active Plan: {planNames[planId.toLowerCase()] || planId}
               </div>
               <h3>Manage your subscription details</h3>
-              <p>Your subscription is active. View your transaction receipts, update billing address, or adjust your payment details directly in the Customer Portal.</p>
+              <p>Your subscription is active. View your transaction receipts or adjust your payment details directly in the Customer Portal.</p>
               <button 
                 className={styles.viewPlansBtn}
                 onClick={() => window.location.href = '/api/billing/portal'}

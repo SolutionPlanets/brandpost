@@ -3,13 +3,6 @@ import { cookies } from 'next/headers';
 import { createClient } from '@/utils/supabase/server';
 import Razorpay from 'razorpay';
 
-const inrPricesPaisa: Record<string, { monthly: number; yearly: number }> = {
-  solo: { monthly: 241500, yearly: 2298400 },
-  smb: { monthly: 491200, yearly: 4696300 },
-  agency: { monthly: 1240400, yearly: 11890000 },
-  franchise: { monthly: 3321800, yearly: 31879000 }
-};
-
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -23,14 +16,26 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { planId, period } = body; // period: 'monthly' | 'yearly'
 
-    const validPlans = ['solo', 'smb', 'agency', 'franchise'];
-    if (!planId || !validPlans.includes(planId.toLowerCase())) {
-      return NextResponse.json({ error: 'Invalid planId' }, { status: 400 });
+    if (!planId) {
+      return NextResponse.json({ error: 'Missing planId' }, { status: 400 });
+    }
+
+    // Fetch plan details dynamically from the database
+    const { data: plan, error: planError } = await supabase
+      .from('plan')
+      .select('*')
+      .eq('id', planId.toLowerCase())
+      .single();
+
+    if (planError || !plan) {
+      return NextResponse.json({ error: 'Plan not found or database offline' }, { status: 404 });
     }
 
     const isYearly = period === 'yearly';
-    const planPrices = inrPricesPaisa[planId.toLowerCase()];
-    const amountPaisa = isYearly ? planPrices.yearly : planPrices.monthly;
+    const baseInrPrice = isYearly ? Number(plan.inr_yearly) : Number(plan.inr_monthly);
+    const gstPercentage = Number(plan.gst || 0);
+    const priceWithGst = baseInrPrice * (1 + gstPercentage / 100);
+    const amountPaisa = Math.round(priceWithGst * 100);
 
     const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;

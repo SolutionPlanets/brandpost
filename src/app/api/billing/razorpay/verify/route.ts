@@ -23,6 +23,7 @@ export async function POST(request: Request) {
       amount,
       currency,
       phone_no,
+      mail,
       payment_source
     } = body;
 
@@ -81,6 +82,7 @@ export async function POST(request: Request) {
       orderId: razorpay_order_id,
       gatewayCustomerId: gatewayCustId,
       phoneNo: paymentDetails?.contact || phone_no || '',
+      mail: paymentDetails?.email || mail || '',
       paymentSource: paymentDetails ? `${paymentDetails.method}${paymentDetails.vpa ? ' (' + paymentDetails.vpa + ')' : ''}` : (payment_source || 'razorpay'),
       paymentStatus: 'completed'
     });

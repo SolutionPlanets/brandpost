@@ -93,7 +93,7 @@ function ComposerPageContent() {
   const { 
     brandKitName, brandKits, businessName, brandTone, brandDescription, colors,
     fullName, ownerName, address, pincode, timing, logo,
-    postsUsed, planId, trialEndsAt, refreshBrandData, workspaceId
+    postsUsed, planId, trialEndsAt, refreshBrandData, workspaceId, checkLimitAndRedirect
   } = useBrand();
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -230,10 +230,7 @@ function ComposerPageContent() {
 
   const handleGenerateFull = async () => {
     // Credit check
-    const isTrial = planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date();
-    const currentLimit = isTrial ? 100 : 50;
-    if (postsUsed >= currentLimit) {
-      alert("Please upgrade your plan. You have reached your AI generation limit.");
+    if (checkLimitAndRedirect()) {
       return;
     }
 

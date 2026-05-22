@@ -21,33 +21,32 @@ import {
 } from 'lucide-react';
 import styles from './Razorpay.module.css';
 
-const planMetadata: Record<string, {
-  name: string;
-  monthlyINR: number;
-  yearlyINR: number;
-}> = {
-  solo: { name: 'Solo Starter', monthlyINR: 2415, yearlyINR: 22984 },
-  smb: { name: 'SMB Growth', monthlyINR: 4912, yearlyINR: 46963 },
-  agency: { name: 'Agency Pro', monthlyINR: 12404, yearlyINR: 118900 },
-  franchise: { name: 'Franchise', monthlyINR: 33218, yearlyINR: 318790 }
-};
+const STATIC_PLANS = [
+  { id: 'solo', name: 'Solo Starter', inr_monthly: 2415, inr_yearly: 22984, gst: 18 },
+  { id: 'smb', name: 'SMB Growth', inr_monthly: 4912, inr_yearly: 46963, gst: 18 },
+  { id: 'agency', name: 'Agency Pro', inr_monthly: 12404, inr_yearly: 118900, gst: 18 },
+  { id: 'franchise', name: 'Franchise', inr_monthly: 33218, inr_yearly: 318790, gst: 18 }
+];
 
 type PaymentMethod = 'upi' | 'cards' | 'netbanking' | 'wallet';
 
 function RazorpayCheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { businessName } = useBrand();
+  const { businessName, plans: dbPlans } = useBrand();
   const supabase = createClient();
 
   const rawPlanId = searchParams.get('planId') || 'solo';
   const period = searchParams.get('period') || 'monthly';
-  const planId = planMetadata[rawPlanId.toLowerCase()] ? rawPlanId.toLowerCase() : 'solo';
-  const plan = planMetadata[planId];
+  const plan = (dbPlans && dbPlans.find((p: any) => p.id === rawPlanId.toLowerCase())) || STATIC_PLANS.find((p: any) => p.id === rawPlanId.toLowerCase()) || STATIC_PLANS[0];
+  const planId = plan.id;
   const isYearly = period === 'yearly';
-  const inrPrice = isYearly ? plan.yearlyINR : plan.monthlyINR;
+  const inrPrice = isYearly ? Number(plan.inr_yearly) : Number(plan.inr_monthly);
+  const gstPercentage = typeof plan.gst !== 'undefined' && plan.gst !== null ? Number(plan.gst) : 18;
+  const gstAmount = Math.round(inrPrice * (gstPercentage / 100));
+  const totalPrice = inrPrice + gstAmount;
 
-  const [isCheckingGateway, setIsCheckingGateway] = useState(true);
+  const [isCheckingGateway, setIsCheckingGateway] = useState(false);
   const [useMockModal, setUseMockModal] = useState(true);
   const [activeMethod, setActiveMethod] = useState<PaymentMethod>('upi');
   const [loading, setLoading] = useState(false);
@@ -67,114 +66,127 @@ function RazorpayCheckoutContent() {
   const [cvv, setCvv] = useState('');
   const [cardName, setCardName] = useState('');
 
+  // Contact step states
+  const [contactStep, setContactStep] = useState(true);
+  const [validationError, setValidationError] = useState('');
 
+  const handleContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setValidationError('');
 
-  // Dynamically load Razorpay standard script
-  useEffect(() => {
+    // Phone validation
+    const cleanPhone = contactPhone.replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      setValidationError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(contactEmail)) {
+      setValidationError('Please enter a valid email address.');
+      return;
+    }
+
+    setLoading(true);
     setIsCheckingGateway(true);
+    setContactStep(false);
 
+    // Dynamically load Razorpay standard script
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
     document.body.appendChild(script);
 
-    // Fetch order to see if keys are active
-    async function checkGateway() {
-      try {
-        const res = await fetch('/api/billing/razorpay/order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ planId, period })
-        });
+    try {
+      const res = await fetch('/api/billing/razorpay/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId, period })
+      });
 
-        if (!res.ok) {
-          throw new Error('Order creation api failed');
-        }
+      if (!res.ok) {
+        throw new Error('Order creation API failed');
+      }
 
-        const data = await res.json();
-        
-        if (data.mock) {
-          // If keys are missing, stay on the custom mock modal
-          setUseMockModal(true);
-          setIsCheckingGateway(false);
-        } else {
-          // Keys are present! Open real Razorpay script overlay
-          setUseMockModal(false);
-          setIsCheckingGateway(false);
-
-          const { data: { user } } = await supabase.auth.getUser();
-
-          const options = {
-            key: data.key,
-            amount: data.amount,
-            currency: data.currency,
-            name: 'BrandPost AI',
-            description: `Upgrade to ${plan.name} (${period})`,
-            order_id: data.id,
-            handler: async function (response: any) {
-              setLoading(true);
-              try {
-                const verifyRes = await fetch('/api/billing/razorpay/verify', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    razorpay_payment_id: response.razorpay_payment_id,
-                    razorpay_order_id: response.razorpay_order_id,
-                    razorpay_signature: response.razorpay_signature,
-                    planId: planId,
-                    amount: inrPrice,
-                    currency: 'INR',
-                    phone_no: contactPhone,
-                    payment_source: 'razorpay'
-                  })
-                });
-
-                if (verifyRes.ok) {
-                  localStorage.removeItem('brandpost_user_data');
-                  window.location.href = '/dashboard?payment_success=true';
-                } else {
-                  throw new Error('Payment verification failed');
-                }
-              } catch (err) {
-                alert('Verification failed. Contact support.');
-                setLoading(false);
-              }
-            },
-            prefill: {
-              name: user?.user_metadata?.full_name || '',
-              email: contactEmail || '',
-              contact: contactPhone || ''
-            },
-            theme: {
-              color: '#4f46e5'
-            },
-            modal: {
-              ondismiss: function() {
-                router.push('/pricing');
-              }
-            }
-          };
-
-          const rzp = new (window as any).Razorpay(options);
-          rzp.open();
-        }
-      } catch (err) {
-        console.error('Razorpay init error:', err);
-        // Fallback to beautiful mock modal in case of script load failures
+      const data = await res.json();
+      
+      if (data.mock) {
+        // If keys are missing, stay on the custom mock modal
         setUseMockModal(true);
         setIsCheckingGateway(false);
+        setLoading(false);
+      } else {
+        // Keys are present! Open real Razorpay script overlay
+        setUseMockModal(false);
+        setIsCheckingGateway(false);
+        setLoading(false);
+
+        const { data: { user } } = await supabase.auth.getUser();
+
+        const options = {
+          key: data.key,
+          amount: data.amount,
+          currency: data.currency,
+          name: 'BrandPost AI',
+          description: `Upgrade to ${plan.name} (${period})`,
+          order_id: data.id,
+          handler: async function (response: any) {
+            setLoading(true);
+            try {
+              const verifyRes = await fetch('/api/billing/razorpay/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_signature: response.razorpay_signature,
+                  planId: planId,
+                  amount: totalPrice,
+                  currency: 'INR',
+                  phone_no: cleanPhone,
+                  mail: contactEmail,
+                  payment_source: 'razorpay'
+                })
+              });
+
+              if (verifyRes.ok) {
+                localStorage.removeItem('brandpost_user_data');
+                window.location.href = '/dashboard?payment_success=true';
+              } else {
+                throw new Error('Payment verification failed');
+              }
+            } catch (err) {
+              alert('Verification failed. Contact support.');
+              setLoading(false);
+            }
+          },
+          prefill: {
+            name: user?.user_metadata?.full_name || '',
+            email: contactEmail,
+            contact: '+91' + cleanPhone
+          },
+          theme: {
+            color: '#4f46e5'
+          },
+          modal: {
+            ondismiss: function() {
+              router.push('/pricing');
+            }
+          }
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
       }
+    } catch (err) {
+      console.error('Razorpay init error:', err);
+      // Fallback to beautiful mock modal in case of script load failures
+      setUseMockModal(true);
+      setIsCheckingGateway(false);
+      setLoading(false);
     }
-
-    // Short timeout to let script append finish
-    setTimeout(checkGateway, 800);
-
-    return () => {
-      try {
-        document.body.removeChild(script);
-      } catch (e) {}
-    };
-  }, [planId, period]);
+  };
 
   // Auto-format card number
   const handleCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -221,9 +233,10 @@ function RazorpayCheckoutContent() {
         body: JSON.stringify({
           planId,
           billingPeriod: period,
-          amount: inrPrice,
+          amount: totalPrice,
           currency: 'INR',
           phone_no: contactPhone,
+          mail: contactEmail,
           payment_source: 'razorpay_mock_card'
         })
       });
@@ -277,9 +290,10 @@ function RazorpayCheckoutContent() {
         body: JSON.stringify({
           planId,
           billingPeriod: period,
-          amount: inrPrice,
+          amount: totalPrice,
           currency: 'INR',
           phone_no: contactPhone,
+          mail: contactEmail,
           payment_source: `razorpay_mock_upi (${upiId})`
         })
       });
@@ -304,6 +318,85 @@ function RazorpayCheckoutContent() {
   };
 
 
+
+  // Step 1.5: Input Contact Details Modal (If contactStep is true, show first to collect details)
+  if (contactStep) {
+    return (
+      <div className={styles.contactModalContainer}>
+        <div className={styles.contactModal}>
+          <h2 className={styles.contactTitle}>Checkout Details</h2>
+          <p className={styles.contactSubtitle}>Please enter your contact details to proceed with the secure payment.</p>
+          
+          <form onSubmit={handleContactSubmit}>
+            <div className={styles.inputFieldGroup}>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Phone Number</label>
+                <div className={styles.phoneInputWrapper}>
+                  <div className={styles.countrySelector}>
+                    <span className={styles.flag}>🇮🇳</span>
+                    <span>+91</span>
+                  </div>
+                  <input 
+                    type="tel"
+                    placeholder="98765 43210"
+                    className={styles.contactInput}
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value.replace(/\D/g, '').substring(0, 10))}
+                    maxLength={10}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Email Address</label>
+                <div className={styles.emailInputWrapper}>
+                  <div className={styles.mailIconWrapper}>
+                    <Mail size={18} style={{ color: '#64748b' }} />
+                  </div>
+                  <input 
+                    type="email"
+                    placeholder="yourname@example.com"
+                    className={styles.contactInput}
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            {validationError && <p className={styles.errorLabel}>{validationError}</p>}
+
+            <button 
+              type="submit"
+              className={styles.continueButton}
+              disabled={loading}
+            >
+              {loading ? 'Initializing Checkout...' : 'Continue to Payment'}
+            </button>
+          </form>
+          
+          <button 
+            onClick={() => router.push('/pricing')}
+            style={{ 
+              marginTop: '1rem', 
+              width: '100%', 
+              background: 'none', 
+              border: 'none', 
+              color: '#64748b', 
+              fontSize: '0.9rem', 
+              fontWeight: 600, 
+              cursor: 'pointer',
+              textAlign: 'center'
+            }}
+          >
+            Cancel and Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Step 2: Checking Gateway / SDK loader state
   if (isCheckingGateway) {
@@ -361,8 +454,21 @@ function RazorpayCheckoutContent() {
 
                 <div className={styles.priceCard}>
                   <span className={styles.priceLabel}>Price Summary</span>
-                  <div className={styles.priceValue}>
-                    ₹{inrPrice.toLocaleString('en-IN')}.00
+                  <div className={styles.priceBreakdown}>
+                    <div className={styles.breakdownRow}>
+                      <span>Base Price</span>
+                      <span>₹{inrPrice.toLocaleString('en-IN')}.00</span>
+                    </div>
+                    {gstPercentage > 0 && (
+                      <div className={styles.breakdownRow}>
+                        <span>GST ({gstPercentage}%)</span>
+                        <span>₹{gstAmount.toLocaleString('en-IN')}.00</span>
+                      </div>
+                    )}
+                    <div className={styles.totalRow}>
+                      <span>Total</span>
+                      <span>₹{totalPrice.toLocaleString('en-IN')}.00</span>
+                    </div>
                   </div>
                 </div>
 
@@ -683,7 +789,7 @@ function RazorpayCheckoutContent() {
                     </>
                   ) : (
                     <>
-                      <span>Pay ₹{inrPrice.toLocaleString('en-IN')}.00</span>
+                      <span>Pay ₹{totalPrice.toLocaleString('en-IN')}.00</span>
                       <ChevronRight size={16} />
                     </>
                   )}

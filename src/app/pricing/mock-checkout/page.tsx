@@ -3,22 +3,17 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ShieldCheck, CreditCard, ArrowLeft, Check, HelpCircle } from 'lucide-react';
+import { useBrand } from '@/contexts/BrandContext';
 import styles from './MockBilling.module.css';
 
-const planMetadata: Record<string, {
-  name: string;
-  monthlyUSD: number;
-  yearlyUSD: number;
-  monthlyINR: number;
-  yearlyINR: number;
-  features: string[];
-}> = {
-  solo: {
+const STATIC_PLANS = [
+  {
+    id: 'solo',
     name: 'Solo Starter',
-    monthlyUSD: 29,
-    yearlyUSD: 276,
-    monthlyINR: 2415,
-    yearlyINR: 22984,
+    usd_monthly: 29,
+    usd_yearly: 276,
+    inr_monthly: 2415,
+    inr_yearly: 22984,
     features: [
       '1 Brand kit',
       '30 AI posts / month',
@@ -28,12 +23,13 @@ const planMetadata: Record<string, {
       '5 Post templates'
     ]
   },
-  smb: {
+  {
+    id: 'smb',
     name: 'SMB Growth',
-    monthlyUSD: 59,
-    yearlyUSD: 564,
-    monthlyINR: 4912,
-    yearlyINR: 46963,
+    usd_monthly: 59,
+    usd_yearly: 564,
+    inr_monthly: 4912,
+    inr_yearly: 46963,
     features: [
       '3 Brand kits',
       '100 AI posts / month',
@@ -43,12 +39,13 @@ const planMetadata: Record<string, {
       '20 Post templates'
     ]
   },
-  agency: {
+  {
+    id: 'agency',
     name: 'Agency Pro',
-    monthlyUSD: 149,
-    yearlyUSD: 1428,
-    monthlyINR: 12404,
-    yearlyINR: 118900,
+    usd_monthly: 149,
+    usd_yearly: 1428,
+    inr_monthly: 12404,
+    inr_yearly: 118900,
     features: [
       '15 Brand kits',
       'Unlimited AI posts',
@@ -59,12 +56,13 @@ const planMetadata: Record<string, {
       'White-label reports'
     ]
   },
-  franchise: {
+  {
+    id: 'franchise',
     name: 'Franchise',
-    monthlyUSD: 399,
-    yearlyUSD: 3828,
-    monthlyINR: 33218,
-    yearlyINR: 318790,
+    usd_monthly: 399,
+    usd_yearly: 3828,
+    inr_monthly: 33218,
+    inr_yearly: 318790,
     features: [
       'Unlimited Brand kits',
       'Unlimited AI posts',
@@ -75,7 +73,7 @@ const planMetadata: Record<string, {
       'White-label reports'
     ]
   }
-};
+];
 
 function MockCheckoutContent() {
   const router = useRouter();
@@ -83,13 +81,14 @@ function MockCheckoutContent() {
   const rawPlanId = searchParams.get('planId') || 'solo';
   const period = searchParams.get('period') || 'monthly';
   const errorParam = searchParams.get('error');
+  const { plans: dbPlans } = useBrand();
 
-  const planId = planMetadata[rawPlanId.toLowerCase()] ? rawPlanId.toLowerCase() : 'solo';
-  const plan = planMetadata[planId];
+  const plan = (dbPlans && dbPlans.find((p: any) => p.id === rawPlanId.toLowerCase())) || STATIC_PLANS.find((p: any) => p.id === rawPlanId.toLowerCase()) || STATIC_PLANS[0];
+  const planId = plan.id;
   const isYearly = period === 'yearly';
 
-  const usdPrice = isYearly ? plan.yearlyUSD : plan.monthlyUSD;
-  const inrPrice = isYearly ? plan.yearlyINR : plan.monthlyINR;
+  const usdPrice = isYearly ? Number(plan.usd_yearly) : Number(plan.usd_monthly);
+  const inrPrice = isYearly ? Number(plan.inr_yearly) : Number(plan.inr_monthly);
 
   const [cardName, setCardName] = useState('');
   const [cardNumber, setCardNumber] = useState('');
@@ -237,7 +236,7 @@ function MockCheckoutContent() {
             </div>
             
             <ul className={styles.featureList}>
-              {plan.features.map((feature, i) => (
+              {plan.features.map((feature: any, i: number) => (
                 <li key={i} className={styles.featureItem}>
                   <Check size={16} className={styles.featureIcon} />
                   <span>{feature}</span>

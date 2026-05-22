@@ -53,6 +53,7 @@ interface BrandContextType {
   brandTone: string;
   brandDescription: string;
   planId: string;
+  plans: any[];
   trialEndsAt: string | null;
   createdAt: string | null;
   postsUsed: number;
@@ -86,6 +87,132 @@ const BRAND_KIT_LIMITS: Record<string, number> = {
   'trial': 3
 };
 
+export const DEFAULT_PLANS = [
+  {
+    id: 'solo',
+    name: 'Solo Starter',
+    target: 'Solo entrepreneur',
+    usd_monthly: 29,
+    usd_yearly: 276,
+    inr_monthly: 2415,
+    inr_yearly: 22984,
+    post_limit: 30,
+    brand_kit_limit: 1,
+    team_members_limit: '1',
+    festive_events: '12 (major only)',
+    scheduling_queue: 'Yes',
+    post_templates_limit: '5',
+    white_label_reports: 'No',
+    features: [
+      '1 Brand kit',
+      '30 AI posts / month',
+      '1 Team member',
+      '12 Festive calendar events (major only)',
+      'Scheduling queue',
+      '5 Post templates',
+      'Standard reports'
+    ],
+    gst: 18
+  },
+  {
+    id: 'smb',
+    name: 'SMB Growth',
+    target: 'Small business',
+    usd_monthly: 59,
+    usd_yearly: 564,
+    inr_monthly: 4912,
+    inr_yearly: 46963,
+    post_limit: 100,
+    brand_kit_limit: 3,
+    team_members_limit: '3',
+    festive_events: 'All 30+',
+    scheduling_queue: 'Yes',
+    post_templates_limit: '20',
+    white_label_reports: 'No',
+    features: [
+      '3 Brand kits',
+      '100 AI posts / month',
+      '3 Team members',
+      'All 30+ Festive calendar events',
+      'Scheduling queue',
+      '20 Post templates',
+      'Standard reports'
+    ],
+    is_featured: true,
+    gst: 18
+  },
+  {
+    id: 'agency',
+    name: 'Agency Pro',
+    target: 'Marketing agencies',
+    usd_monthly: 149,
+    usd_yearly: 1428,
+    inr_monthly: 12404,
+    inr_yearly: 118900,
+    post_limit: 2147483647,
+    brand_kit_limit: 15,
+    team_members_limit: '10',
+    festive_events: 'All 30+',
+    scheduling_queue: 'Yes + bulk',
+    post_templates_limit: 'Unlimited',
+    white_label_reports: 'Yes',
+    features: [
+      '15 Brand kits',
+      'Unlimited AI posts',
+      '10 Team members',
+      'All 30+ Festive calendar events',
+      'Scheduling queue + bulk',
+      'Unlimited Post templates',
+      'White-label reports'
+    ],
+    gst: 18
+  },
+  {
+    id: 'franchise',
+    name: 'Franchise',
+    target: 'Franchise brands',
+    usd_monthly: 399,
+    usd_yearly: 3828,
+    inr_monthly: 33218,
+    inr_yearly: 318790,
+    post_limit: 2147483647,
+    brand_kit_limit: 1000,
+    team_members_limit: 'Unlimited',
+    festive_events: 'All 30+',
+    scheduling_queue: 'Yes + bulk',
+    post_templates_limit: 'Unlimited',
+    white_label_reports: 'Yes',
+    features: [
+      'Unlimited Brand kits',
+      'Unlimited AI posts',
+      'Unlimited Team members',
+      'All 30+ Festive calendar events',
+      'Scheduling queue + bulk',
+      'Unlimited Post templates',
+      'White-label reports'
+    ],
+    gst: 18
+  },
+  {
+    id: 'trial',
+    name: 'Trial',
+    target: 'Trial period configuration',
+    usd_monthly: 0,
+    usd_yearly: 0,
+    inr_monthly: 0,
+    inr_yearly: 0,
+    post_limit: 100,
+    brand_kit_limit: 3,
+    team_members_limit: '3',
+    festive_events: 'All 30+',
+    scheduling_queue: 'Yes',
+    post_templates_limit: '20',
+    white_label_reports: 'No',
+    features: [],
+    gst: 0
+  }
+];
+
 const BrandContext = createContext<BrandContextType | undefined>(undefined);
 
 export function BrandProvider({ children }: { children: React.ReactNode }) {
@@ -109,6 +236,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [brandTone, setBrandTone] = useState('Professional');
   const [brandDescription, setBrandDescription] = useState('');
   const [planId, setPlanId] = useState('solo');
+  const [plans, setPlans] = useState<any[]>(DEFAULT_PLANS);
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [postsUsed, setPostsUsed] = useState(0);
@@ -119,6 +247,19 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
 
   const refreshBrandData = async () => {
+    // Fetch active plans dynamically from database
+    try {
+      const { data: plansData } = await supabase
+        .from('plan')
+        .select('*')
+        .eq('is_active', true);
+      if (plansData && plansData.length > 0) {
+        setPlans(plansData);
+      }
+    } catch (e) {
+      console.error('Error fetching plans from DB:', e);
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -220,6 +361,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         if (d.brandTone) setBrandTone(d.brandTone);
         if (d.brandDescription) setBrandDescription(d.brandDescription);
         if (d.planId) setPlanId(d.planId);
+        if (d.plans) setPlans(d.plans);
         if (d.trialEndsAt) setTrialEndsAt(d.trialEndsAt);
         if (d.createdAt) setCreatedAt(d.createdAt);
         if (d.postsUsed !== undefined) setPostsUsed(d.postsUsed);
@@ -250,6 +392,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       brandTone,
       brandDescription,
       planId,
+      plans,
       trialEndsAt,
       createdAt,
       postsUsed,
@@ -260,14 +403,34 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       profilePhoto,
       authProvider
     }));
-  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, planId, trialEndsAt, createdAt, postsUsed, timezone, logo, colors, timing, profilePhoto, authProvider]);
+  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, planId, plans, trialEndsAt, createdAt, postsUsed, timezone, logo, colors, timing, profilePhoto, authProvider]);
 
-  const isTrial = planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date();
-  const currentLimit = isTrial ? PLAN_LIMITS['trial'] : (PLAN_LIMITS[planId] || 30);
-  const brandKitLimit = isTrial ? BRAND_KIT_LIMITS['trial'] : (BRAND_KIT_LIMITS[planId] || 1);
+  // Automatic redirect if trial is expired and user is on a dashboard route
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard')) {
+      const isExpired = trialEndsAt !== null && new Date(trialEndsAt) <= new Date();
+      if (isExpired) {
+        alert("Your 14-day free trial has expired. Please buy a plan to continue using Brandpost!");
+        window.location.href = '/pricing?from=trial_expired';
+      }
+    }
+  }, [trialEndsAt]);
+
+  const activePlan = plans.find(p => p.id === planId) || DEFAULT_PLANS.find(p => p.id === planId) || DEFAULT_PLANS[0];
+  const trialPlan = plans.find(p => p.id === 'trial') || DEFAULT_PLANS.find(p => p.id === 'trial') || DEFAULT_PLANS[4];
+
+  const isTrial = planId === 'solo' && trialEndsAt !== null && new Date(trialEndsAt) > new Date();
+  const isTrialExpired = trialEndsAt !== null && new Date(trialEndsAt) <= new Date();
+  const currentLimit = isTrialExpired ? 0 : (isTrial ? trialPlan.post_limit : activePlan.post_limit);
+  const brandKitLimit = isTrialExpired ? 0 : (isTrial ? trialPlan.brand_kit_limit : activePlan.brand_kit_limit);
   const isLimitReached = postsUsed >= currentLimit;
 
   const checkLimitAndRedirect = () => {
+    if (isTrialExpired) {
+      alert("Your 14-day free trial has expired. Please buy a plan to continue using Brandpost!");
+      window.location.href = '/pricing?from=trial_expired';
+      return true;
+    }
     if (isLimitReached) {
       alert(`Your AI generation limit (${currentLimit} posts) has been reached. Please upgrade your plan to continue creating amazing content!`);
       window.location.href = '/pricing?from=limit_reached';
@@ -293,6 +456,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     authProvider,
     colors,
     planId,
+    plans,
     trialEndsAt,
     createdAt,
     postsUsed,
@@ -308,7 +472,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     setColors,
     refreshBrandData,
     checkLimitAndRedirect
-  }), [fullName, ownerName, businessName, brandKitName, brandKits, address, pincode, instagram, facebook, brandTone, brandDescription, logo, colors, planId, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, profilePhoto, authProvider, isLimitReached, currentLimit, brandKitLimit]);
+  }), [fullName, ownerName, businessName, brandKitName, brandKits, address, pincode, instagram, facebook, brandTone, brandDescription, logo, colors, planId, plans, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, profilePhoto, authProvider, isLimitReached, currentLimit, brandKitLimit]);
 
   return (
     <BrandContext.Provider value={value}>

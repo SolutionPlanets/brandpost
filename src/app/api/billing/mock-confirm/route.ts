@@ -15,10 +15,20 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { planId, amount, currency, phone_no, payment_source } = body;
+    const { planId, amount, currency, phone_no, mail, payment_source } = body;
 
-    const validPlans = ['solo', 'smb', 'agency', 'franchise'];
-    if (!planId || !validPlans.includes(planId)) {
+    if (!planId) {
+      return NextResponse.json({ error: 'Missing plan ID' }, { status: 400 });
+    }
+
+    // Fetch plan from database to validate it
+    const { data: plan, error: planError } = await supabase
+      .from('plan')
+      .select('id')
+      .eq('id', planId.toLowerCase())
+      .maybeSingle();
+
+    if (planError || !plan) {
       return NextResponse.json({ error: 'Invalid plan ID' }, { status: 400 });
     }
 
@@ -36,6 +46,7 @@ export async function POST(request: Request) {
       orderId: `mock_order_${Date.now()}`,
       gatewayCustomerId: mockCustId,
       phoneNo: phone_no || '',
+      mail: mail || '',
       paymentSource: payment_source || 'mock',
       paymentStatus: 'completed'
     });

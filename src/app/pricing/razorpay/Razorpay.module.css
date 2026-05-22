@@ -92,6 +92,34 @@
   margin-top: 4px;
 }
 
+.priceBreakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 0.85rem;
+  border-top: 1px dashed #e2e8f0;
+  padding-top: 12px;
+}
+
+.breakdownRow {
+  display: flex;
+  justify-content: space-between;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 800;
+  color: #0f172a;
+  font-size: 0.95rem;
+  margin-top: 4px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 8px;
+}
+
 .infoRow {
   background: rgba(255, 255, 255, 0.15);
   border-radius: 6px;

@@ -106,7 +106,7 @@ export default function DashboardHome() {
     fetchDashboardData();
   }, [workspaceId, postsUsed]);
 
-  const isTrial = planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date();
+  const isTrial = planId === 'solo' && trialEndsAt !== null && new Date(trialEndsAt) > new Date();
   const daysRemaining = trialEndsAt ? daysUntil(trialEndsAt) : 0;
   
   const trialStartDate = createdAt ? new Date(createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';

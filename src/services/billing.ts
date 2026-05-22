@@ -1,9 +1,17 @@
 import { createAdminClient } from '@/utils/supabase/admin';
 
-export async function updateUserPlan(userId: string, planId: string, stripeCustomerId?: string) {
+export async function updateUserPlan(
+  userId: string,
+  planId: string,
+  stripeCustomerId?: string,
+  trialEndsAt: string | null = null
+) {
   const adminSupabase = createAdminClient();
 
-  const updateData: any = { plan_id: planId };
+  const updateData: any = { 
+    plan_id: planId,
+    trial_ends_at: trialEndsAt
+  };
   if (stripeCustomerId) {
     updateData.stripe_customer_id = stripeCustomerId;
   }
@@ -34,13 +42,6 @@ export async function updateUserPlan(userId: string, planId: string, stripeCusto
   return true;
 }
 
-const planIdToName: Record<string, string> = {
-  solo: 'Solo Starter',
-  smb: 'SMB Growth',
-  agency: 'Agency Pro',
-  franchise: 'Franchise'
-};
-
 export async function logPayment(details: {
   userId: string;
   planId: string;
@@ -50,6 +51,7 @@ export async function logPayment(details: {
   orderId?: string;
   gatewayCustomerId?: string;
   phoneNo?: string;
+  mail?: string;
   paymentSource?: string;
   paymentStatus: 'completed' | 'failed' | 'pending';
 }) {
@@ -69,10 +71,27 @@ export async function logPayment(details: {
     console.error('Error fetching workspace ID for logging payment:', e);
   }
 
-  const mappedPlanName = details.planName || planIdToName[details.planId.toLowerCase()] || details.planId;
+  let mappedPlanName = details.planName;
+  if (!mappedPlanName) {
+    try {
+      const { data: plan } = await adminSupabase
+        .from('plan')
+        .select('name')
+        .eq('id', details.planId.toLowerCase())
+        .maybeSingle();
+      if (plan) {
+        mappedPlanName = plan.name;
+      }
+    } catch (e) {
+      console.error('Error fetching plan name for payment logging:', e);
+    }
+  }
+  if (!mappedPlanName) {
+    mappedPlanName = details.planId;
+  }
 
   const { error } = await adminSupabase
-    .from('payments')
+    .from('subscription')
     .insert({
       user_id: details.userId,
       workspace_id: workspaceId,
@@ -83,6 +102,7 @@ export async function logPayment(details: {
       order_id: details.orderId || null,
       gateway_customer_id: details.gatewayCustomerId || null,
       phone_no: details.phoneNo || null,
+      mail: details.mail || null,
       payment_source: details.paymentSource || null,
       payment_status: details.paymentStatus
     });

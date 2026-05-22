@@ -116,8 +116,8 @@ export async function POST(request: Request) {
         if (userError || !user) {
           console.error(`User with customer ID ${customerId} not found in database.`);
         } else {
-          console.log(`Subscription deleted. Downgrading user ${user.id} to 'solo' plan.`);
-          await updateUserPlan(user.id, 'solo');
+          console.log(`Subscription deleted. Downgrading user ${user.id} to 'solo' plan with expired trial.`);
+          await updateUserPlan(user.id, 'solo', undefined, new Date(0).toISOString());
         }
         break;
       }
