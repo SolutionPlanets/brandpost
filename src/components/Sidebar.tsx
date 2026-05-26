@@ -9,7 +9,8 @@ import {
   Settings, 
   LogOut,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  CreditCard
 } from 'lucide-react';
 import styles from './Sidebar.module.css';
 
@@ -24,6 +25,7 @@ const menuItems = [
   { name: 'Brand Kit', icon: Palette, href: '/dashboard/brand-kit' },
   { name: 'Calendar', icon: CalendarDays, href: '/dashboard/calendar' },
   { name: 'History', icon: Clock, href: '/dashboard/posts' },
+  { name: 'Plans', icon: CreditCard, href: '/pricing?from=dashboard' },
   { name: 'Settings', icon: Settings, href: '/dashboard/settings' },
 ];
 

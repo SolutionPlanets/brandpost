@@ -6,7 +6,8 @@ export const getCaptionPrompt = (
   extraInstructions: string,
   wordCount?: number,
   hashtagCount?: number,
-  campaignExpiry?: string
+  campaignExpiry?: string,
+  mentionWebsiteInCaption?: boolean
 ) => {
   const brandContext = brandDetails ? `
   BRAND CONTEXT (strictly follow):
@@ -46,6 +47,7 @@ export const getCaptionPrompt = (
   - Strongly adhere to any offers, details, tone, or specific hashtags mentioned in the "Post Description".
   - If "MUST INCLUDE" phrases are listed above, weave them naturally into the caption body.
   - If "MUST AVOID" phrases are listed above, never use those words or synonyms.
+  ${mentionWebsiteInCaption && brandDetails?.websiteUrl ? `- CRITICAL LINK RULE: You MUST append the website link "${brandDetails.websiteUrl}" to the end of the caption text (before the hashtags) as a clear call to action.` : ''}
   - Avoid overly robotic or generic AI language. Sound human, authentic, and on-brand.
   
   Format the response STRICTLY as a JSON object with a "captions" array containing exactly 1 string.

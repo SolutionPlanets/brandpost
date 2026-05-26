@@ -42,12 +42,15 @@
   background-color: var(--surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
 .stepperItem {
   display: flex;
   align-items: center;
   gap: 0.625rem;
+  flex-shrink: 0;
 }
 
 .stepCircle {
@@ -1558,5 +1561,47 @@
   color: #a8a8a8;
   margin-top: 6px;
   text-transform: uppercase;
+}
+
+.imageActionButtons {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 10;
+}
+
+.imageActionButtons .downloadBtn {
+  position: static;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.editBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  height: 36px;
+  border-radius: 18px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+}
+
+.editBtn:hover {
+  background-color: white;
+  color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 

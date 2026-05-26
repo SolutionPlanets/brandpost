@@ -229,6 +229,11 @@ export async function POST(req: Request) {
       postId: regenPostId, // Optional: set when regenerating an existing post's image
       graphicHeadline,
       heroObjects,
+      currentCaption,
+      mentionBrandLogo,
+      brandLogoPosition,
+      mentionWebsiteInPost,
+      brandLinkPosition,
     } = await req.json();
 
     if (!process.env.GOOGLE_GEMINI_API_KEY) {
@@ -277,6 +282,7 @@ export async function POST(req: Request) {
     console.log('Final Target Workspace:', targetWorkspaceId, 'UID:', uid);
 
     // ── REGEN LIMIT CHECK (only for regeneration, not first generation) ──
+    let remainingImageRegens = DAILY_IMAGE_REGEN_LIMIT;
     if (regenPostId) {
       const { allowed, remaining } = await checkAndIncrementRegenLimit(adminSupabase, regenPostId, 'image');
       if (!allowed) {
@@ -286,6 +292,7 @@ export async function POST(req: Request) {
           remainingImageRegens: 0,
         }, { status: 429 });
       }
+      remainingImageRegens = remaining;
       console.log(`🔄 Regeneration allowed. ${remaining} image regens remaining today.`);
     }
 
@@ -304,7 +311,11 @@ export async function POST(req: Request) {
           content_type: contentType,
           status: 'draft',
           extra_instructions: extraInstructions,
-          caption: `Processing: ${topic}...`
+          caption: `Processing: ${topic}...`,
+          mention_brand_logo: mentionBrandLogo,
+          brand_logo_position: brandLogoPosition,
+          mention_website_in_post: mentionWebsiteInPost,
+          brand_link_position: brandLinkPosition
         }])
         .select('id')
         .single();
@@ -320,7 +331,7 @@ export async function POST(req: Request) {
         `https://picsum.photos/seed/${topic.replace(/\s+/g, '')}1/1024/1024`
       ];
 
-      return await processAndStoreImages(dummyUrls, targetWorkspaceId, uid, topic, platform, contentType, brandKitId, workspace, extraInstructions, draftId);
+      return await processAndStoreImages(dummyUrls, targetWorkspaceId, uid, topic, platform, contentType, brandKitId, workspace, extraInstructions, draftId, remainingImageRegens);
     }
 
     // 3. Resolve platform aspect ratio
@@ -334,7 +345,10 @@ export async function POST(req: Request) {
     let designRationale = '';
 
     try {
-      const promptExpansionMsg = getImageExpansionPrompt(brandDetails, topic, contentType, platform, extraInstructions, graphicHeadline, heroObjects);
+      const promptExpansionMsg = getImageExpansionPrompt(
+        brandDetails, topic, contentType, platform, extraInstructions, graphicHeadline, heroObjects,
+        mentionBrandLogo, brandLogoPosition, mentionWebsiteInPost, brandLinkPosition
+      );
 
       const expansionResult = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -400,7 +414,8 @@ export async function POST(req: Request) {
         brandKitId, workspace, extraInstructions, draftId,
         // Extended metadata
         expandedPrompt, mergedNegativePrompt, setup.modelId, aspectRatio,
-        regenPostId
+        regenPostId, currentCaption,
+        mentionBrandLogo, brandLogoPosition, mentionWebsiteInPost, brandLinkPosition
       );
 
     } catch (imgErr: any) {
@@ -442,6 +457,11 @@ async function processAndStoreBuffer(
   modelUsed?: string,
   aspectRatio?: string,
   isRegen?: string, // truthy if this is a regeneration
+  currentCaption?: string,
+  mentionBrandLogo?: boolean,
+  brandLogoPosition?: string,
+  mentionWebsiteInPost?: boolean,
+  brandLinkPosition?: string
 ) {
   const adminSupabase = createAdminClient();
 
@@ -479,17 +499,19 @@ async function processAndStoreBuffer(
     if (negativePrompt) metadataFields.negative_prompt = negativePrompt;
     if (modelUsed) metadataFields.model_used = modelUsed;
     if (aspectRatio) metadataFields.aspect_ratio = aspectRatio;
+    if (mentionBrandLogo !== undefined) metadataFields.mention_brand_logo = mentionBrandLogo;
+    if (brandLogoPosition !== undefined) metadataFields.brand_logo_position = brandLogoPosition;
+    if (mentionWebsiteInPost !== undefined) metadataFields.mention_website_in_post = mentionWebsiteInPost;
+    if (brandLinkPosition !== undefined) metadataFields.brand_link_position = brandLinkPosition;
 
-    if (draftId) {
+    if (draftId && !isRegen) {
       const updatePayload: any = {
         image_url: publicUrl,
         status: 'draft',
         ...metadataFields,
       };
-      // Only overwrite caption placeholder on first generation, not on regen
-      if (!isRegen) {
-        updatePayload.caption = `Generated for ${topic} on ${platform}`;
-      }
+      
+      updatePayload.caption = currentCaption || `Generated for ${topic} on ${platform}`;
 
       const { data, error } = await adminSupabase
         .from('posts')
@@ -505,7 +527,7 @@ async function processAndStoreBuffer(
         .insert([{
           workspace_id: targetWorkspaceId,
           brand_kit_id: brandKitId || null,
-          caption: `Generated for ${topic} on ${platform}`,
+          caption: currentCaption || `Generated for ${topic} on ${platform}`,
           image_url: publicUrl,
           status: 'draft',
           platform: platform === 'both' ? 'both' : platform,
@@ -526,21 +548,19 @@ async function processAndStoreBuffer(
       return NextResponse.json({ images: [{ url: publicUrl, id: draftId || null }] });
     }
 
-    // 5. Update usage in workspace (only for first generation, not regens)
-    if (!isRegen) {
-      await adminSupabase
-        .from('workspaces')
-        .update({ posts_used_this_cycle: (workspace.posts_used_this_cycle || 0) + 1 })
-        .eq('id', targetWorkspaceId);
-    }
+    // 5. Update usage in workspace (costs 1 credit for both initial and regenerations)
+    await adminSupabase
+      .from('workspaces')
+      .update({ posts_used_this_cycle: (workspace.posts_used_this_cycle || 0) + 1 })
+      .eq('id', targetWorkspaceId);
 
     // 6. Fetch remaining regen count for the response
     let remainingImageRegens = DAILY_IMAGE_REGEN_LIMIT;
-    if (isRegen && postData?.id) {
+    if (isRegen) {
       const { data: regenRow } = await adminSupabase
         .from('regen_limits')
         .select('image_count')
-        .eq('post_id', postData.id)
+        .eq('post_id', isRegen)
         .maybeSingle();
       if (regenRow) {
         remainingImageRegens = Math.max(0, DAILY_IMAGE_REGEN_LIMIT - (regenRow.image_count || 0));
@@ -569,7 +589,8 @@ async function processAndStoreImages(
   brandKitId: any,
   workspace: any,
   extraInstructions: string,
-  draftId?: string
+  draftId?: string,
+  remainingImageRegens?: number
 ) {
   const adminSupabase = createAdminClient();
 
@@ -667,5 +688,5 @@ async function processAndStoreImages(
     .update({ posts_used_this_cycle: (workspace.posts_used_this_cycle || 0) + results.length })
     .eq('id', targetWorkspaceId);
 
-  return NextResponse.json({ images: results, remainingImageRegens: DAILY_IMAGE_REGEN_LIMIT });
+  return NextResponse.json({ images: results, remainingImageRegens: remainingImageRegens !== undefined ? remainingImageRegens : DAILY_IMAGE_REGEN_LIMIT });
 }

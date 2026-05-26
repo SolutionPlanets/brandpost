@@ -54,7 +54,11 @@ export const getImageExpansionPrompt = (
   platform: string,
   extraInstructions: string,
   graphicHeadline?: string,
-  heroObjects?: string
+  heroObjects?: string,
+  mentionBrandLogo?: boolean,
+  brandLogoPosition?: string,
+  mentionWebsiteInPost?: boolean,
+  brandLinkPosition?: string
 ) => {
   const aspectRatio = PLATFORM_RATIOS[platform] || '1:1';
   const contentGuide = CONTENT_TYPE_GUIDE[contentType] || CONTENT_TYPE_GUIDE.general;
@@ -79,10 +83,32 @@ export const getImageExpansionPrompt = (
   `;
 
   const visualGeometryContext = `
-  VISUAL GEOMETRY AND STRUCTURAL INSTRUCTIONS (CRITICAL):
+  VISUAL GEOMETRY AND STRUCTURAL INSTRUCTIONS:
   ${graphicHeadline ? `Headline to print directly on the graphic: "${graphicHeadline}". This MUST be printed boldly and visibly as the main text element.` : 'Generate an appropriate short headline based on the topic.'}
-  ${heroObjects ? `Main focal items to display visually: ${heroObjects}. Make sure these elements are the primary visual focus of the composition.` : 'Determine appropriate hero visual objects based on the topic.'}
+  
+  STRICT BRAND COMPLIANCE OVERRIDE (IF APPLICABLE):
+  - You MUST strictly utilise the EXACT Hex Codes provided for Primary, Secondary, and Accent colors in the image palette. Do not substitute colors.
+  ${mentionWebsiteInPost && brandDetails?.websiteUrl ? `- BRAND LINK TEXT: You MUST explicitly print the text "${brandDetails.websiteUrl}" cleanly on the image at this exact position: [${brandLinkPosition || 'Bottom Center'}].` : ''}
+  ${mentionBrandLogo ? `- BRAND LOGO PLACEHOLDER: You MUST allocate a clear space for the brand logo or prominently display the Business Name text at this exact position: [${brandLogoPosition || 'Bottom Right'}].` : ''}
   `;
+
+  // Hero Objects gets the HIGHEST precedence — placed last in the prompt so the LLM
+  // treats it as the final, overriding visual directive. This prevents Post Description
+  // from accidentally overwriting what the user explicitly asked to show.
+  const heroObjectsDirective = heroObjects ? `
+  ╔══════════════════════════════════════════════════════════════════════╗
+  ║  ABSOLUTE PRIORITY DIRECTIVE — HERO OBJECTS (OVERRIDES ALL ABOVE)  ║
+  ╠══════════════════════════════════════════════════════════════════════╣
+  ║  The following items MUST be the PRIMARY VISUAL FOCUS of the       ║
+  ║  image. They take HIGHEST PRECEDENCE over any other visual         ║
+  ║  suggestions from the Post Description, Topic, or Content Type.    ║
+  ║  If there is ANY conflict, these Hero Objects WIN.                 ║
+  ╚══════════════════════════════════════════════════════════════════════╝
+  HERO OBJECTS TO DISPLAY: ${heroObjects}
+  - These items MUST be large, prominent, well-lit, and the clear focal point.
+  - Position them in the CENTRE ZONE of the composition as the main visual element.
+  - All other visual elements (text, background, brand marks) should complement and frame these objects, NOT compete with them.
+  ` : '';
 
   return `
 You are an Elite Creative Strategist and Graphic Designer specialising in high-impact social media marketing posters.
@@ -115,14 +141,12 @@ Topic: ${topic}
 Post Context & Offers: ${extraInstructions || 'No specific extra instructions provided. Rely on topic and brand details.'}
 ${visualGeometryContext}
 
-Now, reason step-by-step and then provide the JSON output:
-
 ${brandContext}
 
 ${FEW_SHOT_OFFER_EXAMPLE}
 
 The "negativePrompt" field should list things to AVOID in this specific image (e.g., cluttered background, deformed text, low contrast). Be specific to the content type.
-
-Now generate the JSON object.
+${heroObjectsDirective}
+Now reason step-by-step and then generate the JSON object.
 `;
 };

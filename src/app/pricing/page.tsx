@@ -1,18 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Check, X, ArrowLeft, Info } from 'lucide-react';
 import Link from 'next/link';
 import { getUSDToINRRate, formatINR, formatUSD } from '@/utils/currency';
+import { createClient } from '@/utils/supabase/client';
+import { useBrand, BrandProvider } from '@/contexts/BrandContext';
 import styles from './Pricing.module.css';
 
-const plans = [
+const STATIC_PLANS = [
   {
+    id: 'solo',
     name: 'Solo Starter',
     target: 'Solo entrepreneur',
-    usdMonthly: 29,
-    usdYearly: 276,
+    usd_monthly: 29,
+    usd_yearly: 276,
+    inr_monthly: 2415,
+    inr_yearly: 22984,
+    post_limit: 30,
+    brand_kit_limit: 1,
+    team_members_limit: '1',
+    festive_events: '12 (major only)',
+    scheduling_queue: 'Yes',
+    post_templates_limit: '5',
+    white_label_reports: 'No',
     features: [
       '1 Brand kit',
       '30 AI posts / month',
@@ -24,11 +36,20 @@ const plans = [
     ]
   },
   {
+    id: 'smb',
     name: 'SMB Growth',
     target: 'Small business',
-    usdMonthly: 59,
-    usdYearly: 564,
-    featured: true,
+    usd_monthly: 59,
+    usd_yearly: 564,
+    inr_monthly: 4912,
+    inr_yearly: 46963,
+    post_limit: 100,
+    brand_kit_limit: 3,
+    team_members_limit: '3',
+    festive_events: 'All 30+',
+    scheduling_queue: 'Yes',
+    post_templates_limit: '20',
+    white_label_reports: 'No',
     features: [
       '3 Brand kits',
       '100 AI posts / month',
@@ -37,13 +58,24 @@ const plans = [
       'Scheduling queue',
       '20 Post templates',
       'Standard reports'
-    ]
+    ],
+    is_featured: true
   },
   {
+    id: 'agency',
     name: 'Agency Pro',
     target: 'Marketing agencies',
-    usdMonthly: 149,
-    usdYearly: 1428,
+    usd_monthly: 149,
+    usd_yearly: 1428,
+    inr_monthly: 12404,
+    inr_yearly: 118900,
+    post_limit: 2147483647,
+    brand_kit_limit: 15,
+    team_members_limit: '10',
+    festive_events: 'All 30+',
+    scheduling_queue: 'Yes + bulk',
+    post_templates_limit: 'Unlimited',
+    white_label_reports: 'Yes',
     features: [
       '15 Brand kits',
       'Unlimited AI posts',
@@ -55,10 +87,20 @@ const plans = [
     ]
   },
   {
+    id: 'franchise',
     name: 'Franchise',
     target: 'Franchise brands',
-    usdMonthly: 399,
-    usdYearly: 3828,
+    usd_monthly: 399,
+    usd_yearly: 3828,
+    inr_monthly: 33218,
+    inr_yearly: 318790,
+    post_limit: 2147483647,
+    brand_kit_limit: 1000,
+    team_members_limit: 'Unlimited',
+    festive_events: 'All 30+',
+    scheduling_queue: 'Yes + bulk',
+    post_templates_limit: 'Unlimited',
+    white_label_reports: 'Yes',
     features: [
       'Unlimited Brand kits',
       'Unlimited AI posts',
@@ -71,28 +113,52 @@ const plans = [
   }
 ];
 
-const featureComparison = [
-  { feature: 'Brand kits', solo: '1', smb: '3', agency: '15', franchise: 'Unlimited' },
-  { feature: 'AI posts / month', solo: '30', smb: '100', agency: 'Unlimited', franchise: 'Unlimited' },
-  { feature: 'Team members', solo: '1', smb: '3', agency: '10', franchise: 'Unlimited' },
-  { feature: 'Festive calendar events', solo: '12 (major only)', smb: 'All 30+', agency: 'All 30+', franchise: 'All 30+' },
-  { feature: 'Scheduling queue', solo: 'Yes', smb: 'Yes', agency: 'Yes + bulk', franchise: 'Yes + bulk' },
-  { feature: 'Post templates', solo: '5', smb: '20', agency: 'Unlimited', franchise: 'Unlimited' },
-  { feature: 'White-label reports', solo: 'No', smb: 'No', agency: 'Yes', franchise: 'Yes' },
+const comparisonFields = [
+  { label: 'Brand kits', key: 'brand_kit_limit', format: (val: any) => val >= 1000 ? 'Unlimited' : String(val) },
+  { label: 'AI posts / month', key: 'post_limit', format: (val: any) => val >= 10000 ? 'Unlimited' : String(val) },
+  { label: 'Team members', key: 'team_members_limit' },
+  { label: 'Festive calendar events', key: 'festive_events' },
+  { label: 'Scheduling queue', key: 'scheduling_queue' },
+  { label: 'Post templates', key: 'post_templates_limit' },
+  { label: 'White-label reports', key: 'white_label_reports' },
 ];
 
-export default function PricingPage() {
+function PricingPageContent() {
   const [isYearly, setIsYearly] = useState(false);
   const [inrRate, setInrRate] = useState(83.3);
   const searchParams = useSearchParams();
   const router = useRouter();
   const from = searchParams.get('from');
+  const supabase = createClient();
+  const { plans: dbPlans } = useBrand();
 
   const handleBack = () => {
-    if (from === 'dashboard') {
-      router.push('/dashboard');
-    } else {
+    if (from === 'home') {
       router.push('/');
+    } else if (from === 'dashboard' || from === 'limit_reached') {
+      router.push('/dashboard');
+    } else if (from === 'brandkit') {
+      router.push('/dashboard/brand-kit');
+    } else {
+      router.push('/dashboard');
+    }
+  };
+
+  const handleUpgrade = async (targetId: string) => {
+    console.log('Upgrading to planId:', targetId);
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('No user found, redirecting to login');
+        router.push(`/auth/login?from=pricing&planId=${targetId}&period=${isYearly ? 'yearly' : 'monthly'}`);
+        return;
+      }
+
+      router.push(`/api/billing/checkout?planId=${targetId}&period=${isYearly ? 'yearly' : 'monthly'}`);
+    } catch (err) {
+      console.error('Fatal upgrade error:', err);
+      alert('An unexpected error occurred. Please try again.');
     }
   };
 
@@ -104,12 +170,14 @@ export default function PricingPage() {
     loadRate();
   }, []);
 
-  const calculateINR = (usd: number) => usd * inrRate;
+  // Filter out any trial configurations from standard card display
+  const activePlans = dbPlans ? dbPlans.filter((p: any) => p.id !== 'trial') : [];
+  const displayPlans = activePlans.length > 0 ? activePlans : STATIC_PLANS;
 
   return (
     <div className={styles.container}>
       <button onClick={handleBack} className={styles.backLink}>
-        <ArrowLeft size={20} /> Back to {from === 'dashboard' ? 'Dashboard' : 'Home'}
+        <ArrowLeft size={20} /> Back to {from === 'home' ? 'Home' : 'Dashboard'}
       </button>
 
       <header className={styles.header}>
@@ -130,15 +198,16 @@ export default function PricingPage() {
       </div>
 
       <div className={styles.pricingGrid}>
-        {plans.map((plan) => {
-          const usdPrice = isYearly ? plan.usdYearly : plan.usdMonthly;
-          const inrPrice = calculateINR(usdPrice);
-          const perMonthUSD = isYearly ? Math.floor(plan.usdYearly / 12) : plan.usdMonthly;
-          const perMonthINR = calculateINR(perMonthUSD);
+        {displayPlans.map((plan) => {
+          const usdPrice = isYearly ? Number(plan.usd_yearly) : Number(plan.usd_monthly);
+          const inrPrice = isYearly ? Number(plan.inr_yearly) : Number(plan.inr_monthly);
+          const perMonthUSD = isYearly ? Math.floor(Number(plan.usd_yearly) / 12) : Number(plan.usd_monthly);
+          const perMonthINR = isYearly ? Math.floor(Number(plan.inr_yearly) / 12) : Number(plan.inr_monthly);
+          const planId = plan.id || plan.name.toLowerCase().split(' ')[0];
 
           return (
-            <div key={plan.name} className={`${styles.planCard} ${plan.featured ? styles.featuredCard : ''}`}>
-              {plan.featured && <div className={styles.badge}>Most Popular</div>}
+            <div key={plan.name} className={`${styles.planCard} ${plan.is_featured ? styles.featuredCard : ''}`}>
+              {plan.is_featured && <div className={styles.badge}>Most Popular</div>}
               <div className={styles.planName}>{plan.name}</div>
               <div className={styles.targetUser}>{plan.target}</div>
               
@@ -146,18 +215,18 @@ export default function PricingPage() {
                 <div className={styles.priceMain}>
                   {isYearly ? (
                     <>
-                      {formatUSD(plan.usdYearly)}
+                      {formatUSD(usdPrice)}
                       <span className={styles.priceBreakdown}>({formatUSD(perMonthUSD)}/mo)</span>
                     </>
                   ) : (
                     <>
-                      {formatUSD(plan.usdMonthly)}
+                      {formatUSD(usdPrice)}
                       <span className={styles.pricePeriod}>/mo</span>
                     </>
                   )}
                 </div>
                 <div className={styles.priceSecondary}>
-                  {isYearly ? formatINR(calculateINR(plan.usdYearly)) : `${formatINR(perMonthINR)} /mo*`}
+                  {isYearly ? formatINR(inrPrice) : `${formatINR(inrPrice)} /mo*`}
                 </div>
                 {isYearly && (
                   <div className={styles.billingNote}>
@@ -166,13 +235,16 @@ export default function PricingPage() {
                 )}
               </div>
 
-              <button className={`${styles.ctaButton} ${styles.primaryCta}`}>
+              <button 
+                onClick={() => handleUpgrade(planId)}
+                className={`${styles.ctaButton} ${styles.primaryCta}`}
+              >
                 Get Started
               </button>
 
               <div className={styles.featureTitle}>What's included:</div>
               <ul className={styles.featureList}>
-                {plan.features.map((feature, i) => (
+                {plan.features.map((feature: string, i: number) => (
                   <li key={i} className={styles.featureItem}>
                     <Check size={18} className={styles.featureIcon} />
                     <span>{feature}</span>
@@ -190,29 +262,51 @@ export default function PricingPage() {
           <thead>
             <tr>
               <th className={styles.featureNameCol}>Feature</th>
-              <th>Solo</th>
-              <th>SMB</th>
-              <th>Agency</th>
-              <th>Franchise</th>
+              {displayPlans.map((plan) => (
+                <th key={plan.id || plan.name}>
+                  {plan.name.replace(' Starter', '').replace(' Growth', '').replace(' Pro', '')}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {featureComparison.map((row, index) => (
+            {comparisonFields.map((field, index) => (
               <tr key={index}>
-                <td className={styles.featureNameCol}>{row.feature}</td>
-                <td>{row.solo === 'Yes' ? <Check className={styles.check} /> : row.solo === 'No' ? <X className={styles.cross} /> : row.solo}</td>
-                <td>{row.smb === 'Yes' ? <Check className={styles.check} /> : row.smb === 'No' ? <X className={styles.cross} /> : row.smb}</td>
-                <td>{row.agency === 'Yes' ? <Check className={styles.check} /> : row.agency === 'No' ? <X className={styles.cross} /> : row.agency}</td>
-                <td>{row.franchise === 'Yes' ? <Check className={styles.check} /> : row.franchise === 'No' ? <X className={styles.cross} /> : row.franchise}</td>
+                <td className={styles.featureNameCol}>{field.label}</td>
+                {displayPlans.map((plan) => {
+                  const rawVal = plan[field.key];
+                  const val = field.format ? field.format(rawVal) : rawVal;
+                  return (
+                    <td key={plan.id || plan.name}>
+                      {val === 'Yes' ? (
+                        <Check className={styles.check} />
+                      ) : val === 'No' ? (
+                        <X className={styles.cross} />
+                      ) : (
+                        val
+                      )}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
         </table>
         <p className={styles.disclaimer}>
-          *INR conversion based on live exchange rates (currently 1 USD = {inrRate.toFixed(2)} INR).
-          Rate updated every 24 hours.
+          *Pricing is fixed in USD and INR. INR payments exclude 18% GST (calculated and added at checkout).
         </p>
       </section>
     </div>
   );
 }
+
+export default function PricingPage() {
+  return (
+    <Suspense fallback={null}>
+      <BrandProvider>
+        <PricingPageContent />
+      </BrandProvider>
+    </Suspense>
+  );
+}
+

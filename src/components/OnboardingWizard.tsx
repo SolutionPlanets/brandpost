@@ -172,6 +172,11 @@ export default function OnboardingWizard() {
           bodyFont: brandKit?.body_font || 'Inter',
           instagram: brandKit?.instagram_handle || '',
           facebook: brandKit?.facebook_handle || '',
+          industry: brandKit?.industry || '',
+          brandAudience: brandKit?.brand_audience || '',
+          websiteUrl: brandKit?.website_url || '',
+          phrasesToInclude: brandKit?.phrases_to_include || '',
+          phrasesToAvoid: brandKit?.phrases_to_avoid || '',
         };
       }
 

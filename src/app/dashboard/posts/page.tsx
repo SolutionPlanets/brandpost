@@ -37,16 +37,6 @@ interface Post {
   publishedAt: string | null;
 }
 
-const MOCK_POSTS: Post[] = [
-  { id: 1, title: 'Diwali Festival Sale – 20% Off!', caption: '🪔 Celebrate Diwali with amazing deals...', platform: 'both', status: 'published', contentType: 'festive', createdAt: '2026-04-10', scheduledAt: null, publishedAt: '2026-04-10' },
-  { id: 2, title: 'Brand Story: Our Journey So Far', caption: '📖 From humble beginnings to where we are today...', platform: 'instagram', status: 'scheduled', contentType: 'informational', createdAt: '2026-04-15', scheduledAt: '2026-04-25', publishedAt: null },
-  { id: 3, title: 'Weekend Flash Offer – Limited Time', caption: '⚡ This weekend only! Get flat 30% off...', platform: 'facebook', status: 'draft', contentType: 'offer', createdAt: '2026-04-18', scheduledAt: null, publishedAt: null },
-  { id: 4, title: 'Team Appreciation Post', caption: '🙌 Our team is the backbone of everything...', platform: 'both', status: 'published', contentType: 'general', createdAt: '2026-04-08', scheduledAt: null, publishedAt: '2026-04-08' },
-  { id: 5, title: 'Earth Day – Go Green Campaign', caption: '🌍 This Earth Day, join us in making...', platform: 'instagram', status: 'failed', contentType: 'festive', createdAt: '2026-04-20', scheduledAt: '2026-04-22', publishedAt: null },
-  { id: 6, title: 'New Product Launch Teaser', caption: '🚀 Something exciting is coming your way...', platform: 'both', status: 'scheduled', contentType: 'general', createdAt: '2026-04-19', scheduledAt: '2026-04-28', publishedAt: null },
-  { id: 7, title: 'Customer Testimonial Spotlight', caption: '⭐ Here is what our amazing customers...', platform: 'facebook', status: 'published', contentType: 'informational', createdAt: '2026-04-05', scheduledAt: null, publishedAt: '2026-04-05' },
-  { id: 8, title: 'Summer Collection Preview', caption: '☀️ Get ready for summer with our brand new...', platform: 'instagram', status: 'draft', contentType: 'offer', createdAt: '2026-04-19', scheduledAt: null, publishedAt: null },
-];
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
@@ -118,7 +108,7 @@ export default function PostsPage() {
   const filteredPosts = posts.filter((post) => {
     if (statusFilter !== 'all' && post.status !== statusFilter) return false;
     if (platformFilter !== 'all' && post.platform !== platformFilter) return false;
-    if (searchQuery && !post.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery && !(post.title || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
@@ -207,8 +197,8 @@ export default function PostsPage() {
                   )}
                 </div>
                 <div className={styles.postInfo}>
-                  <h4>{post.title}</h4>
-                  <p>{post.caption?.substring(0, 50)}...</p>
+                  <h4>{post.title || 'Untitled Draft'}</h4>
+                  <p>{post.caption ? `${post.caption.substring(0, 50)}${post.caption.length > 50 ? '...' : ''}` : 'No caption yet'}</p>
                 </div>
               </div>
               <div className={styles.colPlatform}>

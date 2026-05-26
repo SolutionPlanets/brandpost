@@ -78,24 +78,11 @@ export async function POST(req: Request) {
       wordCount,
       hashtagCount,
       campaignExpiry,
+      mentionWebsiteInCaption,
     } = await req.json();
 
-    // 1. Developer Test Mode (Skip AI if dev mode is active)
-    if (process.env.NEXT_PUBLIC_DEV_MODE === 'true') {
-      console.log('🚧 DEVELOPER MODE ACTIVE: Skipping Gemini caption generation.');
-      return NextResponse.json({ 
-        captions: [
-          `Dummy Caption for ${topic}: Enhance your brand with our premium ${contentType} services! #BrandBoost #AI #Marketing`
-        ],
-        remainingCaptionRegens: DAILY_CAPTION_REGEN_LIMIT,
-      });
-    }
-
-    if (!process.env.GOOGLE_GEMINI_API_KEY) {
-      throw new Error('GOOGLE_GEMINI_API_KEY is not set');
-    }
-
     // ── REGEN LIMIT CHECK (only for regeneration, not first generation) ──
+    let remainingCaptionRegens = DAILY_CAPTION_REGEN_LIMIT;
     if (regenPostId) {
       const adminSupabase = createAdminClient();
       const { allowed, remaining } = await checkAndIncrementCaptionRegenLimit(adminSupabase, regenPostId);
@@ -106,10 +93,26 @@ export async function POST(req: Request) {
           remainingCaptionRegens: 0,
         }, { status: 429 });
       }
+      remainingCaptionRegens = remaining;
       console.log(`🔄 Caption regen allowed. ${remaining} caption regens remaining today.`);
     }
 
-    const captionPrompt = getCaptionPrompt(brandDetails, topic, contentType, platform, extraInstructions, wordCount, hashtagCount, campaignExpiry);
+    // 1. Developer Test Mode (Skip AI if dev mode is active)
+    if (process.env.NEXT_PUBLIC_DEV_MODE === 'true') {
+      console.log('🚧 DEVELOPER MODE ACTIVE: Skipping Gemini caption generation.');
+      return NextResponse.json({ 
+        captions: [
+          `Dummy Caption for ${topic}: Enhance your brand with our premium ${contentType} services! #BrandBoost #AI #Marketing`
+        ],
+        remainingCaptionRegens,
+      });
+    }
+
+    if (!process.env.GOOGLE_GEMINI_API_KEY) {
+      throw new Error('GOOGLE_GEMINI_API_KEY is not set');
+    }
+
+    const captionPrompt = getCaptionPrompt(brandDetails, topic, contentType, platform, extraInstructions, wordCount, hashtagCount, campaignExpiry, mentionWebsiteInCaption);
 
     // Use Gemini 2.5 Flash for caption generation
     const result = await ai.models.generateContent({
@@ -142,7 +145,7 @@ export async function POST(req: Request) {
     }
 
     // Calculate remaining regens for response
-    let remainingCaptionRegens = DAILY_CAPTION_REGEN_LIMIT;
+    remainingCaptionRegens = DAILY_CAPTION_REGEN_LIMIT;
     if (regenPostId) {
       const adminSupabase = createAdminClient();
       const { data: regenRow } = await adminSupabase

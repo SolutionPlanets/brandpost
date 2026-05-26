@@ -11,17 +11,32 @@ import {
   Key,
   Save,
   Check,
+  Globe,
+  Clock,
   Share2,
   Facebook,
   Instagram,
   AlertTriangle,
   Unlink,
   ExternalLink,
-  Clock,
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { useBrand } from '@/contexts/BrandContext';
 import styles from './Settings.module.css';
+
+const TIMEZONES = [
+  { value: 'Asia/Kolkata', label: '(GMT+05:30) India Standard Time' },
+  { value: 'UTC', label: '(GMT+00:00) UTC' },
+  { value: 'America/New_York', label: '(GMT-05:00) Eastern Time' },
+  { value: 'America/Chicago', label: '(GMT-06:00) Central Time' },
+  { value: 'America/Denver', label: '(GMT-07:00) Mountain Time' },
+  { value: 'America/Los_Angeles', label: '(GMT-08:00) Pacific Time' },
+  { value: 'Europe/London', label: '(GMT+00:00) London' },
+  { value: 'Europe/Paris', label: '(GMT+01:00) Paris' },
+  { value: 'Asia/Dubai', label: '(GMT+04:00) Dubai' },
+  { value: 'Asia/Singapore', label: '(GMT+08:00) Singapore' },
+  { value: 'Australia/Sydney', label: '(GMT+11:00) Sydney' },
+];
 
 type SettingsTab = 'profile' | 'workspace' | 'social' | 'billing' | 'notifications';
 
@@ -40,7 +55,20 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [connectingFb, setConnectingFb] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const { businessName, setBusinessName, ownerName, profilePhoto, authProvider, setProfilePhoto, refreshBrandData } = useBrand();
+  
+  const { 
+    businessName, 
+    setBusinessName, 
+    ownerName, 
+    refreshBrandData, 
+    planId, 
+    trialEndsAt, 
+    timezone,
+    profilePhoto, 
+    authProvider, 
+    setProfilePhoto 
+  } = useBrand();
+  
   const supabase = createClient();
 
   const [profileData, setProfileData] = useState({
@@ -54,6 +82,7 @@ export default function SettingsPage() {
     platform: 'both',
     tone: 'professional'
   });
+  
   const [socialConnections, setSocialConnections] = useState<any[]>([]);
 
   // Handle profile photo upload (email users only)
@@ -119,7 +148,7 @@ export default function SettingsPage() {
         setProfileData(prev => ({
           ...prev,
           fullName: workspace.owner_name || prev.fullName,
-          timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+          timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata'
         }));
         setWorkspaceData({
           name: workspace.business_name === 'My Workspace' ? '' : (workspace.business_name || ''),
@@ -139,12 +168,12 @@ export default function SettingsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // 1. Update Profile Metadata (Optional but good)
+      // 1. Update Profile Metadata
       await supabase.auth.updateUser({
         data: { full_name: profileData.fullName }
       });
 
-      // 2. Update Workspace Name
+      // 2. Update Workspace
       const { data: workspace } = await supabase
         .from('workspaces')
         .select('id')
@@ -163,7 +192,7 @@ export default function SettingsPage() {
         
         if (wsError) throw wsError;
 
-        // 3. Update Brand Kit Name (to match workspace)
+        // 3. Update Brand Kit Name
         const { error: bkError } = await supabase
           .from('brand_kits')
           .update({ name: businessName })
@@ -217,16 +246,8 @@ export default function SettingsPage() {
   const isTokenExpiringSoon = (expiresAt: string | null) => {
     if (!expiresAt) return false;
     const expiry = new Date(expiresAt).getTime();
-    const now = Date.now();
     const sevenDays = 7 * 24 * 60 * 60 * 1000;
-    return (expiry > now) && (expiry - now < sevenDays);
-  };
-
-  // Check if token is already expired
-  const isTokenExpired = (expiresAt: string | null) => {
-    if (!expiresAt) return false;
-    const expiry = new Date(expiresAt).getTime();
-    return expiry <= Date.now();
+    return expiry - Date.now() < sevenDays;
   };
 
   const renderProfile = () => {
@@ -300,6 +321,19 @@ export default function SettingsPage() {
               placeholder="email@example.com"
             />
           </div>
+          <div className={styles.formGroup}>
+            <label><Globe size={14} /> Timezone</label>
+            <select 
+              value={profileData.timezone}
+              disabled
+              style={{ backgroundColor: 'var(--background)', cursor: 'not-allowed', opacity: 0.8 }}
+            >
+              {TIMEZONES.map(tz => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
+            <p className={styles.fieldHelp}>Detected automatically based on your location.</p>
+          </div>
         </div>
 
         {/* Change Password - only for email auth users */}
@@ -350,27 +384,13 @@ export default function SettingsPage() {
             <option value="authoritative">Authoritative</option>
           </select>
         </div>
-        <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
-          <label><Clock size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />Timezone</label>
-          <select
-            value={profileData.timezone}
-            onChange={(e) => setProfileData({...profileData, timezone: e.target.value})}
-          >
-            {Intl.supportedValuesOf('timeZone').map(tz => (
-              <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
-            ))}
-          </select>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>Used for scheduling posts at the correct local time.</p>
-        </div>
       </div>
-
     </div>
   );
 
   const renderSocial = () => {
     const facebookPages = socialConnections.filter(c => c.platform === 'facebook');
     const instagramAccounts = socialConnections.filter(c => c.platform === 'instagram');
-    const hasAnyExpired = socialConnections.some(c => isTokenExpired(c.token_expires_at));
     const hasAnyExpiring = socialConnections.some(c => isTokenExpiringSoon(c.token_expires_at));
 
     return (
@@ -378,16 +398,12 @@ export default function SettingsPage() {
         <h2 className={styles.sectionTitle}>Social Connections</h2>
         <p className={styles.sectionDesc}>Connect your Facebook Pages and Instagram accounts to publish content.</p>
 
-        {(hasAnyExpired || hasAnyExpiring) && (
-          <div className={`${styles.tokenWarning} ${hasAnyExpired ? styles.tokenExpired : ''}`}>
+        {hasAnyExpiring && (
+          <div className={styles.tokenWarning}>
             <AlertTriangle size={18} />
             <div>
-              <strong>{hasAnyExpired ? 'Token expired' : 'Token expiring soon'}</strong>
-              <p>
-                {hasAnyExpired 
-                  ? 'One or more connections have expired. Please reconnect Facebook to restore posting functionality.' 
-                  : 'One or more connections will expire within 7 days. Reconnect Facebook to refresh tokens.'}
-              </p>
+              <strong>Token expiring soon</strong>
+              <p>One or more connections will expire within 7 days. Reconnect Facebook to refresh tokens.</p>
             </div>
             <button className={styles.reconnectBtn} onClick={handleConnectFacebook}>Reconnect</button>
           </div>
@@ -408,7 +424,7 @@ export default function SettingsPage() {
 
         {/* Facebook Pages */}
         <div className={styles.dangerZone} style={{ marginTop: '0.5rem' }}>
-          <h3><Facebook size={16} /> Facebook Pages</h3>
+          <h3><Facebook size={16} /> Facebook Page</h3>
           {facebookPages.length > 0 ? (
             facebookPages.map(page => (
               <div key={page.id} className={styles.socialConnectionCard}>
@@ -419,15 +435,10 @@ export default function SettingsPage() {
                   <div>
                     <h4>{page.page_name}</h4>
                     <p style={{ color: '#64748b', fontSize: '0.8rem' }}>Page ID: {page.page_id}</p>
-                    {isTokenExpired(page.token_expires_at) ? (
-                      <span className={`${styles.expiryBadge} ${styles.expiredBadge}`}><AlertTriangle size={12} /> Expired</span>
-                    ) : isTokenExpiringSoon(page.token_expires_at) ? (
+                    {isTokenExpiringSoon(page.token_expires_at) && (
                       <span className={styles.expiryBadge}><AlertTriangle size={12} /> Expiring soon</span>
-                    ) : null}
+                    )}
                   </div>
-                </div>
-                <div className={styles.socialCardRight}>
-                  <span className={styles.connectedBadge}>Connected</span>
                 </div>
               </div>
             ))
@@ -443,7 +454,7 @@ export default function SettingsPage() {
 
         {/* Instagram Accounts */}
         <div className={styles.dangerZone} style={{ marginTop: '1.5rem' }}>
-          <h3><Instagram size={16} /> Instagram Accounts</h3>
+          <h3><Instagram size={16} /> Instagram Account</h3>
           {instagramAccounts.length > 0 ? (
             instagramAccounts.map(account => (
               <div key={account.id} className={styles.socialConnectionCard}>
@@ -454,15 +465,10 @@ export default function SettingsPage() {
                   <div>
                     <h4>{account.page_name}</h4>
                     <p style={{ color: '#64748b', fontSize: '0.8rem' }}>Account ID: {account.page_id}</p>
-                    {isTokenExpired(account.token_expires_at) ? (
-                      <span className={`${styles.expiryBadge} ${styles.expiredBadge}`}><AlertTriangle size={12} /> Expired</span>
-                    ) : isTokenExpiringSoon(account.token_expires_at) ? (
+                    {isTokenExpiringSoon(account.token_expires_at) && (
                       <span className={styles.expiryBadge}><AlertTriangle size={12} /> Expiring soon</span>
-                    ) : null}
+                    )}
                   </div>
-                </div>
-                <div className={styles.socialCardRight}>
-                  <span className={styles.connectedBadge}>Connected</span>
                 </div>
               </div>
             ))
@@ -479,24 +485,68 @@ export default function SettingsPage() {
     );
   };
 
-  const renderBilling = () => (
-    <div className={styles.section}>
-      <h2 className={styles.sectionTitle}>Billing & Plan</h2>
-      <p className={styles.sectionDesc}>Manage your subscription and payment details.</p>
+  const renderBilling = () => {
+    const isPaidPlan = trialEndsAt === null;
+    const isTrial = planId === 'solo' && trialEndsAt !== null && new Date(trialEndsAt) > new Date();
 
+    const planNames: Record<string, string> = {
+      solo: 'Solo Starter',
+      smb: 'SMB Growth',
+      agency: 'Agency Pro',
+      franchise: 'Franchise'
+    };
 
-      <div className={styles.newPlansSection}>
-        <h3>You haven't purchased a plan yet</h3>
-        <p>Choose a professional plan to unlock all features and grow your business.</p>
-        <button 
-          className={styles.viewPlansBtn}
-          onClick={() => window.location.href = '/pricing?from=dashboard'}
-        >
-          Buy Now
-        </button>
+    return (
+      <div className={styles.section}>
+        <h2 className={styles.sectionTitle}>Billing & Plan</h2>
+        <p className={styles.sectionDesc}>Manage your subscription and payment details.</p>
+
+        <div className={styles.newPlansSection}>
+          {isPaidPlan ? (
+            <>
+              <div className={styles.trialBadgeActive} style={{ backgroundColor: '#e0e7ff', color: '#4f46e5', borderColor: '#c7d2fe' }}>
+                Active Plan: {planNames[planId.toLowerCase()] || planId}
+              </div>
+              <h3>Manage your subscription details</h3>
+              <p>Your subscription is active. View your transaction receipts or adjust your payment details directly in the Customer Portal.</p>
+              <button 
+                className={styles.viewPlansBtn}
+                onClick={() => window.location.href = '/api/billing/portal'}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+              >
+                <span>Customer Portal</span>
+                <ExternalLink size={14} />
+              </button>
+            </>
+          ) : isTrial ? (
+            <>
+              <div className={styles.trialBadgeActive}>Active: 14-Day Free Trial</div>
+              <h3>You are currently on a Free Trial</h3>
+              <p>Your trial ends on {new Date(trialEndsAt!).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}. 
+                 Upgrade to a pro plan anytime to keep your premium features.</p>
+              <button 
+                className={styles.viewPlansBtn}
+                onClick={() => window.location.href = '/pricing?from=dashboard'}
+              >
+                Upgrade Plan
+              </button>
+            </>
+          ) : (
+            <>
+              <h3>You are on the Solo Starter Tier</h3>
+              <p>Get started with basic features or upgrade to a professional plan to unlock team member access, higher limits, and additional brand kits.</p>
+              <button 
+                className={styles.viewPlansBtn}
+                onClick={() => window.location.href = '/pricing?from=dashboard'}
+              >
+                Upgrade Plan
+              </button>
+            </>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderNotifications = () => (
     <div className={styles.section}>
@@ -528,7 +578,10 @@ export default function SettingsPage() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <h1 className={styles.title}>Settings</h1>
+        <div>
+          <h1 className={styles.title}>Settings</h1>
+          <p className={styles.subtitle}>Manage your account and workspace preferences.</p>
+        </div>
       </header>
 
       <div className={styles.settingsLayout}>

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
@@ -31,6 +31,7 @@ import {
   Share2,
 } from 'lucide-react';
 import { useBrand } from '@/contexts/BrandContext';
+import { ImageEditor } from '@/components/ImageEditor';
 import styles from './Composer.module.css';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -61,6 +62,11 @@ interface ComposerForm {
   campaignExpiry: string;
   wordCount: number;
   hashtagCount: number;
+  mentionBrandLogo: boolean;
+  brandLogoPosition: string;
+  mentionWebsiteInPost: boolean;
+  brandLinkPosition: string;
+  mentionWebsiteInCaption: boolean;
 }
 
 interface GeneratedContent {
@@ -112,7 +118,8 @@ function ComposerPageContent() {
     brandKitName, businessName, brandTone, brandDescription, colors,
     fullName, ownerName, address, pincode, timing, logo,
     industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid,
-    postsUsed, planId, trialEndsAt, refreshBrandData, workspaceId
+    postsUsed, planId, trialEndsAt, refreshBrandData, workspaceId,
+    checkLimitAndRedirect
   } = useBrand();
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -126,6 +133,7 @@ function ComposerPageContent() {
   const [editedCaption, setEditedCaption] = useState('');
   const [showLogoOverlay, setShowLogoOverlay] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   const [isImmediate, setIsImmediate] = useState(false);
@@ -153,9 +161,126 @@ function ComposerPageContent() {
     campaignExpiry: '',
     wordCount: 100,
     hashtagCount: 6,
+    mentionBrandLogo: true,
+    brandLogoPosition: 'Bottom Right',
+    mentionWebsiteInPost: true,
+    brandLinkPosition: 'Bottom Left',
+    mentionWebsiteInCaption: true,
   });
 
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
+
+  // ── Auto-Save Draft State ──────────────────────────────────────────
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const formRef = useRef(form);
+  const generatedRef = useRef(generated);
+  const editedCaptionRef = useRef(editedCaption);
+  const stepRef = useRef(step);
+  const draftIdRef = useRef(draftId);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isSavingRef = useRef(false);
+
+  // Keep refs in sync with state
+  useEffect(() => { formRef.current = form; }, [form]);
+  useEffect(() => { generatedRef.current = generated; }, [generated]);
+  useEffect(() => { editedCaptionRef.current = editedCaption; }, [editedCaption]);
+  useEffect(() => { stepRef.current = step; }, [step]);
+  useEffect(() => { draftIdRef.current = draftId; }, [draftId]);
+
+  // ── Save Draft to Database ─────────────────────────────────────────
+  const saveDraftToDb = useCallback(async (isBeacon = false) => {
+    const currentForm = formRef.current;
+    const currentGenerated = generatedRef.current;
+    const currentEditedCaption = editedCaptionRef.current;
+    const currentStep = stepRef.current;
+    const currentDraftId = draftIdRef.current;
+
+    // Only save if user has made meaningful progress (at least a topic on step ≥ 3)
+    if (currentStep < 3 || !currentForm.topic.trim()) return;
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
+
+    try {
+      const supabase = createClient();
+      const caption = currentEditedCaption || currentGenerated?.captions?.[0] || `Draft: ${currentForm.topic}`;
+      const imageUrl = currentGenerated?.images?.[0]?.url || null;
+
+      const payload: any = {
+        title: currentForm.topic,
+        content_type: currentForm.contentType || 'general',
+        platform: currentForm.platform || 'both',
+        status: 'draft',
+        extra_instructions: currentForm.extraInstructions || null,
+        caption,
+        image_url: imageUrl,
+        mention_brand_logo: currentForm.mentionBrandLogo,
+        brand_logo_position: currentForm.brandLogoPosition,
+        mention_website_in_post: currentForm.mentionWebsiteInPost,
+        brand_link_position: currentForm.brandLinkPosition,
+        mention_website_in_caption: currentForm.mentionWebsiteInCaption,
+      };
+
+      if (currentDraftId) {
+        // Update existing draft
+        await supabase.from('posts').update(payload).eq('id', currentDraftId);
+      } else if (workspaceId) {
+        // Create new draft
+        payload.workspace_id = workspaceId;
+        const { data } = await supabase.from('posts').insert([payload]).select('id').single();
+        if (data?.id) {
+          setDraftId(data.id);
+          draftIdRef.current = data.id;
+        }
+      }
+    } catch (err) {
+      console.error('Auto-save draft error:', err);
+    } finally {
+      isSavingRef.current = false;
+    }
+  }, [workspaceId]);
+
+  // ── Auto-Save: beforeunload + periodic save ────────────────────────
+  useEffect(() => {
+    // Browser close / tab close
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const currentStep = stepRef.current;
+      const currentForm = formRef.current;
+      if (currentStep >= 3 && currentForm.topic.trim()) {
+        // Fire and forget — use sendBeacon for reliability
+        saveDraftToDb(true);
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Periodic auto-save every 30 seconds
+    autoSaveTimerRef.current = setInterval(() => {
+      saveDraftToDb();
+    }, 30000);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (autoSaveTimerRef.current) {
+        clearInterval(autoSaveTimerRef.current);
+      }
+    };
+  }, [saveDraftToDb]);
+
+  // Save draft when user navigates away via Next.js router (sidebar clicks)
+  useEffect(() => {
+    const handleRouteChange = () => {
+      saveDraftToDb();
+    };
+
+    // Listen for popstate (back/forward navigation)
+    window.addEventListener('popstate', handleRouteChange);
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+      // Final save on component unmount (sidebar navigation)
+      saveDraftToDb();
+    };
+  }, [saveDraftToDb]);
 
   // Pre-fill from calendar link or Edit/Duplicate
   useEffect(() => {
@@ -187,15 +312,27 @@ function ComposerPageContent() {
             campaignExpiry: '',
             wordCount: 100,
             hashtagCount: 6,
+            mentionBrandLogo: data.mention_brand_logo !== undefined ? data.mention_brand_logo : true,
+            brandLogoPosition: data.brand_logo_position || 'Bottom Right',
+            mentionWebsiteInPost: data.mention_website_in_post !== undefined ? data.mention_website_in_post : true,
+            brandLinkPosition: data.brand_link_position || 'Bottom Left',
+            mentionWebsiteInCaption: data.mention_website_in_caption !== undefined ? data.mention_website_in_caption : true,
           });
 
           if (isEdit) {
-            setGenerated({
-              captions: [data.caption || ''],
-              images: [{ url: data.image_url || '', id: data.id }]
-            });
-            setEditedCaption(data.caption || '');
-            setStep(5);
+            setDraftId(data.id);
+            draftIdRef.current = data.id;
+            if (!data.image_url) {
+              // Redirect empty drafts directly to the renderStep3 details form
+              setStep(3);
+            } else {
+              setGenerated({
+                captions: [data.caption || ''],
+                images: [{ url: data.image_url || '', id: data.id }]
+              });
+              setEditedCaption(data.caption || '');
+              setStep(5);
+            }
           } else {
             // Duplicate: Just pre-fill and go to details step
             setStep(3);
@@ -268,10 +405,7 @@ function ComposerPageContent() {
   const handleGenerateFull = async (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
     // Credit check
-    const isTrial = planId === 'solo' && trialEndsAt && new Date(trialEndsAt) > new Date();
-    const currentLimit = isTrial ? 100 : 50;
-    if (postsUsed >= currentLimit) {
-      alert("Please upgrade your plan. You have reached your AI generation limit.");
+    if (checkLimitAndRedirect && checkLimitAndRedirect()) {
       return;
     }
 
@@ -294,6 +428,19 @@ function ComposerPageContent() {
       setSelectedImage(0);
       if (captionsData.captions && captionsData.captions.length > 0) {
         setEditedCaption(captionsData.captions[0]);
+      }
+
+      // Wire up the draftId from the generated post so subsequent saves update the same row
+      const firstImageId = imagesData.images?.[0]?.id;
+      const firstCaption = captionsData.captions?.[0];
+      if (firstImageId) {
+        setDraftId(firstImageId);
+        draftIdRef.current = firstImageId;
+        // Update the draft's caption in the database with the AI generated one
+        if (firstCaption) {
+          const supabase = createClient();
+          await supabase.from('posts').update({ caption: firstCaption }).eq('id', firstImageId);
+        }
       }
 
       // Update remaining regen counts from API response
@@ -332,6 +479,7 @@ function ComposerPageContent() {
           wordCount: form.wordCount,
           hashtagCount: form.hashtagCount,
           brandDetails: { businessName, brandTone, brandDescription, colors, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid },
+          mentionWebsiteInCaption: form.brandKit !== 'none' ? form.mentionWebsiteInCaption : false,
           ...(postId ? { postId } : {}),
         }),
       });
@@ -375,8 +523,15 @@ function ComposerPageContent() {
             logo,
             industry,
             brandAudience,
+            websiteUrl,
+            phrasesToInclude,
+            phrasesToAvoid,
           },
-          ...(postId ? { postId } : {}),
+          mentionBrandLogo: form.brandKit !== 'none' ? form.mentionBrandLogo : false,
+          brandLogoPosition: form.brandLogoPosition,
+          mentionWebsiteInPost: form.brandKit !== 'none' ? form.mentionWebsiteInPost : false,
+          brandLinkPosition: form.brandLinkPosition,
+          ...(postId ? { postId, currentCaption: editedCaption || generated?.captions[selectedCaption] } : {}),
         }),
       });
       const data = await res.json();
@@ -393,6 +548,10 @@ function ComposerPageContent() {
   };
 
   const handleRegenerateCaptions = async () => {
+    // Credit check
+    if (checkLimitAndRedirect && checkLimitAndRedirect()) {
+      return;
+    }
     const postId = getCurrentPostId();
     try {
       const data = await generateCaptions(postId);
@@ -408,6 +567,28 @@ function ComposerPageContent() {
           const currentLen = generated?.captions?.length || 0;
           return currentLen; // Index of the first new caption
         });
+
+        // Insert new captions as drafts so they appear in Post History
+        const supabase = createClient();
+        const currentImageUrl = generated?.images[selectedImage]?.url || '';
+        const draftsToInsert = data.captions.map((cap: string) => ({
+          workspace_id: workspaceId,
+          brand_kit_id: form.brandKit === 'none' ? null : form.brandKit,
+          title: form.topic,
+          platform: form.platform,
+          content_type: form.contentType,
+          status: 'draft',
+          extra_instructions: form.extraInstructions,
+          caption: cap,
+          image_url: currentImageUrl,
+          mention_brand_logo: form.mentionBrandLogo,
+          brand_logo_position: form.brandLogoPosition,
+          mention_website_in_post: form.mentionWebsiteInPost,
+          brand_link_position: form.brandLinkPosition,
+          mention_website_in_caption: form.mentionWebsiteInCaption,
+        }));
+        await supabase.from('posts').insert(draftsToInsert);
+        refreshBrandData(true); // Reflect credits immediately on dashboard
       }
       // Update remaining regen count
       if (typeof data.remainingCaptionRegens === 'number') {
@@ -419,6 +600,10 @@ function ComposerPageContent() {
   };
 
   const handleRegenerateImages = async () => {
+    // Credit check
+    if (checkLimitAndRedirect && checkLimitAndRedirect()) {
+      return;
+    }
     const postId = getCurrentPostId();
     try {
       const data = await generateImages(postId);
@@ -434,6 +619,7 @@ function ComposerPageContent() {
           const currentLen = generated?.images?.length || 0;
           return currentLen; // Index of the first new image
         });
+        refreshBrandData(true); // Reflect credits immediately on dashboard
       }
       // Update remaining regen count
       if (typeof data.remainingImageRegens === 'number') {
@@ -442,6 +628,17 @@ function ComposerPageContent() {
     } catch (error: any) {
       alert(error.message);
     }
+  };
+
+  const handleSaveEditedImage = (editedImageUrl: string) => {
+    if (!generated) return;
+    const newImages = [...generated.images];
+    newImages[selectedImage] = {
+      ...newImages[selectedImage],
+      url: editedImageUrl
+    };
+    setGenerated({ ...generated, images: newImages });
+    setShowEditor(false);
   };
 
   const downloadImage = async () => {
@@ -516,6 +713,11 @@ function ComposerPageContent() {
           scheduled_at: scheduledAtISO,
           workspace_id: workspaceId,
           extra_instructions: form.extraInstructions,
+          mention_brand_logo: form.mentionBrandLogo,
+          brand_logo_position: form.brandLogoPosition,
+          mention_website_in_post: form.mentionWebsiteInPost,
+          brand_link_position: form.brandLinkPosition,
+          mention_website_in_caption: form.mentionWebsiteInCaption,
         };
 
         if (i === 0) {
@@ -723,24 +925,80 @@ function ComposerPageContent() {
               <option value="none">No Brand Kit</option>
             </select>
           </div>
+        </div>
 
-          <div className={styles.formGroup}>
-            <label>Platform</label>
-            <div className={styles.platformSelector}>
-              {(['facebook', 'instagram', 'both'] as Platform[]).map((p) => (
-                <button
-                  key={p}
-                  className={`${styles.platformBtn} ${form.platform === p ? styles.platformBtnActive : ''}`}
-                  onClick={() => setForm({ ...form, platform: p })}
-                >
-                  {p === 'facebook' && <><Facebook size={16} /> Facebook</>}
-                  {p === 'instagram' && <><Instagram size={16} /> Instagram</>}
-                  {p === 'both' && <>Both</>}
-                </button>
-              ))}
+        {form.brandKit !== 'none' && (
+          <div className={styles.formRow}>
+            <div className={styles.formGroup} style={{ border: '1px solid var(--border)', padding: '1rem', borderRadius: 'var(--radius)', backgroundColor: 'var(--surface-50)' }}>
+              <h4 style={{ marginBottom: '1rem', fontSize: '0.9375rem', fontWeight: 600 }}>Brand Identity Rules</h4>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    id="mentionBrandLogo"
+                    checked={form.mentionBrandLogo}
+                    onChange={(e) => setForm({ ...form, mentionBrandLogo: e.target.checked })}
+                    style={{ width: '16px', height: '16px' }}
+                  />
+                  <label htmlFor="mentionBrandLogo" style={{ margin: 0, fontWeight: 500 }}>Mention Brand logo in Generated Post</label>
+                </div>
+                {form.mentionBrandLogo && (
+                  <div style={{ paddingLeft: '1.5rem' }}>
+                    <label htmlFor="brandLogoPosition" style={{ fontSize: '0.8125rem' }}>Brand Logo Position</label>
+                    <input
+                      id="brandLogoPosition"
+                      type="text"
+                      placeholder="e.g. Bottom Right"
+                      value={form.brandLogoPosition}
+                      onChange={(e) => setForm({ ...form, brandLogoPosition: e.target.value })}
+                      style={{ marginTop: '0.25rem' }}
+                    />
+                  </div>
+                )}
+
+                <div style={{ height: '1px', backgroundColor: 'var(--border)', margin: '0.5rem 0' }}></div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    id="mentionWebsiteInPost"
+                    checked={form.mentionWebsiteInPost}
+                    onChange={(e) => setForm({ ...form, mentionWebsiteInPost: e.target.checked })}
+                    style={{ width: '16px', height: '16px' }}
+                  />
+                  <label htmlFor="mentionWebsiteInPost" style={{ margin: 0, fontWeight: 500 }}>Mention Brand Website Link in Generated Post</label>
+                </div>
+                {form.mentionWebsiteInPost && (
+                  <div style={{ paddingLeft: '1.5rem' }}>
+                    <label htmlFor="brandLinkPosition" style={{ fontSize: '0.8125rem' }}>Brand Link Position</label>
+                    <input
+                      id="brandLinkPosition"
+                      type="text"
+                      placeholder="e.g. Bottom Center"
+                      value={form.brandLinkPosition}
+                      onChange={(e) => setForm({ ...form, brandLinkPosition: e.target.value })}
+                      style={{ marginTop: '0.25rem' }}
+                    />
+                  </div>
+                )}
+
+                <div style={{ height: '1px', backgroundColor: 'var(--border)', margin: '0.5rem 0' }}></div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    id="mentionWebsiteInCaption"
+                    checked={form.mentionWebsiteInCaption}
+                    onChange={(e) => setForm({ ...form, mentionWebsiteInCaption: e.target.checked })}
+                    style={{ width: '16px', height: '16px' }}
+                  />
+                  <label htmlFor="mentionWebsiteInCaption" style={{ margin: 0, fontWeight: 500 }}>Mention Brand Website Link in Generated Caption</label>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div className={styles.formGroup}>
           <label htmlFor="extra">Post Description</label>
@@ -756,12 +1014,12 @@ function ComposerPageContent() {
         {/* ── Visual Geometry Fields ── */}
         <div className={styles.formRow}>
           <div className={styles.formGroup}>
-            <label htmlFor="graphicHeadline">Graphic Headline (Max 40 chars)</label>
+            <label htmlFor="graphicHeadline">Graphic Headline</label>
             <input
               id="graphicHeadline"
               type="text"
               placeholder="e.g. BUY 2 GET 1 FREE!"
-              maxLength={40}
+              maxLength={80}
               value={form.graphicHeadline}
               onChange={(e) => setForm({ ...form, graphicHeadline: e.target.value })}
             />
@@ -771,7 +1029,8 @@ function ComposerPageContent() {
             <input
               id="heroObjects"
               type="text"
-              placeholder="e.g. Fresh Bread Loaf, Pineapple Pastry"
+              placeholder="e.g. Fresh Bread Loaf, Mobile Phones"
+              maxLength={80}
               value={form.heroObjects}
               onChange={(e) => setForm({ ...form, heroObjects: e.target.value })}
             />
@@ -894,13 +1153,23 @@ function ComposerPageContent() {
                     className={styles.previewImage}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
-                  <button 
-                    className={styles.downloadBtn}
-                    onClick={downloadImage}
-                    title="Download Image"
-                  >
-                    <Download size={20} />
-                  </button>
+                  <div className={styles.imageActionButtons}>
+                    <button 
+                      className={styles.editBtn}
+                      onClick={() => setShowEditor(true)}
+                      title="Edit Image"
+                    >
+                      <Edit3 size={18} />
+                      <span>Edit</span>
+                    </button>
+                    <button 
+                      className={styles.downloadBtn}
+                      onClick={downloadImage}
+                      title="Download Image"
+                    >
+                      <Download size={18} />
+                    </button>
+                  </div>
                 </>
               ) : (
                 <div className={styles.placeholderImage}>
@@ -1010,14 +1279,6 @@ function ComposerPageContent() {
               />
             </div>
             <div className={styles.previewMeta}>
-              <div className={styles.metaItem}>
-                <span className={styles.metaLabel}>Platform</span>
-                <span className={styles.metaValue}>
-                  {form.platform === 'facebook' && <><Facebook size={14} /> Facebook</>}
-                  {form.platform === 'instagram' && <><Instagram size={14} /> Instagram</>}
-                  {form.platform === 'both' && <><Facebook size={14} /> <Instagram size={14} /> Both</>}
-                </span>
-              </div>
               <div className={styles.metaItem}>
                 <span className={styles.metaLabel}>Content Type</span>
                 <span className={styles.metaValue} style={{ textTransform: 'capitalize' }}>{form.contentType}</span>
@@ -1393,6 +1654,15 @@ function ComposerPageContent() {
           )}
         </div>
       </div>
+      {showEditor && generated && (
+        <ImageEditor
+          key={`editor-${selectedImage}-${generated.images[selectedImage]?.url}`}
+          imageUrl={generated.images[selectedImage]?.url}
+          logoUrl={logo || undefined}
+          onSave={handleSaveEditedImage}
+          onClose={() => setShowEditor(false)}
+        />
+      )}
     </div>
   );
 }

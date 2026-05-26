@@ -119,10 +119,9 @@ function daysUntil(dateStr: string): number {
 
 // ── Component ────────────────────────────────────────────────────────
 export default function DashboardHome() {
-  const { fullName, ownerName, businessName, trialEndsAt, createdAt, planId, postsUsed, workspaceId } = useBrand();
+  const { fullName, ownerName, businessName, trialEndsAt, createdAt, planId, postsUsed, workspaceId, currentLimit } = useBrand();
   const [recentPosts, setRecentPosts] = useState<any[]>([]);
   const [totalPosts, setTotalPosts] = useState(0);
-  const usageLimit = 50; // Default base limit for solo
   const upcoming = getUpcomingEvents();
   useEffect(() => {
     const supabase = createClient();
@@ -159,14 +158,35 @@ export default function DashboardHome() {
   const trialStartDate = createdAt ? new Date(createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   const trialEndDate = trialEndsAt ? new Date(trialEndsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
-  const currentLimit = isTrial ? 100 : usageLimit;
-  const currentUsagePercent = Math.min(Math.round((postsUsed / currentLimit) * 100), 100);
+  // Calculate next reset date based on created_at
+  const getNextResetDate = (dateStr: string | null) => {
+    if (!dateStr) return 'Next month';
+    const created = new Date(dateStr);
+    const now = new Date();
+    const day = created.getDate();
+    
+    // Create a date for the reset day in the current month
+    let reset = new Date(now.getFullYear(), now.getMonth(), day);
+    
+    // If we've already passed the reset day this month, move to next month
+    if (now >= reset) {
+      reset.setMonth(reset.getMonth() + 1);
+    }
+    
+    return reset.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  const currentUsagePercent = currentLimit > 0 ? Math.min(Math.round((postsUsed / currentLimit) * 100), 100) : 0;
 
   const stats = [
     { label: 'Total Posts', value: totalPosts.toString(), icon: CalendarDays, color: '#4f46e5' },
     { label: 'Audience Reach', value: '0', icon: TrendingUp, color: '#10b981' },
     { label: 'Engagement', value: '0%', icon: Users, color: '#f59e0b' },
-    { label: 'AI Credits Left', value: Math.max(0, currentLimit - postsUsed).toString(), icon: Sparkles, color: '#06b6d4' },
+    { label: 'AI Credits Left', value: currentLimit >= 10000 ? '∞' : Math.max(0, currentLimit - postsUsed).toString(), icon: Sparkles, color: '#06b6d4' },
   ];
 
   return (
@@ -286,7 +306,9 @@ export default function DashboardHome() {
             <div className={styles.usageContainer}>
               <div className={styles.usageHeader}>
                 <span className={styles.usageLabel}>AI Posts Generated</span>
-                <span className={styles.usageCount}>{postsUsed} <span>/ {currentLimit}</span></span>
+                <span className={styles.usageCount}>
+                  {postsUsed} <span>/ {currentLimit >= 10000 ? '∞' : currentLimit}</span>
+                </span>
               </div>
               <div className={styles.usageBarTrack}>
                 <div
@@ -298,7 +320,7 @@ export default function DashboardHome() {
                 />
               </div>
               <p className={styles.usageFooter}>
-                {currentLimit - postsUsed} posts remaining this cycle. Resets on May 1, 2026.
+                {currentLimit >= 10000 ? 'Unlimited' : (currentLimit - postsUsed)} posts remaining this cycle. Resets on {getNextResetDate(createdAt)}.
               </p>
             </div>
           </div>
