@@ -1,16 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as fabric from 'fabric';
-import { 
-  X, 
-  Type, 
-  Image as ImageIcon, 
-  Trash2, 
-  Check, 
+import {
+  X,
+  Type,
+  Image as ImageIcon,
+  Trash2,
+  Check,
   Move,
   Minus,
   Plus,
-  RotateCcw,
-  Palette,
   Sparkles,
   Send,
   Loader2
@@ -32,9 +30,12 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
-  const [selectedObject, setSelectedObject] = useState<any>(null);
+  // Snapshot of the active fabric object's editable props. We snapshot
+  // rather than holding the fabric instance directly so React picks up
+  // changes when we mutate the object via updateProperty.
+  type SelectedSnapshot = { type?: string; fontSize?: number; fill?: string };
+  const [selectedObject, setSelectedObject] = useState<SelectedSnapshot | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [stageSize, setStageSize] = useState({ width: 600, height: 600 });
   const [brightness, setBrightness] = useState(100);
   const [contrast, setContrast] = useState(100);
   const [showAIPrompt, setShowAIPrompt] = useState(false);
@@ -57,6 +58,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   useEffect(() => {
     if (!canvasRef.current) return;
     let isCancelled = false;
+    let backgroundImage: fabric.FabricImage | null = null;
 
     const canvas = new fabric.Canvas(canvasRef.current, {
       width: 600,
@@ -67,73 +69,88 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
 
     const updateSelection = () => {
       const active = canvas.getActiveObject();
-      setSelectedObject(active || null);
+      if (!active) {
+        setSelectedObject(null);
+        return;
+      }
+      const snap: SelectedSnapshot = { type: active.type };
+      if ('fontSize' in active) snap.fontSize = (active as fabric.IText).fontSize;
+      if ('fill' in active) {
+        const f = (active as fabric.IText).fill;
+        if (typeof f === 'string') snap.fill = f;
+      }
+      setSelectedObject(snap);
     };
     canvas.on('selection:created', updateSelection);
     canvas.on('selection:updated', updateSelection);
     canvas.on('selection:cleared', () => setSelectedObject(null));
 
-    // Measure the canvas area (parent flex container). Subtract the padding
-    // we set in CSS (1.5rem each side) AND the canvasHint row beneath the
-    // canvas so the image actually fits without overflowing.
-    const measureArea = () => {
-      const container = canvasRef.current?.closest(`.${styles.canvasArea}`) as HTMLElement | null;
+    // Resize the canvas + base image to fit the current canvasArea size.
+    // Re-run whenever the container resizes (modal animation finish, window
+    // resize, etc) so the poster always fills the available area.
+    const fitToContainer = () => {
+      if (isCancelled || !backgroundImage || !canvasRef.current) return;
+      const container = canvasRef.current.closest(`.${styles.canvasArea}`) as HTMLElement | null;
       const cw = container?.clientWidth ?? Math.round(window.innerWidth * 0.6);
       const ch = container?.clientHeight ?? Math.round(window.innerHeight * 0.65);
+      if (cw <= 0 || ch <= 0) return;
+
       const PAD_X = 48;   // CSS padding 1.5rem × 2
-      const PAD_Y = 90;   // padding + canvasHint row
+      const PAD_Y = 90;   // padding + canvasHint row beneath the canvas
       const usableW = Math.max(240, cw - PAD_X);
       const usableH = Math.max(240, ch - PAD_Y);
-      return { usableW, usableH };
-    };
 
-    // Defer measurement to the next frame so the editor overlay has actually
-    // laid out — otherwise container.clientWidth/Height can read pre-layout
-    // values and we end up with a tiny image inside an oversized canvas.
-    const renderImage = () => {
-      fabric.FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((img: any) => {
-        if (isCancelled || !fabricCanvasRef.current) return;
+      const naturalW = backgroundImage.width || 1024;
+      const naturalH = backgroundImage.height || 1024;
+      const ratio = naturalW / naturalH;
 
-        const naturalW = img.width || 1024;
-        const naturalH = img.height || 1024;
-        const ratio = naturalW / naturalH;
+      let w: number, h: number;
+      if (usableW / ratio <= usableH) {
+        w = usableW;
+        h = w / ratio;
+      } else {
+        h = usableH;
+        w = h * ratio;
+      }
 
-        const { usableW, usableH } = measureArea();
-
-        // Fit the natural aspect inside the usable area.
-        let w: number, h: number;
-        if (usableW / ratio <= usableH) {
-          w = usableW;
-          h = w / ratio;
-        } else {
-          h = usableH;
-          w = h * ratio;
-        }
-
-        setStageSize({ width: w, height: h });
-        canvas.setDimensions({ width: w, height: h });
-
-        img.set({
-          left: 0,
-          top: 0,
-          scaleX: w / naturalW,
-          scaleY: h / naturalH,
-          selectable: false,
-          evented: false,
-          hoverCursor: 'default'
-        });
-        canvas.add(img);
-        canvas.sendObjectToBack(img);
-        canvas.renderAll();
+      canvas.setDimensions({ width: w, height: h });
+      // Fabric v7 changed image origin default to center/center — pinning
+      // both axes to left/top so left:0/top:0 anchors the corner.
+      backgroundImage.set({
+        left: 0,
+        top: 0,
+        originX: 'left',
+        originY: 'top',
+        scaleX: w / naturalW,
+        scaleY: h / naturalH,
       });
+      canvas.renderAll();
     };
 
-    // rAF defers to after the browser has applied layout from this render.
-    const raf = requestAnimationFrame(renderImage);
+    fabric.FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((img) => {
+      if (isCancelled || !fabricCanvasRef.current) return;
+      img.set({
+        selectable: false,
+        evented: false,
+        hoverCursor: 'default',
+      });
+      canvas.add(img);
+      canvas.sendObjectToBack(img);
+      backgroundImage = img;
+      fitToContainer();
+    });
+
+    // Watch the container — if its size changes after the modal animates in,
+    // re-fit so we don't end up with a tiny poster in a big white canvas.
+    const container = canvasRef.current.closest(`.${styles.canvasArea}`);
+    const resizeObs = (container && typeof ResizeObserver !== 'undefined')
+      ? new ResizeObserver(() => fitToContainer())
+      : null;
+    if (container && resizeObs) resizeObs.observe(container);
 
     return () => {
       isCancelled = true;
-      cancelAnimationFrame(raf);
+      resizeObs?.disconnect();
       fabricCanvasRef.current = null;
       canvas.dispose();
     };
@@ -154,7 +171,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
 
   const addLogo = () => {
     if (!logoUrl || !fabricCanvasRef.current) return;
-    fabric.FabricImage.fromURL(logoUrl, { crossOrigin: 'anonymous' }).then((img: any) => {
+    fabric.FabricImage.fromURL(logoUrl, { crossOrigin: 'anonymous' }).then((img) => {
       img.scaleToWidth(120);
       img.set({ left: 100, top: 200 });
       fabricCanvasRef.current?.add(img);
@@ -162,13 +179,18 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     });
   };
 
-  const updateProperty = (prop: string, value: any) => {
+  const updateProperty = (prop: string, value: string | number) => {
     const active = fabricCanvasRef.current?.getActiveObject();
-    if (active) {
-      active.set(prop as any, value);
-      fabricCanvasRef.current?.renderAll();
-      setSelectedObject({ ...active.toObject(), type: active.type });
+    if (!active) return;
+    active.set({ [prop]: value });
+    fabricCanvasRef.current?.renderAll();
+    const snap: SelectedSnapshot = { type: active.type };
+    if ('fontSize' in active) snap.fontSize = (active as fabric.IText).fontSize;
+    if ('fill' in active) {
+      const f = (active as fabric.IText).fill;
+      if (typeof f === 'string') snap.fill = f;
     }
+    setSelectedObject(snap);
   };
 
   const deleteSelected = () => {
@@ -227,7 +249,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   <div className={styles.controlItem}>
                     <label>Size</label>
                     <button onClick={() => updateProperty('fontSize', (selectedObject.fontSize || 32) - 4)}><Minus size={14} /></button>
-                    <span className={styles.valueLabel}>{Math.round(selectedObject.fontSize)}</span>
+                    <span className={styles.valueLabel}>{Math.round(selectedObject.fontSize ?? 32)}</span>
                     <button onClick={() => updateProperty('fontSize', (selectedObject.fontSize || 32) + 4)}><Plus size={14} /></button>
                   </div>
                   <div className={styles.controlItem}>
