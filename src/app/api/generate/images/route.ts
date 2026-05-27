@@ -607,38 +607,50 @@ async function compositeAllOverlays(
 
     if (overlays.length === 0) return baseBuffer;
 
-    // Collision resolution: bucket by normalized position. Within a bucket,
-    // anchor the outermost element at its computed edge position and stack
-    // the rest inward. Priority (outer → inner): logo, url_chip, cta.
-    const buckets = new Map<string, OverlayDesc[]>();
-    for (const o of overlays) {
-      const key = normalizePos(o.position);
-      if (!buckets.has(key)) buckets.set(key, []);
-      buckets.get(key)!.push(o);
-    }
+    // ── Pixel-rect overlap resolution ──
+    // Different position labels can still overlap visually (e.g. a wide CTA
+    // at "Bottom Left" + a wide URL chip at "Bottom Center" — their footprints
+    // meet in the middle). We walk overlays in priority order and, for each,
+    // push it vertically AWAY from the screen edge until no rectangle overlap
+    // remains with any previously-placed overlay. Logo stays anchored to its
+    // corner; URL chip yields if it collides; CTA yields last.
+    const priorityOf = (k: OverlayKind): number =>
+      ({ logo: 0, url_chip: 1, cta: 2 } as Record<OverlayKind, number>)[k];
 
-    const innerOrder: OverlayKind[] = ['logo', 'url_chip', 'cta'];
+    const rectsOverlap = (a: OverlayDesc, b: OverlayDesc): boolean =>
+      !(a.left + a.width <= b.left ||
+        b.left + b.width <= a.left ||
+        a.top + a.height <= b.top ||
+        b.top + b.height <= a.top);
 
-    for (const [key, group] of buckets) {
-      if (group.length < 2) continue;
-      group.sort((a, b) => innerOrder.indexOf(a.kind) - innerOrder.indexOf(b.kind));
-      const isTop = key.includes('top');
+    const sortedByPriority = [...overlays].sort(
+      (a, b) => priorityOf(a.kind) - priorityOf(b.kind)
+    );
+    const placed: OverlayDesc[] = [];
 
-      if (isTop) {
-        // Outer at minimum top, stack downward
-        let cursor = group[0].top + group[0].height + stackGap;
-        for (let i = 1; i < group.length; i++) {
-          group[i].top = cursor;
-          cursor += group[i].height + stackGap;
-        }
-      } else {
-        // Bottom or center default: outer at largest top, stack upward
-        let cursor = group[0].top - stackGap;
-        for (let i = 1; i < group.length; i++) {
-          group[i].top = cursor - group[i].height;
-          cursor = group[i].top - stackGap;
+    for (const o of sortedByPriority) {
+      // Edge affinity based on the ORIGINAL anchor: bottom positions push
+      // upward, top positions push downward. We use the initial vertical
+      // position (relative to base centre) to decide direction.
+      const isTopAnchor = normalizePos(o.position).includes('top');
+      const isBottomAnchor = !isTopAnchor; // anything else lands at the bottom edge by default
+
+      let safety = 0;
+      while (safety++ < 24) {
+        const collider = placed.find(p => rectsOverlap(o, p));
+        if (!collider) break;
+
+        if (isBottomAnchor) {
+          // Push the moving overlay UP so its bottom edge sits above the collider's top.
+          o.top = collider.top - o.height - stackGap;
+          if (o.top < 0) { o.top = 0; break; } // give up gracefully if we ran out of room
+        } else {
+          // Top-anchored: push DOWN so its top sits below the collider's bottom.
+          o.top = collider.top + collider.height + stackGap;
+          if (o.top + o.height > baseH) { o.top = baseH - o.height; break; }
         }
       }
+      placed.push(o);
     }
 
     // Emit sharp overlays: plate first (if any), then the main bitmap.

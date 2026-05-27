@@ -3,7 +3,7 @@
 // universal failure modes — NOT creative content (cultural motifs,
 // brand-tone interpretation, content-type design) which is derived
 // dynamically by the LLM from user inputs.
-export const NEGATIVE_PROMPT_BASELINE = `blurry, low quality, pixelated, jpeg artifacts, poorly drawn, deformed faces, fused fingers, extra limbs, bad anatomy, watermark, stock photo overlay, text artifacts, cropped letters, illegible writing, misspelled words, gibberish text, warped typography, oversaturated, harsh flash, cluttered composition, isolated single subject on empty plain background, plain solid-coloured full-width banner strip across top or bottom, generic flat coloured navigation bar look, low resolution, grainy, noisy`;
+export const NEGATIVE_PROMPT_BASELINE = `blurry, low quality, pixelated, jpeg artifacts, poorly drawn, deformed faces, fused fingers, extra limbs, bad anatomy, watermark, stock photo overlay, text artifacts, cropped letters, illegible writing, misspelled words, gibberish text, warped typography, oversaturated, harsh flash, cluttered composition, isolated single subject on empty plain background, plain solid-coloured full-width banner strip across top or bottom, generic flat coloured navigation bar look, low resolution, grainy, noisy, painted URL text, painted website address, http://, https://, www., domain name in image, browser address bar, search bar UI, magnifying glass icon with text, made-up URL gibberish, painted CTA button, "Click Here" button, "Visit Our Website" chip, "Shop Now" pill, painted action buttons, duplicate overlay elements`;
 
 // ── Platform Aspect Ratios ───────────────────────────────────────────
 // Technical mapping — not creative — so it stays here.
@@ -82,6 +82,34 @@ ${phrasesToAvoid.length ? `- Forbidden phrases — these MUST NEVER appear in an
 NO BRAND KIT PROVIDED — derive the design language entirely from the Topic, Post Description, Hero Objects and Content Type. Use a sophisticated, modern aesthetic.
 `;
 
+  // Build the hard-priority anti-paint block. Anything in here is a
+  // post-generation overlay; if the model paints its own version, the user
+  // sees DUPLICATE garbage (e.g. an AI-painted "uttp://arn.bo" sitting under
+  // the real URL chip overlay). This rule is so commonly violated by image
+  // models that we promote it to the very TOP of the prompt with concrete
+  // anti-patterns the model can recognise and refuse.
+  const antiPaintItems: string[] = [];
+  if (mentionBrandLogo && brandDetails?.logo) {
+    antiPaintItems.push(`• ABSOLUTELY NO LOGO / WORDMARK / MONOGRAM / BRAND BADGE rendered anywhere on the image, especially at [${brandLogoPosition || 'Bottom Right'}]. The real logo file is pasted there after generation.`);
+  }
+  if (hasUrlChip) {
+    antiPaintItems.push(`• ABSOLUTELY NO URL, DOMAIN NAME, WEBSITE ADDRESS, OR BROWSER ADDRESS BAR rendered anywhere on the image. This includes: "http://", "https://", "www.", any "${(brandDetails?.websiteUrl || '').replace(/^https?:\/\//i, '').replace(/\/$/, '')}", any rounded white pill with a magnifying glass icon, any "search bar" UI element, any partial / blurred / illegible / made-up URL text. A real polished URL chip is pasted post-generation. Painting your own creates DUPLICATE GIBBERISH text underneath the real overlay — this is the single worst failure mode.`);
+  }
+  if (hasCtaButton) {
+    antiPaintItems.push(`• ABSOLUTELY NO CTA BUTTON, action chip, "${(ctaText || '').toUpperCase()}", "CLICK HERE", "SHOP NOW", "VISIT", "BUY NOW", "REGISTER", "LEARN MORE", or any similar call-to-action pill / button anywhere on the image. The real CTA button is pasted post-generation. Painting your own creates a duplicate.`);
+  }
+  const antiPaintBlock = antiPaintItems.length ? `
+
+╔══════════════════════════════════════════════════════════════════╗
+║ HIGHEST-PRIORITY RULES — VIOLATION RUINS THE OUTPUT             ║
+╚══════════════════════════════════════════════════════════════════╝
+The following elements will be COMPOSITED on top of the generated image after the fact by a separate pixel-perfect system. They must NEVER be drawn by you:
+${antiPaintItems.join('\n')}
+
+Instead of painting these elements, RESERVE clean quiet space at the listed positions: calm low-contrast background, no text, no faces, no decorative clutter. The rest of the composition stays rich and detailed — only those small reserved zones stay quiet.
+
+` : '';
+
   return `
 You are an Elite Creative Strategist and Graphic Designer specialising in high-impact social media marketing posters. You design every poster FROM FIRST PRINCIPLES based on the specific inputs given — you do NOT rely on stock templates, fixed style libraries, or generic defaults.
 
@@ -89,7 +117,7 @@ YOUR TASK: Produce ONE detailed, production-ready image generation prompt for a 
 
 OUTPUT FORMAT — return ONLY a JSON object in this exact shape (no markdown fences, no commentary):
 {"expandedPrompts": ["<single rich paragraph describing the poster>"], "negativePrompt": "<comma-separated things to avoid in THIS image>", "design_rationale": "<2-3 sentence reasoning>"}
-
+${antiPaintBlock}
 DYNAMIC REASONING PIPELINE — work through these silently before writing the final prompt. Every decision must be derived from the user's actual inputs, not from generic defaults:
 
 STEP 1 — TOPIC INTERPRETATION
@@ -162,7 +190,7 @@ USER INPUTS:
 
 ${brandBlock}${reservedBlock}
 
-NEGATIVE PROMPT GUIDANCE — for the "negativePrompt" field, list things to AVOID for THIS specific image. At minimum include: plain solid-colour top or bottom banner strip, isolated hero on empty background, missing supporting scene elements, deformed or misspelled text, generic stock-photo look${reservedZones.length ? `, painted logos / wordmarks at the reserved zone, painted URL or website text anywhere on the image, painted browser address bar or search pill, painted CTA buttons or "Click Here" chips (all overlays are pasted post-generation — painting duplicates is the worst failure mode)` : ''}${phrasesToAvoid.length ? `, and these words must never appear in any image text: ${phrasesToAvoid.join(', ')}` : ''}. Add anything else specific to this image's risks.
+NEGATIVE PROMPT GUIDANCE — for the "negativePrompt" field, list things to AVOID for THIS specific image. At minimum include: plain solid-colour top or bottom banner strip, isolated hero on empty background, missing supporting scene elements, deformed or misspelled text, generic stock-photo look${reservedZones.length ? `, painted logos / wordmarks / monograms at any reserved zone, ANY painted URL or domain text (http, https, www, .com, address bar, search bar, browser pill, magnifying-glass icon next to text, blurred or partial URLs, made-up domains like "uttp://" or "arn.bo"), ANY painted CTA button or call-to-action chip ("Click Here", "Visit Our Website", "Shop Now", "Register", "Buy Now", "Learn More"), duplicated overlays — every one of these elements is pasted post-generation and painting your own creates ugly duplicates` : ''}${phrasesToAvoid.length ? `, and these words must never appear in any image text: ${phrasesToAvoid.join(', ')}` : ''}. Add anything else specific to this image's risks.
 
 Now run the reasoning pipeline silently, then output ONLY the JSON object.
 `;
