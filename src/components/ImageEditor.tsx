@@ -63,55 +63,77 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       height: 600,
       backgroundColor: '#ffffff'
     });
-
-    fabric.FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((img: any) => {
-      if (isCancelled) return;
-
-      const container = canvasRef.current?.closest(`.${styles.canvasArea}`);
-      const maxW = (container?.clientWidth || window.innerWidth) * 0.85;
-      const maxH = (container?.clientHeight || window.innerHeight) * 0.7;
-      
-      const ratio = img.width / img.height;
-      let w, h;
-
-      if (ratio > maxW / maxH) {
-        w = maxW;
-        h = w / ratio;
-      } else {
-        h = maxH;
-        w = h * ratio;
-      }
-
-      setStageSize({ width: w, height: h });
-      canvas.setDimensions({ width: w, height: h });
-      
-      img.set({
-        left: 0,
-        top: 0,
-        scaleX: w / img.width,
-        scaleY: h / img.height,
-        selectable: false,
-        evented: false,
-        hoverCursor: 'default'
-      });
-      canvas.add(img);
-      canvas.sendObjectToBack(img);
-      canvas.renderAll();
-    });
+    fabricCanvasRef.current = canvas;
 
     const updateSelection = () => {
       const active = canvas.getActiveObject();
       setSelectedObject(active || null);
     };
-
     canvas.on('selection:created', updateSelection);
     canvas.on('selection:updated', updateSelection);
     canvas.on('selection:cleared', () => setSelectedObject(null));
 
-    fabricCanvasRef.current = canvas;
-    
+    // Measure the canvas area (parent flex container). Subtract the padding
+    // we set in CSS (1.5rem each side) AND the canvasHint row beneath the
+    // canvas so the image actually fits without overflowing.
+    const measureArea = () => {
+      const container = canvasRef.current?.closest(`.${styles.canvasArea}`) as HTMLElement | null;
+      const cw = container?.clientWidth ?? Math.round(window.innerWidth * 0.6);
+      const ch = container?.clientHeight ?? Math.round(window.innerHeight * 0.65);
+      const PAD_X = 48;   // CSS padding 1.5rem × 2
+      const PAD_Y = 90;   // padding + canvasHint row
+      const usableW = Math.max(240, cw - PAD_X);
+      const usableH = Math.max(240, ch - PAD_Y);
+      return { usableW, usableH };
+    };
+
+    // Defer measurement to the next frame so the editor overlay has actually
+    // laid out — otherwise container.clientWidth/Height can read pre-layout
+    // values and we end up with a tiny image inside an oversized canvas.
+    const renderImage = () => {
+      fabric.FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((img: any) => {
+        if (isCancelled || !fabricCanvasRef.current) return;
+
+        const naturalW = img.width || 1024;
+        const naturalH = img.height || 1024;
+        const ratio = naturalW / naturalH;
+
+        const { usableW, usableH } = measureArea();
+
+        // Fit the natural aspect inside the usable area.
+        let w: number, h: number;
+        if (usableW / ratio <= usableH) {
+          w = usableW;
+          h = w / ratio;
+        } else {
+          h = usableH;
+          w = h * ratio;
+        }
+
+        setStageSize({ width: w, height: h });
+        canvas.setDimensions({ width: w, height: h });
+
+        img.set({
+          left: 0,
+          top: 0,
+          scaleX: w / naturalW,
+          scaleY: h / naturalH,
+          selectable: false,
+          evented: false,
+          hoverCursor: 'default'
+        });
+        canvas.add(img);
+        canvas.sendObjectToBack(img);
+        canvas.renderAll();
+      });
+    };
+
+    // rAF defers to after the browser has applied layout from this render.
+    const raf = requestAnimationFrame(renderImage);
+
     return () => {
       isCancelled = true;
+      cancelAnimationFrame(raf);
       fabricCanvasRef.current = null;
       canvas.dispose();
     };
