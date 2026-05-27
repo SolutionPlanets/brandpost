@@ -1,52 +1,30 @@
 // ── Negative Prompt Baseline ─────────────────────────────────────────
-// Appended to every image generation call to eliminate common artifacts.
-export const NEGATIVE_PROMPT_BASELINE = `blurry, low quality, pixelated, jpeg artifacts, poorly drawn, deformed, extra limbs, fused fingers, bad anatomy, watermark, text artifacts, cropped text, illegible writing, misspelled words, oversaturated, harsh lighting, messy composition, cluttered background, stock photo watermark, low resolution, grainy, noisy`;
+// Quality-control floor appended to every image generation call. Lists
+// universal failure modes — NOT creative content (cultural motifs,
+// brand-tone interpretation, content-type design) which is derived
+// dynamically by the LLM from user inputs.
+export const NEGATIVE_PROMPT_BASELINE = `blurry, low quality, pixelated, jpeg artifacts, poorly drawn, deformed faces, fused fingers, extra limbs, bad anatomy, watermark, stock photo overlay, text artifacts, cropped letters, illegible writing, misspelled words, gibberish text, warped typography, oversaturated, harsh flash, cluttered composition, isolated single subject on empty plain background, plain solid-coloured full-width banner strip across top or bottom, generic flat coloured navigation bar look, low resolution, grainy, noisy`;
 
 // ── Platform Aspect Ratios ───────────────────────────────────────────
+// Technical mapping — not creative — so it stays here.
 export const PLATFORM_RATIOS: Record<string, string> = {
   instagram: '1:1',
   facebook: '4:5',
   both: '1:1',
 };
 
-// ── Content-Type Specific Design Guide ───────────────────────────────
-export const CONTENT_TYPE_GUIDE: Record<string, string> = {
-  offer: 'BOLD discount text, clear CTA button, high contrast, urgent but premium feel. Use large price/percentage numbers. Banner-style layout with attention-grabbing hierarchy.',
-  festive: 'Festive decorations, warm golden lighting, celebratory mood, rich jewel-tone colors, ornamental borders, traditional motifs blended with modern design.',
-  informational: 'Editorial layout, plenty of whitespace, authoritative tone, clean sections, subtle icons, professional and trustworthy feel.',
-  general: 'Lifestyle-focused, aspirational imagery, balanced composition, brand-forward design with elegant typography and subtle gradient backgrounds.',
-};
-
-// ── Style Library: Brand Tone → Artistic Keywords ────────────────────
-const BRAND_TONE_STYLES: Record<string, string> = {
-  elegant: 'cinematic lighting, high-end fashion editorial, deep shadows, metallic accents, luxury magazine aesthetic',
-  luxury: 'cinematic lighting, high-end fashion editorial, deep shadows, metallic accents, luxury magazine aesthetic',
-  minimalist: 'clean negative space, Swiss design, geometric precision, muted palette, editorial whitespace',
-  playful: 'vibrant pop art, bold flat colors, dynamic composition, playful typography, energetic layout',
-  fun: 'vibrant pop art, bold flat colors, dynamic composition, playful typography, energetic layout',
-  trustworthy: 'clean corporate memphis design, soft gradients, professional, ample negative space, structured grid',
-  corporate: 'clean corporate memphis design, soft gradients, professional, ample negative space, structured grid',
-  modern: 'sleek gradients, neon accents, futuristic sans-serif typography, dark backgrounds with vibrant highlights',
-  warm: 'golden hour lighting, natural textures, earth tones, cozy atmosphere, soft focus backgrounds',
-  bold: 'high contrast, saturated colors, dramatic lighting, impactful typography, strong geometric shapes',
-};
-
-function getStyleKeywords(brandTone: string | undefined): string {
-  if (!brandTone) return 'professional, clean, modern design aesthetic';
-  const toneLower = brandTone.toLowerCase();
-  for (const [key, style] of Object.entries(BRAND_TONE_STYLES)) {
-    if (toneLower.includes(key)) return style;
-  }
-  return 'professional, clean, modern design aesthetic';
+// Normalise comma-separated strings or arrays into a clean string list.
+function asList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(v => String(v).trim()).filter(Boolean);
+  if (typeof value === 'string') return value.split(',').map(s => s.trim()).filter(Boolean);
+  return [];
 }
 
-// ── Few-Shot Example ─────────────────────────────────────────────────
-const FEW_SHOT_OFFER_EXAMPLE = `
-EXAMPLE of a top-quality prompt (for reference only, DO NOT copy this verbatim):
-"An ultra-premium, 8k marketing poster for a modern clothing brand. Deep obsidian background (#1A1A1A). A golden spotlight illuminates a neatly folded stack of luxury apparel. Bold, razor-sharp white sans-serif text at the very top: 'EXCLUSIVE DIWALI OFFER'. In the centre, a large gold badge with clean serif text: '30% OFF'. Bottom footer area: 'Use Code DIWALI30' in small, crisp gold letters on a dark strip. Cinematic depth of field, bokeh highlights, no clutter, minimalist luxury aesthetic. Business name 'LUXE THREADS' in top-left corner in elegant thin serif."
-`;
-
-// ── Main Expansion Prompt Builder ────────────────────────────────────
+// ── Main Expansion Prompt Builder (fully dynamic) ────────────────────
+// There are NO hardcoded festival libraries, brand-tone style tables, or
+// content-type design templates. The LLM is taught a REASONING PIPELINE
+// that interprets every input from first principles — so any topic,
+// tone, industry, or occasion is handled without code changes.
 export const getImageExpansionPrompt = (
   brandDetails: any,
   topic: string,
@@ -58,95 +36,134 @@ export const getImageExpansionPrompt = (
   mentionBrandLogo?: boolean,
   brandLogoPosition?: string,
   mentionWebsiteInPost?: boolean,
-  brandLinkPosition?: string
+  brandLinkPosition?: string,
+  ctaText?: string,
+  ctaPosition?: string
 ) => {
   const aspectRatio = PLATFORM_RATIOS[platform] || '1:1';
-  const contentGuide = CONTENT_TYPE_GUIDE[contentType] || CONTENT_TYPE_GUIDE.general;
-  const styleKeywords = brandDetails ? getStyleKeywords(brandDetails.brandTone) : 'professional, clean, modern design aesthetic';
+  const phrasesToInclude = asList(brandDetails?.phrasesToInclude);
+  const phrasesToAvoid = asList(brandDetails?.phrasesToAvoid);
+  const hasUrlChip = mentionWebsiteInPost && brandDetails?.websiteUrl;
+  const hasCtaButton = !!(ctaText && String(ctaText).trim());
 
-  const brandContext = brandDetails ? `
-  BRAND DATABASE (STRICTLY ADHERE TO THESE):
-  - Business Name: "${brandDetails.businessName}"
-  - Industry: "${brandDetails.industry || 'Not specified'}"
-  - Target Audience: "${brandDetails.brandAudience || 'General audience'}"
-  - Logo Reference: ${brandDetails.logo ? `A logo exists for this brand. Integrate the brand identity visually through color and typography. Do NOT attempt to fetch or render the logo URL.` : 'Use premium professional typography for branding.'}
-  - Color Palette: Primary ${brandDetails.colors?.primary || '#4F46E5'}, Secondary ${brandDetails.colors?.secondary || '#7C3AED'}, Accent ${brandDetails.colors?.accent || '#F59E0B'}
-  - Brand Tone: ${brandDetails.brandTone || 'professional'}
-  - Artistic Style: ${styleKeywords}
+  // Each composited UI element needs a "quiet zone" reserved in the AI
+  // artwork so the overlay doesn't fight the design underneath. We list
+  // every reserved zone so the model knows to keep those areas clean.
+  const reservedZones: string[] = [];
+  if (mentionBrandLogo && brandDetails?.logo) {
+    reservedZones.push(`a clean uncluttered ~22% × 22% LOGO quiet zone at [${brandLogoPosition || 'Bottom Right'}]`);
+  }
+  if (hasUrlChip) {
+    reservedZones.push(`a horizontal ~55% × 7% URL CHIP quiet zone at [${brandLinkPosition || 'Bottom Center'}] (a pixel-perfect browser-style search-bar pill will be pasted there)`);
+  }
+  if (hasCtaButton) {
+    reservedZones.push(`a compact ~28% × 9% CTA BUTTON quiet zone at [${ctaPosition || 'Bottom Center'}]`);
+  }
+  const reservedBlock = reservedZones.length ? `
 
-  BRAND LAYOUT RULES:
-  1. TOP ZONE: Premium branding area – place "${brandDetails.businessName}" in bold, high-contrast, large font using brand Primary color.
-  2. CENTRE ZONE: Main visual content and key message text.
-  3. BOTTOM ZONE: Clean footer with CTA, coupon code, or tagline.
-  ` : `
-  DESIGN FREEDOM: No specific brand kit is selected. Rely entirely on the user's Post Description and Topic to determine the design, colors, and typography. Use a sophisticated, modern aesthetic.
-  `;
+POST-GENERATION OVERLAYS — RESERVED ZONES (CRITICAL):
+After this image is generated, the following elements will be PASTED ON TOP by a separate system with pixel-perfect typography. You MUST leave each listed zone visually quiet — calm low-contrast backdrop, NO text, NO faces, NO decorative elements, NO painted versions of these elements. The rest of the composition stays rich and detailed.
+${reservedZones.map((z, i) => `  ${i + 1}. ${z}`).join('\n')}
+Specifically: DO NOT draw a logo/wordmark in the logo zone; DO NOT draw a URL, website address, browser-bar, address-pill or "https://" anywhere; DO NOT draw a button, "Click Here", "Shop Now", "Register" or similar CTA chip. Those are all rendered later by overlay. Painting them yourself will result in DUPLICATED elements stacked on top of each other.` : '';
 
-  const visualGeometryContext = `
-  VISUAL GEOMETRY AND STRUCTURAL INSTRUCTIONS:
-  ${graphicHeadline ? `Headline to print directly on the graphic: "${graphicHeadline}". This MUST be printed boldly and visibly as the main text element.` : 'Generate an appropriate short headline based on the topic.'}
-  
-  STRICT BRAND COMPLIANCE OVERRIDE (IF APPLICABLE):
-  - You MUST strictly utilise the EXACT Hex Codes provided for Primary, Secondary, and Accent colors in the image palette. Do not substitute colors.
-  ${mentionWebsiteInPost && brandDetails?.websiteUrl ? `- BRAND LINK TEXT: You MUST explicitly print the text "${brandDetails.websiteUrl}" cleanly on the image at this exact position: [${brandLinkPosition || 'Bottom Center'}].` : ''}
-  ${mentionBrandLogo ? `- BRAND LOGO PLACEHOLDER: You MUST allocate a clear space for the brand logo or prominently display the Business Name text at this exact position: [${brandLogoPosition || 'Bottom Right'}].` : ''}
-  `;
-
-  // Hero Objects gets the HIGHEST precedence — placed last in the prompt so the LLM
-  // treats it as the final, overriding visual directive. This prevents Post Description
-  // from accidentally overwriting what the user explicitly asked to show.
-  const heroObjectsDirective = heroObjects ? `
-  ╔══════════════════════════════════════════════════════════════════════╗
-  ║  ABSOLUTE PRIORITY DIRECTIVE — HERO OBJECTS (OVERRIDES ALL ABOVE)  ║
-  ╠══════════════════════════════════════════════════════════════════════╣
-  ║  The following items MUST be the PRIMARY VISUAL FOCUS of the       ║
-  ║  image. They take HIGHEST PRECEDENCE over any other visual         ║
-  ║  suggestions from the Post Description, Topic, or Content Type.    ║
-  ║  If there is ANY conflict, these Hero Objects WIN.                 ║
-  ╚══════════════════════════════════════════════════════════════════════╝
-  HERO OBJECTS TO DISPLAY: ${heroObjects}
-  - These items MUST be large, prominent, well-lit, and the clear focal point.
-  - Position them in the CENTRE ZONE of the composition as the main visual element.
-  - All other visual elements (text, background, brand marks) should complement and frame these objects, NOT compete with them.
-  ` : '';
+  const brandBlock = brandDetails ? `
+BRAND DETAILS (interpret and honour these dynamically — do NOT map to a fixed template):
+- Business Name: "${brandDetails.businessName || ''}"
+- Industry: "${brandDetails.industry || ''}"
+- Target Audience: "${brandDetails.brandAudience || ''}"
+- Brand Description: "${brandDetails.brandDescription || ''}"
+- Brand Tone (free-form keywords — translate semantically into a matching artistic style): "${brandDetails.brandTone || ''}"
+- Colour Palette: Primary ${brandDetails.colors?.primary || '(unspecified)'}, Secondary ${brandDetails.colors?.secondary || '(unspecified)'}, Accent ${brandDetails.colors?.accent || '(unspecified)'}
+- Website: ${brandDetails.websiteUrl || '(none)'}
+- Logo present: ${brandDetails.logo ? 'yes — reflect identity via palette and typography only; do NOT attempt to fetch or render the URL' : 'no'}${brandDetails.logo && mentionBrandLogo ? `\n- Logo handling: the user\'s real logo file will be PASTED onto the poster after generation at [${brandLogoPosition || 'Bottom Right'}]. You MUST NOT draw a logo, wordmark, monogram, badge or any brand mark in that corner. Reserve a clean uncluttered "quiet zone" there (roughly 22% × 22%) with calm, low-contrast background and NO text, NO decorative elements, NO faces — just an empty area suitable for an overlaid logo. The rest of the composition stays rich.` : ''}
+${phrasesToInclude.length ? `- Approved phrases — usable as on-image microcopy (urgency chip, subtitle) where natural: ${phrasesToInclude.join(' | ')}` : ''}
+${phrasesToAvoid.length ? `- Forbidden phrases — these MUST NEVER appear in any image text: ${phrasesToAvoid.join(' | ')}` : ''}
+` : `
+NO BRAND KIT PROVIDED — derive the design language entirely from the Topic, Post Description, Hero Objects and Content Type. Use a sophisticated, modern aesthetic.
+`;
 
   return `
-You are an Elite Creative Strategist and Graphic Designer specialising in high-impact social media marketing posters.
+You are an Elite Creative Strategist and Graphic Designer specialising in high-impact social media marketing posters. You design every poster FROM FIRST PRINCIPLES based on the specific inputs given — you do NOT rely on stock templates, fixed style libraries, or generic defaults.
 
-YOUR TASK: Generate ONE detailed, production-ready image prompt for a ${contentType} marketing poster.
+YOUR TASK: Produce ONE detailed, production-ready image generation prompt for a marketing poster.
 
-You MUST output a JSON object with EXACTLY this structure (no markdown, no extra text):
-{"expandedPrompts": ["detailed prompt text"], "negativePrompt": "things to avoid", "design_rationale": "brief reasoning"}
+OUTPUT FORMAT — return ONLY a JSON object in this exact shape (no markdown fences, no commentary):
+{"expandedPrompts": ["<single rich paragraph describing the poster>"], "negativePrompt": "<comma-separated things to avoid in THIS image>", "design_rationale": "<2-3 sentence reasoning>"}
 
-FOLLOW THIS STEP-BY-STEP REASONING before writing the final prompt:
-1. VISUAL HIERARCHY: Decide what catches the eye first (headline/offer), second (supporting visual), third (CTA/brand).
-2. COLOR ZONES: Assign the brand colours (#primary, #secondary, #accent) to specific areas of the poster.
-3. TYPOGRAPHY PLAN: Business name location (top), main headline size/position (centre, large), CTA placement (bottom).
-4. ARTISTIC STYLE: Select style keywords matching the brand tone.
-5. FINAL PROMPT: Write the prompt using ultra-specific visual descriptors (lighting, materials, camera angle, textures).
+DYNAMIC REASONING PIPELINE — work through these silently before writing the final prompt. Every decision must be derived from the user's actual inputs, not from generic defaults:
 
-CRITICAL RULES FOR THE PROMPT:
-- IMAGE QUALITY: Ultra-HD, 8k resolution, photorealistic rendering, razor-sharp focus, NO BLUR.
-- TEXT CLARITY: Every letter MUST be sharp, crisp, perfectly spelled, and clearly readable. Use high-contrast text against its background.
-- LANGUAGE: All text in the image MUST be in CLEAR, FLUENT ENGLISH.
-- ASPECT RATIO: Design for ${aspectRatio} aspect ratio (${platform} optimised).
-- TEXT PLACEMENT: Business name at the very top in bold high-contrast font. Main offer/headline centred and largest. CTA/coupon at the bottom, clean and legible.
-- Describe exact positions: "top-centre", "bottom-left", "perfectly centred", "prominent and unmissable".
+STEP 1 — TOPIC INTERPRETATION
+Read the Topic string and decide what kind of subject it names:
+  (a) A specific cultural / religious festival or holiday (Diwali, Christmas, Eid, Lunar New Year, Hanukkah, Holi, Thanksgiving, Onam, Pongal, Songkran, Raksha Bandhan, Navratri, etc.) — if so, recall the AUTHENTIC visual vocabulary of that occasion: traditional motifs, signature ritual objects, characteristic colour palette, typical lighting, scene atmosphere. Be culturally accurate, not generic. Resist clichés (e.g. "just a single firework" for Diwali when the occasion has diyas, marigolds, rangoli, sweets, sparklers, family scenes).
+  (b) A seasonal or weather event (summer sale, monsoon, autumn, winter) — translate to atmospheric cues.
+  (c) A product launch, milestone, announcement, or generic theme — derive imagery from Industry + Post Description.
+If the Topic is sparse or one-word, expand it using the Post Description and Industry. Never produce a literal one-word interpretation when richer context is available.
 
-CONTENT-TYPE DESIGN RULES (${contentType}):
-${contentGuide}
+STEP 2 — BRAND TONE INTERPRETATION
+Treat the Brand Tone keywords as free-form descriptors and translate them semantically into concrete artistic choices:
+  - lighting (golden hour, hard rim, soft diffuse, neon, candlelit, studio, overcast)
+  - typography character (thin serif, condensed sans, rounded, geometric, brushed)
+  - composition feel (editorial, dynamic, minimal, playful, cinematic)
+  - texture / finish (matte, glossy, grainy film, polished)
+Interpret unusual or compound tones by reasoning about their meaning — do not match against a fixed lookup.
+
+STEP 3 — CONTENT TYPE INTENT
+The Content Type names the COMMERCIAL goal. Derive the design language from intent:
+  - offer/sale → the discount or price IS the hero; urgency cues; high contrast; one strong CTA chip.
+  - festive → authentic occasion atmosphere first, brand/offer integrated subtly.
+  - informational → editorial layout, hierarchy, restrained palette, generous whitespace.
+  - general → lifestyle-led, aspirational, brand-forward.
+Blend with cultural context from Step 1 where they overlap (e.g. a festive offer = rich occasion scene + bold price hero).
+
+STEP 3b — HEADLINE TREATMENT RECIPE (pick ONE that matches the content type and brand tone — describe it explicitly in the final paragraph so the image model renders it precisely):
+  • CARD-HERO — large bold headline set inside a soft cream/off-white rounded rectangle at the top, generous padding, subtle drop shadow. Best for OFFER posters where the price is the hero (e.g. "30% OFF" set in a heavyweight rounded sans inside a pale card).
+  • EYEBROW + PILL — two-tier treatment: a short eyebrow line in plain confident text on top ("TURN YOUR INNINGS INTO"), then the main payoff line set in heavy bold uppercase inside a tight rounded pill chip filled with an accent colour ("UNFORGETTABLE RECORDS" in a yellow pill). Best for editorial / sports / announcement posters where there is a build-up phrase + a punchline.
+  • OUTLINED DISPLAY — large display headline with a heavy stroke outline only (no fill), or filled with the background colour and stroked with the accent. Best for energetic / sports / youth-targeted compositions.
+  • EDITORIAL SERIF — refined serif headline, restrained sizing, thin underline rule, generous whitespace around it. Best for informational / luxury / professional content.
+  • FESTIVE GOLD/CREAM — headline in a warm gold or cream-on-deep-tone treatment, possibly with a thin ornamental rule above. Best for festivals and cultural occasions.
+Always name the chosen treatment in the final paragraph and describe its colour callouts, weight, casing and pill/card colour exactly so the image model can render it consistently. The headline is the HERO of the poster — give it strong size and presence.
+
+STEP 4 — SCENE INVENTORY (CRITICAL — most failures happen here)
+List every visible element the final image MUST contain, in priority order:
+  1. PRIMARY HERO SUBJECT — the focal point: ${heroObjects ? `"${heroObjects}"` : '(derive from Topic + Post Description)'}
+  2. REQUIRED SUPPORTING SCENE ELEMENTS — these are MANDATORY, not optional flavour:
+       • Every element described in the Post Description (people, objects, mood, action)
+       • Every cultural / contextual motif you identified in Step 1
+       • Atmospheric backdrop appropriate to the tone
+     Render these supporting elements visibly somewhere in the composition (foreground, midground, atmospheric background or soft bokeh). DO NOT strip them out to "simplify" the composition. Stripping them is the most common failure mode of poster generation — explicitly resist it.
+  3. TYPOGRAPHY — headline ${graphicHeadline ? `"${graphicHeadline}"` : '(generate a short punchy headline)'} rendered using the chosen treatment recipe from Step 3b${mentionBrandLogo && brandDetails?.logo ? '. DO NOT paint a brand wordmark, monogram or logo at the logo corner (the real logo will be pasted there post-generation)' : ', plus a discreet brand wordmark integrated into the artwork'}${hasUrlChip ? '. DO NOT paint the website URL or any browser-style address bar anywhere on the image (a real URL chip will be pasted post-generation)' : ''}${hasCtaButton ? '. DO NOT paint any CTA button, "Click Here", "Shop Now" or similar chip (the real CTA will be pasted post-generation)' : ''}.
+
+STEP 5 — COLOUR & LAYOUT
+Map the brand hex codes to specific regions of the composition (primary for dominant tone, secondary for accents, accent for highlights). DO NOT substitute the supplied hex codes.
+LAYOUT PRINCIPLES — favour elegant integration over rigid zoning:
+  - ${mentionBrandLogo && brandDetails?.logo ? `The [${brandLogoPosition || 'Bottom Right'}] corner is RESERVED for the real logo overlay — keep it visually quiet (calm low-contrast backdrop, no text, no faces, no decorative elements, no painted wordmark there).` : 'Integrate the brand wordmark discreetly into the artwork (refined wordmark at top with a thin ornamental rule, transparent overlay, or quiet corner placement).'} DO NOT paint a solid full-width coloured rectangular banner strip across the top or bottom — that pattern looks generic and cheap and will be rejected.
+  - Hero headline occupies the optical centre (or top, depending on the chosen treatment) with strong size, weight and presence — it is the primary visual draw.
+  - Any post-generation overlay zones (logo / URL chip / CTA button) MUST be kept visually quiet — DO NOT paint duplicates of those elements anywhere on the image.
+
+STEP 6 — WRITE THE FINAL PROMPT
+Compose ONE rich paragraph naming every element from your Scene Inventory EXPLICITLY. Use ultra-specific visual descriptors (lighting direction, materials, depth of field, camera feel, textures, colour callouts by hex). Mentioning each required element by name prevents the downstream image model from dropping it.
+
+QUALITY RULES (always apply):
+- Photorealistic, ultra-HD 8k, sharp focus, magazine-quality finish.
+- Every letter in the image must be perfectly spelled, crisp, high-contrast English.
+- Aspect ratio: ${aspectRatio} for ${platform}.
+- Forbidden layout: single isolated subject on empty background framed by solid coloured top/bottom banner strips.
 
 USER INPUTS:
-Topic: ${topic}
-Post Context & Offers: ${extraInstructions || 'No specific extra instructions provided. Rely on topic and brand details.'}
-${visualGeometryContext}
+- Topic: "${topic || ''}"
+- Content Type: "${contentType || ''}"
+- Platform: "${platform || ''}"
+- Post Description: "${extraInstructions || '(none)'}"
+- Graphic Headline (must print on image as largest text element): "${graphicHeadline || '(none — generate one)'}"
+- Hero Objects (primary focal subject): "${heroObjects || '(none — derive from above)'}"
+- Brand logo overlay (pasted post-generation): ${mentionBrandLogo && brandDetails?.logo ? `yes, at [${brandLogoPosition || 'Bottom Right'}]` : 'no'}
+- Website URL chip overlay (pasted post-generation): ${hasUrlChip ? `yes, "${brandDetails?.websiteUrl || ''}" at [${brandLinkPosition || 'Bottom Center'}]` : 'no'}
+- CTA button overlay (pasted post-generation): ${hasCtaButton ? `yes, "${ctaText}" at [${ctaPosition || 'Bottom Center'}]` : 'no'}
 
-${brandContext}
+${brandBlock}${reservedBlock}
 
-${FEW_SHOT_OFFER_EXAMPLE}
+NEGATIVE PROMPT GUIDANCE — for the "negativePrompt" field, list things to AVOID for THIS specific image. At minimum include: plain solid-colour top or bottom banner strip, isolated hero on empty background, missing supporting scene elements, deformed or misspelled text, generic stock-photo look${reservedZones.length ? `, painted logos / wordmarks at the reserved zone, painted URL or website text anywhere on the image, painted browser address bar or search pill, painted CTA buttons or "Click Here" chips (all overlays are pasted post-generation — painting duplicates is the worst failure mode)` : ''}${phrasesToAvoid.length ? `, and these words must never appear in any image text: ${phrasesToAvoid.join(', ')}` : ''}. Add anything else specific to this image's risks.
 
-The "negativePrompt" field should list things to AVOID in this specific image (e.g., cluttered background, deformed text, low contrast). Be specific to the content type.
-${heroObjectsDirective}
-Now reason step-by-step and then generate the JSON object.
+Now run the reasoning pipeline silently, then output ONLY the JSON object.
 `;
 };

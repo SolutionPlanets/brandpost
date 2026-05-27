@@ -20,6 +20,7 @@ interface BrandContextType {
   phrasesToInclude: string;
   phrasesToAvoid: string;
   logo: string | null;
+  logoDark: string | null;
   profilePhoto: string | null;
   authProvider: string;
   colors: {
@@ -42,6 +43,7 @@ interface BrandContextType {
   brandKitLimit: number;
   setBusinessName: (name: string) => void;
   setLogo: (logo: string | null) => void;
+  setLogoDark: (logo: string | null) => void;
   setProfilePhoto: (photo: string | null) => void;
   setColors: (colors: { primary: string; secondary: string; accent: string }) => void;
   refreshBrandData: (silent?: boolean) => Promise<void>;
@@ -198,6 +200,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [businessName, setBusinessName] = useState('');
   const [brandKitName, setBrandKitName] = useState('');
   const [logo, setLogo] = useState<string | null>(null);
+  const [logoDark, setLogoDark] = useState<string | null>(null);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [authProvider, setAuthProvider] = useState<string>('email');
   const [colors, setColors] = useState({
@@ -313,6 +316,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       setTimezone(workspace.timezone || 'Asia/Kolkata');
       setTiming(workspace.business_timing || '');
       setLogo(brandKit?.logo_url || null);
+      setLogoDark(brandKit?.logo_dark_url || null);
       setInstagram(brandKit?.instagram_handle || '');
       setFacebook(brandKit?.facebook_handle || '');
       setBrandTone(brandKit?.tone || 'Professional');
@@ -338,6 +342,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         address: workspace.address || '',
         pincode: workspace.pincode || '',
         logo: brandKit?.logo_url || null,
+        logoDark: brandKit?.logo_dark_url || null,
         profilePhoto: userProfile?.profile_photo || null,
         instagram: brandKit?.instagram_handle || '',
         facebook: brandKit?.facebook_handle || '',
@@ -386,6 +391,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         if (d.timezone) setTimezone(d.timezone);
         if (d.timing) setTiming(d.timing);
         if (d.logo) setLogo(d.logo);
+        if (d.logoDark) setLogoDark(d.logoDark);
         if (d.profilePhoto) setProfilePhoto(d.profilePhoto);
         if (d.colors) setColors(d.colors);
       } catch (e) {
@@ -420,12 +426,13 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       postsUsed,
       timezone,
       logo,
+      logoDark,
       profilePhoto,
       authProvider,
       colors,
       timing
     }));
-  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid, planId, plans, trialEndsAt, createdAt, postsUsed, timezone, logo, profilePhoto, authProvider, colors, timing]);
+  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid, planId, plans, trialEndsAt, createdAt, postsUsed, timezone, logo, logoDark, profilePhoto, authProvider, colors, timing]);
 
   // Automatic redirect if trial is expired and user is on a dashboard route
   useEffect(() => {
@@ -478,6 +485,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     phrasesToInclude,
     phrasesToAvoid,
     logo,
+    logoDark,
     profilePhoto,
     authProvider,
     colors,
@@ -494,13 +502,14 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     brandKitLimit,
     setBusinessName,
     setLogo,
+    setLogoDark,
     setProfilePhoto,
     setColors,
     refreshBrandData,
     checkLimitAndRedirect,
     isLoading,
     hasBrandKit
-  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid, logo, profilePhoto, authProvider, colors, planId, plans, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, isLoading, hasBrandKit, isLimitReached, currentLimit, brandKitLimit]);
+  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid, logo, logoDark, profilePhoto, authProvider, colors, planId, plans, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, isLoading, hasBrandKit, isLimitReached, currentLimit, brandKitLimit]);
 
   return (
     <BrandContext.Provider value={value}>

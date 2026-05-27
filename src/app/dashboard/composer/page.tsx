@@ -67,6 +67,8 @@ interface ComposerForm {
   mentionWebsiteInPost: boolean;
   brandLinkPosition: string;
   mentionWebsiteInCaption: boolean;
+  ctaText: string;
+  ctaPosition: string;
 }
 
 interface GeneratedContent {
@@ -116,7 +118,7 @@ function ComposerPageContent() {
   const searchParams = useSearchParams();
   const { 
     brandKitName, businessName, brandTone, brandDescription, colors,
-    fullName, ownerName, address, pincode, timing, logo,
+    fullName, ownerName, address, pincode, timing, logo, logoDark,
     industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid,
     postsUsed, planId, trialEndsAt, refreshBrandData, workspaceId,
     checkLimitAndRedirect
@@ -166,6 +168,8 @@ function ComposerPageContent() {
     mentionWebsiteInPost: true,
     brandLinkPosition: 'Bottom Left',
     mentionWebsiteInCaption: true,
+    ctaText: '',
+    ctaPosition: 'Bottom Center',
   });
 
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
@@ -317,6 +321,8 @@ function ComposerPageContent() {
             mentionWebsiteInPost: data.mention_website_in_post !== undefined ? data.mention_website_in_post : true,
             brandLinkPosition: data.brand_link_position || 'Bottom Left',
             mentionWebsiteInCaption: data.mention_website_in_caption !== undefined ? data.mention_website_in_caption : true,
+            ctaText: data.cta_text || '',
+            ctaPosition: data.cta_position || 'Bottom Center',
           });
 
           if (isEdit) {
@@ -521,6 +527,7 @@ function ComposerPageContent() {
             pincode,
             timing,
             logo,
+            logoDark,
             industry,
             brandAudience,
             websiteUrl,
@@ -531,6 +538,8 @@ function ComposerPageContent() {
           brandLogoPosition: form.brandLogoPosition,
           mentionWebsiteInPost: form.brandKit !== 'none' ? form.mentionWebsiteInPost : false,
           brandLinkPosition: form.brandLinkPosition,
+          ctaText: form.ctaText,
+          ctaPosition: form.ctaPosition,
           ...(postId ? { postId, currentCaption: editedCaption || generated?.captions[selectedCaption] } : {}),
         }),
       });
@@ -982,6 +991,33 @@ function ComposerPageContent() {
                     />
                   </div>
                 )}
+
+                <div style={{ height: '1px', backgroundColor: 'var(--border)', margin: '0.5rem 0' }}></div>
+
+                <div>
+                  <label htmlFor="ctaText" style={{ fontWeight: 500 }}>Call-to-Action Button (Optional)</label>
+                  <input
+                    id="ctaText"
+                    type="text"
+                    placeholder="e.g. Register Free Today, Shop Now, Learn More"
+                    value={form.ctaText}
+                    onChange={(e) => setForm({ ...form, ctaText: e.target.value })}
+                    style={{ marginTop: '0.25rem' }}
+                  />
+                  {form.ctaText.trim() && (
+                    <div style={{ paddingLeft: '0', marginTop: '0.5rem' }}>
+                      <label htmlFor="ctaPosition" style={{ fontSize: '0.8125rem' }}>CTA Position</label>
+                      <input
+                        id="ctaPosition"
+                        type="text"
+                        placeholder="e.g. Bottom Center"
+                        value={form.ctaPosition}
+                        onChange={(e) => setForm({ ...form, ctaPosition: e.target.value })}
+                        style={{ marginTop: '0.25rem' }}
+                      />
+                    </div>
+                  )}
+                </div>
 
                 <div style={{ height: '1px', backgroundColor: 'var(--border)', margin: '0.5rem 0' }}></div>
 
