@@ -30,6 +30,17 @@ const STATIC_PLANS = [
 
 type PaymentMethod = 'upi' | 'cards' | 'netbanking' | 'wallet';
 
+const formatPrice = (amount: number) => {
+  const num = Number(amount);
+  const hasDecimals = num % 1 !== 0;
+  const integerPart = Math.floor(num).toLocaleString('en-IN');
+  if (hasDecimals) {
+    const decimalPart = num.toFixed(2).split('.')[1];
+    return `${integerPart}.${decimalPart}`;
+  }
+  return integerPart;
+};
+
 function RazorpayCheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -43,7 +54,7 @@ function RazorpayCheckoutContent() {
   const isYearly = period === 'yearly';
   const inrPrice = isYearly ? Number(plan.inr_yearly) : Number(plan.inr_monthly);
   const gstPercentage = typeof plan.gst !== 'undefined' && plan.gst !== null ? Number(plan.gst) : 18;
-  const gstAmount = Math.round(inrPrice * (gstPercentage / 100));
+  const gstAmount = inrPrice * (gstPercentage / 100);
   const totalPrice = inrPrice + gstAmount;
 
   const [isCheckingGateway, setIsCheckingGateway] = useState(false);
@@ -457,17 +468,17 @@ function RazorpayCheckoutContent() {
                   <div className={styles.priceBreakdown}>
                     <div className={styles.breakdownRow}>
                       <span>Base Price</span>
-                      <span>₹{inrPrice.toLocaleString('en-IN')}.00</span>
+                      <span>₹{formatPrice(inrPrice)}</span>
                     </div>
                     {gstPercentage > 0 && (
                       <div className={styles.breakdownRow}>
                         <span>GST ({gstPercentage}%)</span>
-                        <span>₹{gstAmount.toLocaleString('en-IN')}.00</span>
+                        <span>₹{formatPrice(gstAmount)}</span>
                       </div>
                     )}
                     <div className={styles.totalRow}>
                       <span>Total</span>
-                      <span>₹{totalPrice.toLocaleString('en-IN')}.00</span>
+                      <span>₹{formatPrice(totalPrice)}</span>
                     </div>
                   </div>
                 </div>
@@ -789,7 +800,7 @@ function RazorpayCheckoutContent() {
                     </>
                   ) : (
                     <>
-                      <span>Pay ₹{totalPrice.toLocaleString('en-IN')}.00</span>
+                      <span>Pay ₹{formatPrice(totalPrice)}</span>
                       <ChevronRight size={16} />
                     </>
                   )}
