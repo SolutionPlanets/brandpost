@@ -55,7 +55,9 @@ function RazorpayCheckoutContent() {
   const inrPrice = isYearly ? Number(plan.inr_yearly) : Number(plan.inr_monthly);
   const gstPercentage = typeof plan.gst !== 'undefined' && plan.gst !== null ? Number(plan.gst) : 18;
   const gstAmount = inrPrice * (gstPercentage / 100);
-  const totalPrice = inrPrice + gstAmount;
+  const rawTotalPrice = inrPrice + gstAmount;
+  const totalPrice = Math.floor(rawTotalPrice);
+  const roundoff = Number((totalPrice - rawTotalPrice).toFixed(2));
 
   const [isCheckingGateway, setIsCheckingGateway] = useState(false);
   const [useMockModal, setUseMockModal] = useState(true);
@@ -474,6 +476,12 @@ function RazorpayCheckoutContent() {
                       <div className={styles.breakdownRow}>
                         <span>GST ({gstPercentage}%)</span>
                         <span>₹{formatPrice(gstAmount)}</span>
+                      </div>
+                    )}
+                    {roundoff !== 0 && (
+                      <div className={styles.breakdownRow} style={{ color: '#ef4444' }}>
+                        <span>Roundoff</span>
+                        <span>-₹{formatPrice(Math.abs(roundoff))}</span>
                       </div>
                     )}
                     <div className={styles.totalRow}>
