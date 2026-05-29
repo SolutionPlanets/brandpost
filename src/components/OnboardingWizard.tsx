@@ -20,6 +20,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
+import { useBrand } from '@/contexts/BrandContext';
 import styles from './OnboardingWizard.module.css';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { usePalette } from 'color-thief-react';
@@ -63,10 +64,17 @@ const steps = [
   { title: 'Connect', icon: Share2 },
 ];
 
-export default function OnboardingWizard() {
+interface OnboardingWizardProps {
+  brandKitId?: string;
+  onComplete?: () => void;
+}
+
+export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingWizardProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
+  const { refreshBrandData } = useBrand();
+
   const [currentStep, setCurrentStep] = useState(() => {
     const stepParam = searchParams.get('step');
     return stepParam ? parseInt(stepParam, 10) : 1;
@@ -75,6 +83,7 @@ export default function OnboardingWizard() {
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -150,68 +159,126 @@ export default function OnboardingWizard() {
             instagram: workspace.social_connections.some((c: any) => c.platform === 'instagram'),
           });
         }
-        const brandKit = workspace.brand_kits?.[0];
-        dbData = {
-          businessName: workspace.business_name || '',
-          ownerName: workspace.owner_name || '',
-          address: workspace.address || '',
-          pincode: workspace.pincode || '',
-          timing: workspace.business_timing || '',
-          timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-          logo: brandKit?.logo_url || null,
-          logoUrl: brandKit?.logo_url || null,
-          colors: brandKit ? {
-            primary: brandKit.primary_color || '#4f46e5',
-            secondary: brandKit.secondary_color || '#64748b',
-            accent: brandKit.accent_color || '#fbbf24',
-          } : { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
-          tone: brandKit?.tone ? brandKit.tone.toLowerCase() : 'professional',
-          description: brandKit?.brand_description || '',
-          brandKitName: brandKit?.brand_kit_name || '',
-          headingFont: brandKit?.heading_font || 'Inter',
-          bodyFont: brandKit?.body_font || 'Inter',
-          instagram: brandKit?.instagram_handle || '',
-          facebook: brandKit?.facebook_handle || '',
-          industry: brandKit?.industry || '',
-          brandAudience: brandKit?.brand_audience || '',
-          websiteUrl: brandKit?.website_url || '',
-          phrasesToInclude: brandKit?.phrases_to_include || '',
-          phrasesToAvoid: brandKit?.phrases_to_avoid || '',
-        };
+
+        // Determine if we are creating a new kit (supplementary) or doing initial onboarding
+        const isInitialOnboarding = (workspace.brand_kits || []).length === 0;
+        const isAddingNewKit = !brandKitId && !isInitialOnboarding;
+
+        // Find the specific brand kit
+        const brandKit = brandKitId 
+          ? workspace.brand_kits?.find((k: any) => k.id === brandKitId)
+          : null; // Don't fallback to first kit if adding new
+
+        if (isAddingNewKit) {
+          // If adding a NEW kit, start with BLANK brand kit data, but keep workspace data if helpful
+          dbData = {
+            ownerName: workspace.owner_name || '',
+            businessName: (workspace.business_name || '').toLowerCase().includes('my workspace') ? '' : (workspace.business_name || ''),
+            address: workspace.address || '',
+            pincode: workspace.pincode || '',
+            timing: workspace.business_timing || '',
+            timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+            logo: null,
+            logoUrl: null,
+            logoDark: null,
+            logoDarkUrl: null,
+            colors: { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
+            tone: 'professional',
+            description: '',
+            brandKitName: '',
+            headingFont: 'Inter',
+            bodyFont: 'Inter',
+            instagram: '',
+            facebook: '',
+            industry: '',
+            brandAudience: '',
+            websiteUrl: '',
+            phrasesToInclude: '',
+            phrasesToAvoid: '',
+          };
+        } else {
+          // Editing existing or initial onboarding
+          dbData = {
+            businessName: workspace.business_name || '',
+            ownerName: workspace.owner_name || '',
+            address: workspace.address || '',
+            pincode: workspace.pincode || '',
+            timing: workspace.business_timing || '',
+            timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+            logo: brandKit?.logo_url || null,
+            logoUrl: brandKit?.logo_url || null,
+            logoDark: brandKit?.logo_dark_url || null,
+            logoDarkUrl: brandKit?.logo_dark_url || null,
+            colors: brandKit ? {
+              primary: brandKit.primary_color || '#4f46e5',
+              secondary: brandKit.secondary_color || '#64748b',
+              accent: brandKit.accent_color || '#fbbf24',
+            } : { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
+            tone: brandKit?.tone ? brandKit.tone.toLowerCase() : 'professional',
+            description: brandKit?.brand_description || '',
+            brandKitName: brandKit?.brand_kit_name || '',
+            headingFont: brandKit?.heading_font || 'Inter',
+            bodyFont: brandKit?.body_font || 'Inter',
+            instagram: brandKit?.instagram_handle || '',
+            facebook: brandKit?.facebook_handle || '',
+            industry: brandKit?.industry || '',
+            brandAudience: brandKit?.brand_audience || '',
+            websiteUrl: brandKit?.website_url || '',
+            phrasesToInclude: brandKit?.phrases_to_include || '',
+            phrasesToAvoid: brandKit?.phrases_to_avoid || '',
+          };
+        }
+
+        const bNameToCheck = workspace.business_name || workspace.name || '';
+        if (bNameToCheck && !bNameToCheck.toLowerCase().includes('my workspace') && !isAddingNewKit) {
+          setIsEditMode(true);
+        }
       }
 
-      // 2. Load from localStorage (priority for draft data)
-      const savedState = localStorage.getItem('onboarding_formData');
-      if (savedState) {
-        try {
-          const parsed = JSON.parse(savedState);
-          setFormData(prev => ({ ...prev, ...dbData, ...parsed }));
-          
-          const savedStep = localStorage.getItem('onboarding_currentStep');
-          if (savedStep) setCurrentStep(parseInt(savedStep, 10));
-        } catch (e) {
-          console.error('Error parsing onboarding state:', e);
-          if (dbData.businessName) setFormData(prev => ({ ...prev, ...dbData }));
+      // 2. Load from localStorage (ONLY for initial onboarding draft)
+      const isInitialOnboarding = !brandKitId && (!workspace || (workspace.brand_kits || []).length === 0);
+      if (isInitialOnboarding) {
+        const savedState = localStorage.getItem('onboarding_formData');
+        if (savedState) {
+          try {
+            const parsed = JSON.parse(savedState);
+            setFormData(prev => ({ ...prev, ...dbData, ...parsed }));
+            
+            const savedStep = localStorage.getItem('onboarding_currentStep');
+            if (savedStep) setCurrentStep(parseInt(savedStep, 10));
+          } catch (e) {
+            console.error('Error parsing onboarding state:', e);
+            setFormData(prev => ({ ...prev, ...dbData }));
+          }
+        } else {
+          setFormData(prev => ({ ...prev, ...dbData }));
         }
-      } else if (dbData.businessName) {
+      } else {
         setFormData(prev => ({ ...prev, ...dbData }));
       }
 
       setIsRefreshing(false);
     }
     fetchExistingData();
-  }, []);
+  }, [brandKitId, refreshBrandData]);
 
   // Save to localStorage whenever formData or currentStep changes
   useEffect(() => {
     if (isRefreshing) return;
     
+    // Only save to localStorage during initial onboarding (when there are no brand kit IDs yet)
+    if (brandKitId) return;
+
     // Don't save File objects
     const { logoFile, logoDarkFile, ...stateToSave } = formData;
     
-    localStorage.setItem('onboarding_formData', JSON.stringify(stateToSave));
-    localStorage.setItem('onboarding_currentStep', currentStep.toString());
-  }, [formData, currentStep, isRefreshing]);
+    try {
+      localStorage.setItem('onboarding_formData', JSON.stringify(stateToSave));
+      localStorage.setItem('onboarding_currentStep', currentStep.toString());
+    } catch (e) {
+      console.error('Error saving onboarding state:', e);
+    }
+  }, [formData, currentStep, isRefreshing, brandKitId]);
 
   // For color extraction
   const { data: palette } = usePalette(formData.logo || '', 5, 'hex', {
@@ -235,17 +302,44 @@ export default function OnboardingWizard() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // Check existing workspace and kits
+    const { data: workspace } = await supabase
+      .from('workspaces')
+      .select('id, business_name, brand_kits(id)')
+      .eq('owner_id', user.id)
+      .maybeSingle();
+
+    if (!workspace) return;
+
+    const bKits = workspace.brand_kits || [];
+    const isInitialOnboarding = bKits.length === 0;
+    
+    // We ONLY update global workspace info during initial setup 
+    // or when explicitly editing the VERY FIRST brand kit.
+    // Supplementary kits (Kit 2, 3) should NOT touch global workspace settings.
+    const isFirstKit = bKits.length > 0 && brandKitId === bKits[0].id;
+
+    if (!isInitialOnboarding && !isFirstKit && !(!brandKitId && isInitialOnboarding)) {
+      // If we are adding Kit 2/3 or editing Kit 2/3, we skip workspace global updates
+      return;
+    }
+
+    const updatePayload: any = {
+      owner_name: formData.ownerName,
+      address: formData.address,
+      pincode: formData.pincode,
+      business_timing: formData.timing,
+      timezone: formData.timezone
+    };
+
+    if (isInitialOnboarding || isFirstKit) {
+      updatePayload.business_name = formData.businessName;
+    }
+
     const { error } = await supabase
       .from('workspaces')
-      .update({ 
-        business_name: formData.businessName,
-        owner_name: formData.ownerName,
-        address: formData.address,
-        pincode: formData.pincode,
-        business_timing: formData.timing,
-        timezone: formData.timezone
-      })
-      .eq('owner_id', user.id);
+      .update(updatePayload)
+      .eq('id', workspace.id);
 
     if (error) {
       console.error('Workspace update error:', JSON.stringify(error, null, 2));
@@ -279,13 +373,26 @@ export default function OnboardingWizard() {
 
       console.log('saveBrandKit: Saving for workspace', workspace.id);
 
-      // Fetch existing brand kit to append 'id' if it exists. 
-      // This bypasses the need for the ON CONFLICT specifying 'workspace_id' which throws 42P10.
-      const { data: existingBrandKit } = await supabase
-        .from('brand_kits')
-        .select('id')
-        .eq('workspace_id', workspace.id)
-        .maybeSingle();
+      // Determine the target brand kit ID
+      let targetId = brandKitId;
+      if (!targetId) {
+        // If brandKitId prop is not provided, fetch existing brand kits for the workspace to see if we already have some.
+        const { data: existingKits } = await supabase
+          .from('brand_kits')
+          .select('id')
+          .eq('workspace_id', workspace.id);
+
+        const kits = existingKits || [];
+        const isInitialOnboarding = kits.length === 0;
+
+        if (isInitialOnboarding) {
+          // No kits exist at all, so we let it insert or fetch any temporarily created row
+          targetId = kits[0]?.id;
+        } else {
+          // Kits already exist, and brandKitId is undefined, which means the user clicked "Add New Brand Kit".
+          // In this case, we leave targetId undefined to perform a new INSERT.
+        }
+      }
 
       const payload: Record<string, any> = {
         workspace_id: workspace.id,
@@ -306,8 +413,8 @@ export default function OnboardingWizard() {
         phrases_to_avoid: formData.phrasesToAvoid,
       };
 
-      if (existingBrandKit?.id) {
-        payload.id = existingBrandKit.id; // Append primary key for seamless UPSERT fallback
+      if (targetId) {
+        payload.id = targetId; // Append primary key for seamless UPSERT fallback
       }
 
       const { error, data } = await supabase
@@ -403,11 +510,21 @@ export default function OnboardingWizard() {
       setUploading(false);
       await saveBrandKit(finalLogoUrl || undefined, finalLogoDarkUrl || undefined);
       
+      await refreshBrandData();
+      
       // Success! Clear state
       localStorage.removeItem('onboarding_formData');
       localStorage.removeItem('onboarding_currentStep');
       
-      router.push('/dashboard');
+      if (isEditMode || brandKitId) {
+        alert('Changes saved successfully');
+      }
+      
+      if (onComplete) {
+        onComplete();
+      } else {
+        router.push('/dashboard');
+      }
     } catch (err: any) {
       console.error('Final submit error:', err);
       setLoading(false);
@@ -1092,7 +1209,7 @@ export default function OnboardingWizard() {
             onClick={nextStep}
             disabled={loading || uploading}
           >
-            {loading ? 'Saving...' : uploading ? 'Uploading...' : (currentStep === steps.length ? 'Get Started' : 'Next')} <ArrowRight size={18} />
+            {loading ? 'Saving...' : uploading ? 'Uploading...' : (currentStep === steps.length ? (isEditMode ? 'Changes Done' : 'Get Started') : 'Next')} <ArrowRight size={18} />
           </button>
         </div>
       </div>

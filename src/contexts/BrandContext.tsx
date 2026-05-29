@@ -3,11 +3,30 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 
+export interface BrandKit {
+  id: string;
+  workspace_id: string;
+  brand_kit_name: string;
+  logo_url: string | null;
+  logo_dark_url: string | null;
+  primary_color: string;
+  secondary_color: string;
+  accent_color: string;
+  heading_font: string;
+  body_font: string;
+  brand_description: string;
+  tone: string;
+  instagram_handle: string;
+  facebook_handle: string;
+  created_at: string;
+}
+
 interface BrandContextType {
   fullName: string;
   ownerName: string;
   businessName: string;
   brandKitName: string;
+  brandKits: BrandKit[];
   address: string;
   pincode: string;
   instagram: string;
@@ -199,6 +218,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [ownerName, setOwnerName] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [brandKitName, setBrandKitName] = useState('');
+  const [brandKits, setBrandKits] = useState<BrandKit[]>([]);
   const [logo, setLogo] = useState<string | null>(null);
   const [logoDark, setLogoDark] = useState<string | null>(null);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
@@ -303,7 +323,9 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     if (workspace) {
       setWorkspaceId(workspace.id);
       const bKits = workspace.brand_kits;
-      const brandKit = bKits ? (Array.isArray(bKits) ? bKits[0] : bKits) : undefined;
+      const brandKitsArray = bKits ? (Array.isArray(bKits) ? bKits : [bKits]) : [];
+      setBrandKits(brandKitsArray as BrandKit[]);
+      const brandKit = brandKitsArray[0] || undefined;
       setHasBrandKit(!!brandKit);
       const rawBName = workspace.business_name || '';
       const bName = rawBName.toLowerCase().includes('my workspace') ? '' : rawBName;
@@ -473,6 +495,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     ownerName,
     businessName,
     brandKitName,
+    brandKits,
     address,
     pincode,
     instagram,
@@ -509,7 +532,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     checkLimitAndRedirect,
     isLoading,
     hasBrandKit
-  }), [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid, logo, logoDark, profilePhoto, authProvider, colors, planId, plans, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, isLoading, hasBrandKit, isLimitReached, currentLimit, brandKitLimit]);
+  }), [fullName, ownerName, businessName, brandKitName, brandKits, address, pincode, instagram, facebook, brandTone, brandDescription, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid, logo, logoDark, profilePhoto, authProvider, colors, planId, plans, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, isLoading, hasBrandKit, isLimitReached, currentLimit, brandKitLimit]);
 
   return (
     <BrandContext.Provider value={value}>

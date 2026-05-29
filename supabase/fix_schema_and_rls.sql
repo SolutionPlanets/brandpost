@@ -66,12 +66,23 @@ RETURNS trigger AS $$
 DECLARE
     new_user_id uuid;
     is_verified boolean;
+    provider_name text;
+    avatar_url text;
 BEGIN
-    -- Google users are auto-verified
-    is_verified := (new.raw_app_meta_data->>'provider' = 'google');
+    -- OAuth/Social users are auto-verified
+    is_verified := (new.raw_app_meta_data->>'provider' IN ('google', 'facebook'));
 
-    INSERT INTO public.users (id, email, full_name, plan_id, trial_ends_at, mail_verified)
-    VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 'solo', now() + interval '14 days', is_verified)
+    -- Determine clean provider name matching public.users CHECK constraints
+    provider_name := new.raw_app_meta_data->>'provider';
+    IF provider_name IS NULL OR provider_name NOT IN ('google', 'facebook') THEN
+        provider_name := 'email';
+    END IF;
+
+    -- Extract avatar URL from provider metadata
+    avatar_url := COALESCE(new.raw_user_meta_data->>'avatar_url', new.raw_user_meta_data->>'picture');
+
+    INSERT INTO public.users (id, email, full_name, plan_id, trial_ends_at, mail_verified, auth_provider, profile_photo)
+    VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 'solo', now() + interval '14 days', is_verified, provider_name, avatar_url)
     RETURNING id INTO new_user_id;
 
     INSERT INTO public.workspaces (owner_id, business_name, plan_id)

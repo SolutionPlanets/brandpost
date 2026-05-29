@@ -5,7 +5,7 @@ import { Palette, MessageSquare, Type, Edit2, Globe, FileText } from 'lucide-rea
 interface BrandKitCardProps {
   brandKit: {
     brand_kit_name: string;
-    logo_url: string;
+    logo_url: string | null;
     primary_color: string;
     secondary_color: string;
     accent_color: string;

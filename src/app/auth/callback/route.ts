@@ -41,7 +41,7 @@ export async function GET(request: Request) {
         // 1. Ensure user and workspace records exist using admin client
         const { data: existingUser } = await adminSupabase
           .from('users')
-          .select('id, auth_provider, profile_photo')
+          .select('id, auth_provider, profile_photo, mail_verified')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -74,13 +74,47 @@ export async function GET(request: Request) {
             plan_id: 'solo'
           });
         } else {
+          // Determine actual current provider and check if it's OAuth
+          const currentProvider = user.app_metadata?.provider || 'email';
+          let storedProvider = existingUser.auth_provider;
+
+          // Self-healing: if DB has 'email' but current auth provider is 'google' or 'facebook', correct it!
+          if (storedProvider !== currentProvider && ['google', 'facebook'].includes(currentProvider)) {
+            console.log(`Callback: Correcting auth_provider from ${storedProvider} to ${currentProvider} for user ${user.id}`);
+            const freshPhoto = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
+            
+            const updatePayload: any = { auth_provider: currentProvider };
+            if (!existingUser.profile_photo && freshPhoto) {
+              updatePayload.profile_photo = freshPhoto;
+              existingUser.profile_photo = freshPhoto;
+            }
+
+            await adminSupabase.from('users')
+              .update(updatePayload)
+              .eq('id', user.id);
+
+            storedProvider = currentProvider;
+            existingUser.auth_provider = currentProvider;
+          }
+
+          // Fix: Ensure standard email users' and OAuth users' verification status is updated upon successful callback landing
+          const isEmailAuth = storedProvider === 'email' || currentProvider === 'email';
+          const isOAuth = ['google', 'facebook'].includes(storedProvider) || ['google', 'facebook'].includes(currentProvider);
+          
+          if ((isEmailAuth || isOAuth) && !existingUser.mail_verified) {
+            await adminSupabase.from('users')
+              .update({ mail_verified: true })
+              .eq('id', user.id);
+          }
+
           // User exists — update profile_photo from OAuth ONLY if they don't already have one stored
-          if (!existingUser.profile_photo && existingUser.auth_provider !== 'email') {
+          if (!existingUser.profile_photo && storedProvider !== 'email') {
             const freshPhoto = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
             if (freshPhoto) {
               await adminSupabase.from('users')
                 .update({ profile_photo: freshPhoto })
                 .eq('id', user.id);
+              existingUser.profile_photo = freshPhoto;
             }
           }
         }

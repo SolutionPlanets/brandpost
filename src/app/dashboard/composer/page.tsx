@@ -183,6 +183,7 @@ function ComposerPageContent() {
   const draftIdRef = useRef(draftId);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef(false);
+  const hasCompletedDistributionRef = useRef(false);
 
   // Keep refs in sync with state
   useEffect(() => { formRef.current = form; }, [form]);
@@ -193,6 +194,7 @@ function ComposerPageContent() {
 
   // ── Save Draft to Database ─────────────────────────────────────────
   const saveDraftToDb = useCallback(async (isBeacon = false) => {
+    if (hasCompletedDistributionRef.current) return;
     const currentForm = formRef.current;
     const currentGenerated = generatedRef.current;
     const currentEditedCaption = editedCaptionRef.current;
@@ -672,7 +674,7 @@ function ComposerPageContent() {
     const editId = searchParams.get('editId');
     const selectedPost = generated?.images[selectedImage];
     
-    if (!selectedPost?.id && !editId) {
+    if (!editId && !draftId && !selectedPost?.id) {
       alert('Error: No post ID found to update. Please regenerate images.');
       return;
     }
@@ -683,8 +685,14 @@ function ComposerPageContent() {
     }
 
     setIsGenerating(true); 
+    hasCompletedDistributionRef.current = true;
+    if (autoSaveTimerRef.current) {
+      clearInterval(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
     try {
-      const targetId = (editId || selectedPost?.id) as string;
+      const targetId = (editId || draftId || selectedPost?.id) as string;
       const publishPostIds: string[] = [];
 
       // Load original brand kit ID from the draft
@@ -797,6 +805,11 @@ function ComposerPageContent() {
     } catch (err: any) {
       console.error('Error saving post:', err);
       alert(err.message || 'Failed to save post.');
+      // Re-enable auto-save on failure
+      hasCompletedDistributionRef.current = false;
+      autoSaveTimerRef.current = setInterval(() => {
+        saveDraftToDb();
+      }, 30000);
     } finally {
       setIsGenerating(false);
     }
@@ -1066,7 +1079,7 @@ function ComposerPageContent() {
               id="heroObjects"
               type="text"
               placeholder="e.g. Fresh Bread Loaf, Mobile Phones"
-              maxLength={80}
+              maxLength={200}
               value={form.heroObjects}
               onChange={(e) => setForm({ ...form, heroObjects: e.target.value })}
             />
@@ -1076,7 +1089,7 @@ function ComposerPageContent() {
         {/* ── Campaign Urgency & Caption Refinement ── */}
         <div className={styles.formRow}>
           <div className={styles.formGroup}>
-            <label htmlFor="campaignExpiry">Campaign Expiry (Optional)</label>
+            <label htmlFor="campaignExpiry">Campaign/Offer Expiry (Optional)</label>
             <input
               id="campaignExpiry"
               type="date"

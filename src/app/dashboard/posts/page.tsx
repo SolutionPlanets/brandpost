@@ -43,6 +43,11 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function formatTime(dateStr: string | null): string {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
 export default function PostsPage() {
   const { workspaceId } = useBrand();
   const [posts, setPosts] = useState<any[]>([]);
@@ -51,8 +56,28 @@ export default function PostsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  const [postsLimit, setPostsLimit] = useState(10);
   const supabase = createClient();
   const router = useRouter();
+
+  useEffect(() => {
+    setMounted(true);
+
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(`.${styles.actionMenu}`)) {
+        setOpenMenuId(null);
+      }
+    };
+
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    setPostsLimit(10);
+  }, [statusFilter, platformFilter, searchQuery]);
 
   const handleView = (post: any) => {
     if (post.image_url) {
@@ -176,6 +201,7 @@ export default function PostsPage() {
           <span className={styles.colType}>Type</span>
           <span className={styles.colStatus}>Status</span>
           <span className={styles.colDate}>Date</span>
+          <span className={styles.colTime}>Time</span>
           <span className={styles.colActions}></span>
         </div>
 
@@ -186,60 +212,87 @@ export default function PostsPage() {
             <p>Try adjusting your filters or create a new post.</p>
           </div>
         ) : (
-          filteredPosts.map((post) => (
-            <div key={post.id} className={styles.tableDataRow}>
-              <div className={styles.colPost}>
-                <div className={styles.postThumb}>
-                  {post.image_url ? (
-                    <img src={post.image_url} alt="" className={styles.thumbImg} />
+          <>
+            {filteredPosts.slice(0, postsLimit).map((post) => (
+              <div key={post.id} className={styles.tableDataRow}>
+                <div className={styles.colPost}>
+                  <div className={styles.postThumb}>
+                    {post.image_url ? (
+                      <img src={post.image_url} alt="" className={styles.thumbImg} />
+                    ) : (
+                      <ImageIcon size={18} />
+                    )}
+                  </div>
+                  <div className={styles.postInfo}>
+                    <h4>{post.title || 'Untitled Draft'}</h4>
+                    <p>{post.caption ? `${post.caption.substring(0, 50)}${post.caption.length > 50 ? '...' : ''}` : 'No caption yet'}</p>
+                  </div>
+                </div>
+                <div className={styles.colPlatform}>
+                  {post.status === 'draft' ? (
+                    <span style={{ color: 'var(--text-muted)' }}>—</span>
                   ) : (
-                    <ImageIcon size={18} />
+                    <>
+                      {(post.platform === 'facebook' || post.platform === 'both') && <Facebook size={18} className={styles.fbIcon} />}
+                      {(post.platform === 'instagram' || post.platform === 'both') && <Instagram size={18} className={styles.igIcon} />}
+                    </>
                   )}
                 </div>
-                <div className={styles.postInfo}>
-                  <h4>{post.title || 'Untitled Draft'}</h4>
-                  <p>{post.caption ? `${post.caption.substring(0, 50)}${post.caption.length > 50 ? '...' : ''}` : 'No caption yet'}</p>
+                <div className={styles.colType}>
+                  <span className={styles.typeBadge}>{post.content_type || post.contentType}</span>
                 </div>
-              </div>
-              <div className={styles.colPlatform}>
-                {(post.platform === 'facebook' || post.platform === 'both') && <Facebook size={18} className={styles.fbIcon} />}
-                {(post.platform === 'instagram' || post.platform === 'both') && <Instagram size={18} className={styles.igIcon} />}
-              </div>
-              <div className={styles.colType}>
-                <span className={styles.typeBadge}>{post.content_type || post.contentType}</span>
-              </div>
-              <div className={styles.colStatus}>
-                <span className={`${styles.statusBadge} ${styles[`status${post.status.charAt(0).toUpperCase() + post.status.slice(1)}`]}`}>
-                  {post.status}
-                </span>
-              </div>
-              <div className={styles.colDate}>
-                {post.status === 'scheduled' ? (
-                  <span className={styles.scheduledDate}><CalendarClock size={13} /> {formatDate(post.scheduled_at || post.scheduledAt)}</span>
-                ) : (
-                  <span>{formatDate(post.published_at || post.publishedAt || post.created_at || post.createdAt)}</span>
-                )}
-              </div>
-              <div className={styles.colActions}>
-                <div className={styles.actionMenu}>
-                  <button
-                    className={styles.moreBtn}
-                    onClick={() => setOpenMenuId(openMenuId === post.id ? null : post.id)}
-                  >
-                    <MoreHorizontal size={18} />
-                  </button>
-                  {openMenuId === post.id && (
-                    <div className={styles.dropdown}>
-                      <button onClick={() => handleView(post)}><Eye size={14} /> View</button>
-                      <button onClick={() => handleEdit(post.id)}><Edit3 size={14} /> Edit</button>
-                      <button onClick={() => handleDuplicate(post.id)}><Copy size={14} /> Duplicate</button>
-                      <button className={styles.deleteAction} onClick={() => handleDelete(post.id)}><Trash2 size={14} /> Delete</button>
-                    </div>
+                <div className={styles.colStatus}>
+                  <span className={`${styles.statusBadge} ${styles[`status${post.status.charAt(0).toUpperCase() + post.status.slice(1)}`]}`}>
+                    {post.status === 'draft' ? (post.image_url ? 'Generated Draft' : 'Draft') : post.status}
+                  </span>
+                </div>
+                <div className={styles.colDate}>
+                  {post.status === 'scheduled' ? (
+                    <span className={styles.scheduledDate}><CalendarClock size={13} /> {mounted ? formatDate(post.scheduled_at || post.scheduledAt) : '—'}</span>
+                  ) : (
+                    <span>{mounted ? formatDate(post.published_at || post.publishedAt || post.created_at || post.createdAt) : '—'}</span>
                   )}
                 </div>
+                <div className={styles.colTime}>
+                  {post.status === 'scheduled' ? (
+                    <span>{mounted ? formatTime(post.scheduled_at || post.scheduledAt) : '—'}</span>
+                  ) : post.status === 'published' ? (
+                    <span>{mounted ? formatTime(post.published_at || post.publishedAt || post.created_at || post.createdAt) : '—'}</span>
+                  ) : (
+                    <span>—</span>
+                  )}
+                </div>
+                <div className={styles.colActions}>
+                  <div className={styles.actionMenu}>
+                    <button
+                      className={styles.moreBtn}
+                      onClick={() => setOpenMenuId(openMenuId === post.id ? null : post.id)}
+                    >
+                      <MoreHorizontal size={18} />
+                    </button>
+                    {openMenuId === post.id && (
+                      <div className={styles.dropdown}>
+                        {post.image_url && (
+                          <button onClick={() => handleView(post)}><Eye size={14} /> View</button>
+                        )}
+                        <button onClick={() => handleEdit(post.id)}><Edit3 size={14} /> Edit</button>
+                        <button onClick={() => handleDuplicate(post.id)}><Copy size={14} /> Duplicate</button>
+                        <button className={styles.deleteAction} onClick={() => handleDelete(post.id)}><Trash2 size={14} /> Delete</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+            {filteredPosts.length > postsLimit && (
+              <button 
+                className={styles.loadMoreBtn} 
+                onClick={() => setPostsLimit((prev) => prev + 10)}
+              >
+                Load More
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
