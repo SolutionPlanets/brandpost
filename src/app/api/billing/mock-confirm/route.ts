@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { planId, amount, currency, phone_no, mail, payment_source } = body;
+    const { planId, amount, currency, phone_no, mail, payment_source, billingPeriod } = body;
 
     if (!planId) {
       return NextResponse.json({ error: 'Missing plan ID' }, { status: 400 });
@@ -24,13 +24,16 @@ export async function POST(request: Request) {
     // Fetch plan from database to validate it
     const { data: plan, error: planError } = await supabase
       .from('plan')
-      .select('id')
+      .select('name')
       .eq('id', planId.toLowerCase())
       .maybeSingle();
 
     if (planError || !plan) {
       return NextResponse.json({ error: 'Invalid plan ID' }, { status: 400 });
     }
+
+    const rawPlanName = plan.name || planId;
+    const finalPlanName = billingPeriod === 'yearly' ? `${rawPlanName} Yearly` : `${rawPlanName} Monthly`;
 
     const mockCustId = `mock_cust_${user.id.substring(0, 8)}`;
 
@@ -41,9 +44,10 @@ export async function POST(request: Request) {
     await logPayment({
       userId: user.id,
       planId: planId,
+      planName: finalPlanName,
       amount: amount || 0,
       currency: currency || 'USD',
-      orderId: `mock_order_${Date.now()}`,
+      orderId: `mock_order_${billingPeriod === 'yearly' ? 'yearly_' : ''}${Date.now()}`,
       gatewayCustomerId: mockCustId,
       phoneNo: phone_no || '',
       mail: mail || '',

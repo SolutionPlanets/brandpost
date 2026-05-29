@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '../../../utils/supabase/client';
 import { LogIn, Loader2, Mail, Lock, Chrome, Facebook, Eye, EyeOff } from 'lucide-react';
 import styles from '../Auth.module.css';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
@@ -67,7 +67,7 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      
+
       router.push('/dashboard');
     }
   };
@@ -155,7 +155,7 @@ export default function LoginPage() {
           <Chrome size={18} /> Continue with Google
         </button>
 
-        <button onClick={handleFacebookLogin} className={`${styles.socialBtn} ${styles.facebookBtn}`} suppressHydrationWarning>
+        <button onClick={handleFacebookLogin} className={`${styles.socialBtn} ${styles.facebookBtn}`}>
           <Facebook size={18} /> Continue with Facebook
         </button>
 
@@ -164,5 +164,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

@@ -24,10 +24,10 @@ export default function SignupPage() {
     setError(null);
 
     // Check if user already exists in our public records
-    const { data: userExists } = await supabase.rpc('check_user_exists', { 
-      email_to_check: email 
+    const { data: userExists } = await supabase.rpc('check_user_exists', {
+      email_to_check: email
     });
-    
+
     if (userExists) {
       setError('An account with this email already exists. Please log in.');
       setLoading(false);
@@ -164,7 +164,7 @@ export default function SignupPage() {
           <Chrome size={18} /> Sign up with Google
         </button>
 
-        <button onClick={handleFacebookLogin} className={`${styles.socialBtn} ${styles.facebookBtn}`} suppressHydrationWarning>
+        <button onClick={handleFacebookLogin} className={`${styles.socialBtn} ${styles.facebookBtn}`}>
           <Facebook size={18} /> Sign up with Facebook
         </button>
 

@@ -1,5 +1,16 @@
 'use client';
 
+import * as Sentry from "@sentry/nextjs";
+
+if (typeof window !== "undefined") {
+  console.log("Explicit Sentry initialization on client side with:", process.env.NEXT_PUBLIC_SENTRY_DSN);
+  Sentry.init({
+    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN || "https://ea83f38ceb195bc8d536f10586f52b8d@o4511410644451328.ingest.de.sentry.io/4511410650677328",
+    tracesSampleRate: 1.0,
+    debug: true,
+  });
+}
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 
@@ -19,6 +30,12 @@ export interface BrandKit {
   instagram_handle: string;
   facebook_handle: string;
   created_at: string;
+  industry?: string;
+  brand_audience?: string;
+  target_audience?: string;
+  website_url?: string;
+  phrases_to_include?: string;
+  phrases_to_avoid?: string;
 }
 
 interface BrandContextType {
@@ -254,7 +271,6 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
 
   const refreshBrandData = async (silent = false) => {
     if (!silent) setIsLoading(true);
-
     // Fetch active plans dynamically from database
     try {
       const { data: plansData } = await supabase
@@ -274,36 +290,33 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Fetch user's full_name, profile_photo, and auth_provider from the users table
+    // Fetch user profile info
     const { data: userProfile } = await supabase
       .from('users')
-      .select('full_name, profile_photo, auth_provider, plan_id, trial_ends_at, created_at')
+      .select('full_name, plan_id, trial_ends_at, created_at, profile_photo, auth_provider')
       .eq('id', user.id)
       .maybeSingle();
-
+ 
     if (userProfile) {
       if (userProfile.full_name) setFullName(userProfile.full_name);
       setPlanId(userProfile.plan_id || 'solo');
       setTrialEndsAt(userProfile.trial_ends_at);
       setCreatedAt(userProfile.created_at);
       
-      // Determine profile photo based on auth provider
-      const storedProvider = userProfile?.auth_provider || 'email';
+      const storedProvider = userProfile.auth_provider || 'email';
       setAuthProvider(storedProvider);
 
-      // Priority: 1) Photo from DB (captured in callback or uploaded) 2) OAuth metadata
-      if (userProfile?.profile_photo) {
+      // Priority: 1) Photo from DB 2) OAuth metadata
+      if (userProfile.profile_photo) {
         setProfilePhoto(userProfile.profile_photo);
-      } else if (storedProvider === 'google') {
-        setProfilePhoto(user.user_metadata?.avatar_url || user.user_metadata?.picture || null);
-      } else if (storedProvider === 'facebook') {
+      } else if (storedProvider === 'google' || storedProvider === 'facebook') {
         setProfilePhoto(user.user_metadata?.avatar_url || user.user_metadata?.picture || null);
       } else {
         setProfilePhoto(null);
       }
     }
 
-    // Fetch workspace and brand kit
+    // Fetch workspace and brand kits
     const { data: workspace } = await supabase
       .from('workspaces')
       .select(`
@@ -315,7 +328,8 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         timezone,
         business_timing,
         posts_used_this_cycle,
-        brand_kits (*)
+        brand_kits (*),
+        social_connections (*)
       `)
       .eq('owner_id', user.id)
       .maybeSingle();
@@ -324,6 +338,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       setWorkspaceId(workspace.id);
       const bKits = workspace.brand_kits;
       const brandKitsArray = bKits ? (Array.isArray(bKits) ? bKits : [bKits]) : [];
+      brandKitsArray.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       setBrandKits(brandKitsArray as BrandKit[]);
       const brandKit = brandKitsArray[0] || undefined;
       setHasBrandKit(!!brandKit);
@@ -339,8 +354,12 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       setTiming(workspace.business_timing || '');
       setLogo(brandKit?.logo_url || null);
       setLogoDark(brandKit?.logo_dark_url || null);
-      setInstagram(brandKit?.instagram_handle || '');
-      setFacebook(brandKit?.facebook_handle || '');
+      const socialConns = workspace.social_connections || [];
+      const instaConn = Array.isArray(socialConns) ? socialConns.find((c: any) => c.platform === 'instagram') : null;
+      const fbConn = Array.isArray(socialConns) ? socialConns.find((c: any) => c.platform === 'facebook') : null;
+
+      setInstagram(instaConn?.page_name || brandKit?.instagram_handle || '');
+      setFacebook(fbConn?.page_name || brandKit?.facebook_handle || '');
       setBrandTone(brandKit?.tone || 'Professional');
       setBrandDescription(brandKit?.brand_description || '');
       setIndustry(brandKit?.industry || '');
@@ -355,8 +374,9 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
           accent: brandKit.accent_color || '#06b6d4'
         });
       }
-
       // Sync with localStorage for legacy components
+      const activeInstagram = instaConn?.page_name || brandKit?.instagram_handle || '';
+      const activeFacebook = fbConn?.page_name || brandKit?.facebook_handle || '';
       localStorage.setItem('brandpost_user_data', JSON.stringify({
         fullName: userProfile?.full_name || '',
         ownerName: workspace.owner_name || '',
@@ -366,8 +386,8 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         logo: brandKit?.logo_url || null,
         logoDark: brandKit?.logo_dark_url || null,
         profilePhoto: userProfile?.profile_photo || null,
-        instagram: brandKit?.instagram_handle || '',
-        facebook: brandKit?.facebook_handle || '',
+        instagram: activeInstagram,
+        facebook: activeFacebook,
         brandTone: brandKit?.tone || 'Professional',
         brandDescription: brandKit?.brand_description || '',
         industry: brandKit?.industry || '',
@@ -416,6 +436,8 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         if (d.logoDark) setLogoDark(d.logoDark);
         if (d.profilePhoto) setProfilePhoto(d.profilePhoto);
         if (d.colors) setColors(d.colors);
+        if (d.profilePhoto) setProfilePhoto(d.profilePhoto);
+        if (d.authProvider) setAuthProvider(d.authProvider);
       } catch (e) {
         console.error('Error parsing brand data:', e);
       }
@@ -449,10 +471,10 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       timezone,
       logo,
       logoDark,
-      profilePhoto,
-      authProvider,
       colors,
-      timing
+      timing,
+      profilePhoto,
+      authProvider
     }));
   }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid, planId, plans, trialEndsAt, createdAt, postsUsed, timezone, logo, logoDark, profilePhoto, authProvider, colors, timing]);
 
@@ -548,4 +570,3 @@ export function useBrand() {
   }
   return context;
 }
-

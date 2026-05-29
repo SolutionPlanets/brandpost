@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
-import { createAdminClient } from "@/utils/supabase/admin";
+import { NextResponse } from 'next/server';
+import { createAdminClient } from '@/utils/supabase/admin';
+import fs from 'fs';
+import path from 'path';
 
 export async function POST(req: Request) {
   console.log("\n" + "=".repeat(50));
@@ -56,19 +58,68 @@ export async function POST(req: Request) {
     let fbPostId = null;
     let igPostId = null;
     let errors: string[] = [];
+    let imageUrl = post.image_url;
+
+    // Check if imageUrl is a local/relative path
+    if (imageUrl && !imageUrl.startsWith('http')) {
+      try {
+        const cleanPath = imageUrl.startsWith('/') ? imageUrl.slice(1) : imageUrl;
+        const localPath = path.join(process.cwd(), 'public', cleanPath);
+        
+        if (fs.existsSync(localPath)) {
+          console.log(`Local image detected at: ${localPath}. Uploading to Supabase Storage for public access...`);
+          const fileBuffer = fs.readFileSync(localPath);
+          const extension = path.extname(cleanPath) || '.png';
+          const mimeType = extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : 'image/png';
+          const filename = `local_${Date.now()}${extension}`;
+          const storagePath = `local_uploads/${post.workspace_id}/${filename}`;
+
+          // Upload to storage using Admin Client (bypasses RLS)
+          const { error: uploadError } = await adminSupabase.storage
+            .from('BrandPostAI_Post')
+            .upload(storagePath, fileBuffer, {
+              contentType: mimeType,
+              cacheControl: '3600',
+              upsert: true
+            });
+
+          if (uploadError) {
+            console.error('Failed to upload local image to storage:', uploadError);
+            throw uploadError;
+          }
+
+          // Get Public URL
+          const { data: { publicUrl } } = adminSupabase.storage
+            .from('BrandPostAI_Post')
+            .getPublicUrl(storagePath);
+
+          console.log(`Local image successfully uploaded. Public URL: ${publicUrl}`);
+          imageUrl = publicUrl;
+
+          // Update post record in DB with the new public URL so it is persisted
+          await adminSupabase
+            .from('posts')
+            .update({ image_url: publicUrl })
+            .eq('id', postId);
+        } else {
+          console.warn(`Local file not found at: ${localPath}. Trying to proceed as-is.`);
+        }
+      } catch (err: any) {
+        console.error('Error handling local image upload:', err.message);
+        errors.push(`Local Image Upload Error: ${err.message}`);
+      }
+    }
 
     // 3. Publish to Facebook
     if ((post.platform === "facebook" || post.platform === "both") && fbConn) {
       try {
-        console.log(
-          `Publish: Attempting Facebook post for Page ID: ${fbConn.page_id} (${fbConn.page_name})`,
-        );
+        console.log(`Publish: Attempting Facebook post for Page ID: ${fbConn.page_id} (${fbConn.page_name})`);
         const fbUrl = `https://graph.facebook.com/v22.0/${fbConn.page_id}/photos`;
         const fbRes = await fetch(fbUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            url: post.image_url,
+            url: imageUrl,
             message: post.caption,
             access_token: fbConn.access_token,
           }),
@@ -101,7 +152,7 @@ export async function POST(req: Request) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            image_url: post.image_url,
+            image_url: imageUrl,
             caption: post.caption,
             access_token: igConn.access_token,
           }),
@@ -116,7 +167,7 @@ export async function POST(req: Request) {
           const creationId = containerData.id;
 
           // Step B: Wait for Instagram to process the image (Media ID is not available fix)
-          console.log("Publish: Waiting 3 seconds for Instagram processing...");
+          console.log("Publish: Waiting 10 seconds for Instagram processing...");
           await new Promise((resolve) => setTimeout(resolve, 10000));
 
           // Step C: Publish Media Container

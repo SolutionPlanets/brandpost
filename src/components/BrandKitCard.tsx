@@ -1,6 +1,7 @@
 import React from 'react';
 import styles from './BrandKitCard.module.css';
 import { Palette, MessageSquare, Type, Edit2, Globe, FileText } from 'lucide-react';
+import { useBrand } from '@/contexts/BrandContext';
 
 interface BrandKitCardProps {
   brandKit: {
@@ -23,14 +24,21 @@ interface BrandKitCardProps {
 }
 
 const BrandKitCard: React.FC<BrandKitCardProps> = ({ brandKit, onEdit }) => {
+  const { profilePhoto } = useBrand();
+  
+  // Use manual logo if exists, otherwise fallback to OAuth profile photo
+  const effectiveLogo = brandKit.logo_url || profilePhoto;
+
   return (
     <div className={styles.card}>
       <div className={styles.header}>
         <div className={styles.logoSection}>
-          {brandKit.logo_url ? (
-            <img src={brandKit.logo_url} alt={brandKit.brand_kit_name} className={styles.logo} />
+          {effectiveLogo ? (
+            <img src={effectiveLogo} alt={brandKit.brand_kit_name} className={styles.logo} referrerPolicy="no-referrer" />
           ) : (
-            <div className={styles.logoPlaceholder}>No Logo</div>
+            <div className={styles.logoPlaceholder}>
+              {brandKit.brand_kit_name ? brandKit.brand_kit_name.charAt(0).toUpperCase() : 'B'}
+            </div>
           )}
           <div className={styles.nameInfo}>
             <h3 className={styles.name}>{brandKit.brand_kit_name}</h3>

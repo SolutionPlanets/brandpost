@@ -19,6 +19,7 @@ import {
   Copy,
   CalendarClock,
   Clock,
+  Bookmark,
 } from 'lucide-react';
 import styles from './Posts.module.css';
 
@@ -54,6 +55,8 @@ export default function PostsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [selectedViewerImage, setSelectedViewerImage] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -81,7 +84,7 @@ export default function PostsPage() {
 
   const handleView = (post: any) => {
     if (post.image_url) {
-      window.open(post.image_url, '_blank');
+      setSelectedViewerImage(post.image_url);
     } else {
       alert('No image available for this post.');
     }
@@ -130,19 +133,41 @@ export default function PostsPage() {
     fetchPosts();
   }, [workspaceId, supabase]);
 
+  // Close action dropdown menu when clicking anywhere outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (openMenuId !== null) {
+        const target = event.target as HTMLElement;
+        if (!target.closest(`.${styles.actionMenu}`)) {
+          setOpenMenuId(null);
+        }
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [openMenuId]);
+
   const filteredPosts = posts.filter((post) => {
+    if (showSavedOnly && !post.is_saved && post.extra_instructions !== 'saved') return false;
     if (statusFilter !== 'all' && post.status !== statusFilter) return false;
     if (platformFilter !== 'all' && post.platform !== platformFilter) return false;
     if (searchQuery && !(post.title || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
+  const activePostsForCounts = showSavedOnly 
+    ? posts.filter(p => p.is_saved || p.extra_instructions === 'saved')
+    : posts;
+
   const statusCounts = {
-    all: posts.length,
-    draft: posts.filter((p) => p.status === 'draft').length,
-    scheduled: posts.filter((p) => p.status === 'scheduled').length,
-    published: posts.filter((p) => p.status === 'published').length,
-    failed: posts.filter((p) => p.status === 'failed').length,
+    all: activePostsForCounts.length,
+    draft: activePostsForCounts.filter((p) => p.status === 'draft').length,
+    scheduled: activePostsForCounts.filter((p) => p.status === 'scheduled').length,
+    published: activePostsForCounts.filter((p) => p.status === 'published').length,
+    failed: activePostsForCounts.filter((p) => p.status === 'failed').length,
   };
 
   return (
@@ -152,9 +177,34 @@ export default function PostsPage() {
           <h1 className={styles.title}>Post History</h1>
           <p className={styles.subtitle}>Manage and track all your created content.</p>
         </div>
-        <Link href="/dashboard/composer" className={styles.createBtn}>
-          <Plus size={20} /> New Post
-        </Link>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end', minWidth: '150px' }}>
+          <Link href="/dashboard/composer" className={styles.createBtn} style={{ margin: 0, width: '100%', justifyContent: 'center' }}>
+            <Plus size={20} /> New Post
+          </Link>
+          <button
+            onClick={() => setShowSavedOnly(!showSavedOnly)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              backgroundColor: showSavedOnly ? '#10b981' : 'transparent',
+              color: showSavedOnly ? 'white' : '#64748b',
+              border: '1px solid ' + (showSavedOnly ? '#10b981' : '#cbd5e1'),
+              padding: '8px 14px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              transition: 'all 0.2s',
+              width: '100%',
+              boxSizing: 'border-box'
+            }}
+          >
+            <Bookmark size={16} fill={showSavedOnly ? 'white' : 'none'} />
+            Saved Images
+          </button>
+        </div>
       </header>
 
       {/* Status Tabs */}
@@ -193,108 +243,299 @@ export default function PostsPage() {
         </div>
       </div>
 
-      {/* Posts Table */}
-      <div className={styles.tableCard}>
-        <div className={styles.tableHeaderRow}>
-          <span className={styles.colPost}>Post</span>
-          <span className={styles.colPlatform}>Platform</span>
-          <span className={styles.colType}>Type</span>
-          <span className={styles.colStatus}>Status</span>
-          <span className={styles.colDate}>Date</span>
-          <span className={styles.colTime}>Time</span>
-          <span className={styles.colActions}></span>
-        </div>
-
-        {filteredPosts.length === 0 ? (
-          <div className={styles.emptyState}>
-            <Clock size={40} />
-            <h3>No posts found</h3>
-            <p>Try adjusting your filters or create a new post.</p>
+      {/* Posts Grid/Table Container */}
+      {showSavedOnly ? (
+        filteredPosts.length === 0 ? (
+          <div className={styles.tableCard}>
+            <div className={styles.emptyState}>
+              <Clock size={40} />
+              <h3>No saved images found</h3>
+              <p>Go to the composer and generate images, then save them!</p>
+            </div>
           </div>
         ) : (
-          <>
-            {filteredPosts.slice(0, postsLimit).map((post) => (
-              <div key={post.id} className={styles.tableDataRow}>
-                <div className={styles.colPost}>
-                  <div className={styles.postThumb}>
-                    {post.image_url ? (
-                      <img src={post.image_url} alt="" className={styles.thumbImg} />
-                    ) : (
-                      <ImageIcon size={18} />
-                    )}
-                  </div>
-                  <div className={styles.postInfo}>
-                    <h4>{post.title || 'Untitled Draft'}</h4>
-                    <p>{post.caption ? `${post.caption.substring(0, 50)}${post.caption.length > 50 ? '...' : ''}` : 'No caption yet'}</p>
-                  </div>
-                </div>
-                <div className={styles.colPlatform}>
-                  {post.status === 'draft' ? (
-                    <span style={{ color: 'var(--text-muted)' }}>—</span>
+          <div 
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: '24px',
+              marginTop: '10px'
+            }}
+          >
+            {filteredPosts.map((post) => (
+              <div 
+                key={post.id} 
+                style={{
+                  backgroundColor: 'var(--surface)',
+                  borderRadius: '16px',
+                  border: '1px solid var(--border)',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02)',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer',
+                  position: 'relative'
+                }}
+                onClick={() => setSelectedViewerImage(post.image_url)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.boxShadow = '0 12px 20px -8px rgba(0, 0, 0, 0.15)';
+                  e.currentTarget.style.borderColor = 'var(--primary)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02)';
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                }}
+              >
+                {/* Large Preview Image */}
+                <div style={{ position: 'relative', width: '100%', height: '260px', backgroundColor: '#f8fafc', overflow: 'hidden' }}>
+                  {post.image_url ? (
+                    <img 
+                      src={post.image_url} 
+                      alt={post.title} 
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} 
+                    />
                   ) : (
-                    <>
-                      {(post.platform === 'facebook' || post.platform === 'both') && <Facebook size={18} className={styles.fbIcon} />}
-                      {(post.platform === 'instagram' || post.platform === 'both') && <Instagram size={18} className={styles.igIcon} />}
-                    </>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}>
+                      <ImageIcon size={48} />
+                    </div>
                   )}
                 </div>
-                <div className={styles.colType}>
-                  <span className={styles.typeBadge}>{post.content_type || post.contentType}</span>
-                </div>
-                <div className={styles.colStatus}>
-                  <span className={`${styles.statusBadge} ${styles[`status${post.status.charAt(0).toUpperCase() + post.status.slice(1)}`]}`}>
-                    {post.status === 'draft' ? (post.image_url ? 'Generated Draft' : 'Draft') : post.status}
-                  </span>
-                </div>
-                <div className={styles.colDate}>
-                  {post.status === 'scheduled' ? (
-                    <span className={styles.scheduledDate}><CalendarClock size={13} /> {mounted ? formatDate(post.scheduled_at || post.scheduledAt) : '—'}</span>
-                  ) : (
-                    <span>{mounted ? formatDate(post.published_at || post.publishedAt || post.created_at || post.createdAt) : '—'}</span>
-                  )}
-                </div>
-                <div className={styles.colTime}>
-                  {post.status === 'scheduled' ? (
-                    <span>{mounted ? formatTime(post.scheduled_at || post.scheduledAt) : '—'}</span>
-                  ) : post.status === 'published' ? (
-                    <span>{mounted ? formatTime(post.published_at || post.publishedAt || post.created_at || post.createdAt) : '—'}</span>
-                  ) : (
-                    <span>—</span>
-                  )}
-                </div>
-                <div className={styles.colActions}>
-                  <div className={styles.actionMenu}>
-                    <button
-                      className={styles.moreBtn}
-                      onClick={() => setOpenMenuId(openMenuId === post.id ? null : post.id)}
-                    >
-                      <MoreHorizontal size={18} />
-                    </button>
-                    {openMenuId === post.id && (
-                      <div className={styles.dropdown}>
-                        {post.image_url && (
+
+                {/* Info and Details */}
+                <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', flexGrow: 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                    <h4 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexGrow: 1 }}>
+                      {post.title}
+                    </h4>
+                    
+                    {/* Action Menu */}
+                    <div className={styles.actionMenu} style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        style={{ color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        onClick={() => setOpenMenuId(openMenuId === post.id ? null : post.id)}
+                      >
+                        <MoreHorizontal size={18} />
+                      </button>
+                      {openMenuId === post.id && (
+                        <div className={styles.dropdown} style={{ right: 0, top: '100%' }}>
                           <button onClick={() => handleView(post)}><Eye size={14} /> View</button>
-                        )}
-                        <button onClick={() => handleEdit(post.id)}><Edit3 size={14} /> Edit</button>
-                        <button onClick={() => handleDuplicate(post.id)}><Copy size={14} /> Duplicate</button>
-                        <button className={styles.deleteAction} onClick={() => handleDelete(post.id)}><Trash2 size={14} /> Delete</button>
-                      </div>
-                    )}
+                          <button onClick={() => handleEdit(post.id)}><Edit3 size={14} /> Edit</button>
+                          <button onClick={() => handleDuplicate(post.id)}><Copy size={14} /> Duplicate</button>
+                          <button className={styles.deleteAction} onClick={() => handleDelete(post.id)}><Trash2 size={14} /> Delete</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: '13px', color: '#64748b', margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.5', minHeight: '38px' }}>
+                    {post.caption}
+                  </p>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>
+                      {mounted ? formatDate(post.published_at || post.publishedAt || post.created_at || post.createdAt) : '—'}
+                    </span>
                   </div>
                 </div>
               </div>
             ))}
-            {filteredPosts.length > postsLimit && (
-              <button 
-                className={styles.loadMoreBtn} 
-                onClick={() => setPostsLimit((prev) => prev + 10)}
-              >
-                Load More
-              </button>
-            )}
-          </>
-        )}
-      </div>
+          </div>
+        )
+      ) : (
+        /* Posts Table */
+        <div className={styles.tableCard}>
+          <div className={styles.tableHeaderRow}>
+            <span className={styles.colPost}>Post</span>
+            <span className={styles.colPlatform}>Platform</span>
+            <span className={styles.colType}>Type</span>
+            <span className={styles.colStatus}>Status</span>
+            <span className={styles.colDate}>Date</span>
+            <span className={styles.colTime}>Time</span>
+            <span className={styles.colActions}></span>
+          </div>
+
+          {filteredPosts.length === 0 ? (
+            <div className={styles.emptyState}>
+              <Clock size={40} />
+              <h3>No posts found</h3>
+              <p>Try adjusting your filters or create a new post.</p>
+            </div>
+          ) : (
+            <>
+              {filteredPosts.slice(0, postsLimit).map((post) => (
+                <div key={post.id} className={styles.tableDataRow}>
+                  <div className={styles.colPost}>
+                    <div className={styles.postThumb}>
+                      {post.image_url ? (
+                        <img src={post.image_url} alt="" className={styles.thumbImg} />
+                      ) : (
+                        <ImageIcon size={18} />
+                      )}
+                    </div>
+                    <div className={styles.postInfo}>
+                      <h4>{post.title || 'Untitled Draft'}</h4>
+                      <p>{post.caption ? `${post.caption.substring(0, 50)}${post.caption.length > 50 ? '...' : ''}` : 'No caption yet'}</p>
+                    </div>
+                  </div>
+                  <div className={styles.colPlatform}>
+                    {post.status === 'draft' ? (
+                      <span style={{ color: 'var(--text-muted)' }}>—</span>
+                    ) : (
+                      <>
+                        {(post.platform === 'facebook' || post.platform === 'both') && <Facebook size={18} className={styles.fbIcon} />}
+                        {(post.platform === 'instagram' || post.platform === 'both') && <Instagram size={18} className={styles.igIcon} />}
+                      </>
+                    )}
+                  </div>
+                  <div className={styles.colType}>
+                    <span className={styles.typeBadge}>{post.content_type || post.contentType}</span>
+                  </div>
+                  <div className={styles.colStatus}>
+                    <span className={`${styles.statusBadge} ${styles[`status${post.status.charAt(0).toUpperCase() + post.status.slice(1)}`]}`}>
+                      {post.status === 'draft' ? (post.image_url ? 'Generated Draft' : 'Draft') : post.status}
+                    </span>
+                  </div>
+                  <div className={styles.colDate}>
+                    {post.status === 'scheduled' ? (
+                      <span className={styles.scheduledDate}><CalendarClock size={13} /> {mounted ? formatDate(post.scheduled_at || post.scheduledAt) : '—'}</span>
+                    ) : (
+                      <span>{mounted ? formatDate(post.published_at || post.publishedAt || post.created_at || post.createdAt) : '—'}</span>
+                    )}
+                  </div>
+                  <div className={styles.colTime}>
+                    {post.status === 'scheduled' ? (
+                      <span>{mounted ? formatTime(post.scheduled_at || post.scheduledAt) : '—'}</span>
+                    ) : post.status === 'published' ? (
+                      <span>{mounted ? formatTime(post.published_at || post.publishedAt || post.created_at || post.createdAt) : '—'}</span>
+                    ) : (
+                      <span>—</span>
+                    )}
+                  </div>
+                  <div className={styles.colActions}>
+                    <div className={styles.actionMenu}>
+                      <button
+                        className={styles.moreBtn}
+                        onClick={() => setOpenMenuId(openMenuId === post.id ? null : post.id)}
+                      >
+                        <MoreHorizontal size={18} />
+                      </button>
+                      {openMenuId === post.id && (
+                        <div className={styles.dropdown}>
+                          {post.image_url && (
+                            <button onClick={() => handleView(post)}><Eye size={14} /> View</button>
+                          )}
+                          <button onClick={() => handleEdit(post.id)}><Edit3 size={14} /> Edit</button>
+                          <button onClick={() => handleDuplicate(post.id)}><Copy size={14} /> Duplicate</button>
+                          <button className={styles.deleteAction} onClick={() => handleDelete(post.id)}><Trash2 size={14} /> Delete</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {filteredPosts.length > postsLimit && (
+                <button 
+                  className={styles.loadMoreBtn} 
+                  onClick={() => setPostsLimit((prev) => prev + 10)}
+                >
+                  Load More
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Premium Lightbox Modal Viewer */}
+      {selectedViewerImage && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            backdropFilter: 'blur(10px)',
+            zIndex: 9999,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px'
+          }}
+          onClick={() => setSelectedViewerImage(null)}
+        >
+          {/* Header Bar with prominent Back to History button */}
+          <div style={{
+            width: '100%',
+            maxWidth: '90%',
+            display: 'flex',
+            justifyContent: 'flex-start',
+            marginBottom: '16px'
+          }}>
+            <button
+              onClick={() => setSelectedViewerImage(null)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                color: 'white',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                padding: '10px 20px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                transition: 'all 0.2s',
+                backdropFilter: 'blur(4px)',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+                e.currentTarget.style.transform = 'translateX(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                e.currentTarget.style.transform = 'none';
+              }}
+            >
+              <span>← Back to History</span>
+            </button>
+          </div>
+
+          <div 
+            style={{
+              position: 'relative',
+              maxWidth: '90%',
+              maxHeight: '80vh',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'black'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img 
+              src={selectedViewerImage} 
+              alt="Preview" 
+              style={{
+                maxWidth: '100%',
+                maxHeight: '75vh',
+                objectFit: 'contain',
+                display: 'block'
+              }} 
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 -- 1. FIX USERS TABLE
-ALTER TABLE public.users 
+ALTER TABLE public.users
 ADD COLUMN IF NOT EXISTS mail_verified boolean DEFAULT false;
 
 -- 2. FIX WORKSPACES TABLE
@@ -15,7 +15,9 @@ END $$;
 ALTER TABLE public.workspaces 
 ADD COLUMN IF NOT EXISTS address text,
 ADD COLUMN IF NOT EXISTS pincode text,
-ADD COLUMN IF NOT EXISTS business_timing text;
+ADD COLUMN IF NOT EXISTS business_timing text,
+ADD COLUMN IF NOT EXISTS owner_name text,
+ADD COLUMN IF NOT EXISTS timezone text DEFAULT 'Asia/Kolkata';
 
 -- 3. FIX BRAND_KITS TABLE
 -- Ensure 'brand_kit_name' exists and is not 'name'
@@ -25,6 +27,16 @@ BEGIN
     ALTER TABLE public.brand_kits RENAME COLUMN name TO brand_kit_name;
   END IF;
 END $$;
+
+-- Ensure all columns used by Brand Kit Manager and onboarding exist
+ALTER TABLE public.brand_kits
+ADD COLUMN IF NOT EXISTS logo_dark_url text,
+ADD COLUMN IF NOT EXISTS instagram_handle text,
+ADD COLUMN IF NOT EXISTS facebook_handle text,
+ADD COLUMN IF NOT EXISTS accent_color text,
+ADD COLUMN IF NOT EXISTS heading_font text,
+ADD COLUMN IF NOT EXISTS body_font text,
+ADD COLUMN IF NOT EXISTS brand_description text;
 
 -- 4. FIX ROW LEVEL SECURITY (RLS)
 -- Users Policies

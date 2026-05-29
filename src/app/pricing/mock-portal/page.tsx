@@ -152,7 +152,8 @@ function MockPortalContent() {
     if (latestSub) {
       const isYearly = latestSub.plan_name?.toLowerCase().includes('yearly') || 
                        (latestSub.order_id && latestSub.order_id.toLowerCase().includes('yearly')) ||
-                       (latestSub.receipt && latestSub.receipt.toLowerCase().includes('yearly'));
+                       (latestSub.receipt && latestSub.receipt.toLowerCase().includes('yearly')) ||
+                       Number(latestSub.amount) > (latestSub.currency?.toUpperCase() === 'INR' ? (Number(plan.inr_monthly) || 5000) * 2 : (Number(plan.usd_monthly) || 50) * 2);
       const currency = latestSub.currency || 'INR';
       const basePrice = currency.toUpperCase() === 'INR'
         ? (isYearly ? Number(plan.inr_yearly) : Number(plan.inr_monthly))
@@ -169,7 +170,8 @@ function MockPortalContent() {
     const createdDate = new Date(latestSub.created_at);
     const isYearly = latestSub.plan_name?.toLowerCase().includes('yearly') || 
                      (latestSub.order_id && latestSub.order_id.toLowerCase().includes('yearly')) ||
-                     (latestSub.receipt && latestSub.receipt.toLowerCase().includes('yearly'));
+                     (latestSub.receipt && latestSub.receipt.toLowerCase().includes('yearly')) ||
+                     Number(latestSub.amount) > (latestSub.currency?.toUpperCase() === 'INR' ? (Number(plan.inr_monthly) || 5000) * 2 : (Number(plan.usd_monthly) || 50) * 2);
     createdDate.setDate(createdDate.getDate() + (isYearly ? 365 : 30));
     return formatDate(createdDate);
   };

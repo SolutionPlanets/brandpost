@@ -11,6 +11,7 @@ export default function Home() {
           <span>BrandPost AI</span>
         </div>
         <div className={styles.navLinks}>
+          <Link href="/pricing?from=home">Plans</Link>
           <Link href="/auth/login">Login</Link>
           <Link href="/auth/signup" className={styles.cta}>Get Started Free</Link>
         </div>
@@ -23,7 +24,7 @@ export default function Home() {
           <span>Automated by AI.</span>
         </h1>
         <p className={styles.heroSubtitle}>
-          Create consistent, professional brand posts in seconds. Connect your brand kit, 
+          Create consistent, professional brand posts in seconds. Connect your brand kit,
           let AI generate the content, and schedule everything in one click.
         </p>
         <div className={styles.heroActions}>

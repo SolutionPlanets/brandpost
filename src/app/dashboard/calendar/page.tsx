@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useBrand } from '@/contexts/BrandContext';
 import {
   ChevronLeft,
   ChevronRight,
@@ -47,12 +48,21 @@ function getEventsForMonth(events: FestiveEvent[], year: number, month: number, 
 }
 
 export default function CalendarPage() {
+  const { checkLimitAndRedirect } = useBrand();
+  const router = useRouter();
   const today = new Date();
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [filter, setFilter] = useState<FilterType>('all');
   const [allEvents, setAllEvents] = useState<FestiveEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const handleCreateClick = (e: React.MouseEvent, url: string) => {
+    e.preventDefault();
+    if (!checkLimitAndRedirect()) {
+      router.push(url);
+    }
+  };
 
   useEffect(() => {
     async function fetchHolidays() {
@@ -177,7 +187,24 @@ export default function CalendarPage() {
                 const EventIcon = event.icon;
                 const eventDate = new Date(event.date);
                 return (
-                  <div key={event.id} className={styles.eventItem}>
+                  <div 
+                    key={event.id} 
+                    className={`${styles.eventItem} ${
+                      event.source === 'Google' 
+                        ? styles.eventItemGoogle 
+                        : event.source === 'Calendarific' 
+                          ? styles.eventItemCalendarific 
+                          : ''
+                    }`}
+                    style={
+                      event.source !== 'Google' && event.source !== 'Calendarific' && event.color
+                        ? { 
+                            borderLeftColor: event.color, 
+                            backgroundColor: `${event.color}0a` 
+                          } 
+                        : undefined
+                    }
+                  >
                     <div className={styles.eventDate}>
                       <span className={styles.eventDay}>{eventDate.getDate()}</span>
                       <span className={styles.eventMonth}>{MONTHS[eventDate.getMonth()].substring(0, 3)}</span>
@@ -187,14 +214,16 @@ export default function CalendarPage() {
                     </div>
                     <div className={styles.eventInfo}>
                       <h4>{event.name}</h4>
-                      <span className={styles.eventCategory}>{event.category}</span>
+                      <div className={styles.eventMeta}>
+                        <span className={styles.eventCategory}>{event.category}</span>
+                      </div>
                     </div>
-                    <Link
-                      href={`/dashboard/composer?occasion=${encodeURIComponent(event.name)}&type=festive`}
+                    <button
+                      onClick={(e) => handleCreateClick(e, `/dashboard/composer?occasion=${encodeURIComponent(event.name)}&type=festive`)}
                       className={styles.eventCreateBtn}
                     >
                       <Plus size={14} /> Create
-                    </Link>
+                    </button>
                   </div>
                 );
               })

@@ -12,6 +12,7 @@ import {
   ChevronRight,
   CreditCard
 } from 'lucide-react';
+import { createClient } from '@/utils/supabase/client';
 import styles from './Sidebar.module.css';
 
 interface SidebarProps {
@@ -31,6 +32,18 @@ const menuItems = [
 
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   const pathname = usePathname();
+  const supabase = createClient();
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      localStorage.removeItem('brandpost_user_data');
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error during logout:', error);
+      window.location.href = '/';
+    }
+  };
 
   return (
     <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''}`}>
@@ -56,7 +69,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
       </nav>
 
       <div className={styles.footer}>
-        <button className={styles.navItem}>
+        <button className={styles.navItem} onClick={handleLogout}>
           <LogOut size={22} />
           {!collapsed && <span>Logout</span>}
         </button>

@@ -1,13 +1,14 @@
 .wizard {
+  width: 100%;
   max-width: 800px;
-  margin: 4rem auto;
-  padding: 0 1.5rem;
+  margin: 0.5rem auto;
+  padding: 0 1rem;
 }
 
 .progressContainer {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 3rem;
+  margin-bottom: 1rem;
   position: relative;
 }
 
@@ -22,8 +23,8 @@
 }
 
 .iconCircle {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background-color: var(--surface);
   border: 2px solid var(--border);
@@ -47,7 +48,7 @@
 }
 
 .stepTitle {
-  font-size: 0.875rem;
+  font-size: 1rem;
   font-weight: 500;
   color: var(--text-muted);
 }
@@ -74,9 +75,9 @@
 .mainCard {
   background-color: var(--surface);
   border-radius: var(--radius-lg);
-  padding: 3rem;
+  padding: 1.5rem;
   box-shadow: var(--shadow-lg);
-  min-height: 450px;
+  min-height: auto;
   display: flex;
   flex-direction: column;
 }
@@ -87,12 +88,19 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .stepContent h2 {
-  font-size: 1.75rem;
+  font-size: 2rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
   color: var(--text);
@@ -100,25 +108,26 @@
 
 .stepContent p {
   color: var(--text-muted);
-  margin-bottom: 2.5rem;
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .inputGroup {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .inputGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .inputGroup label {
   display: block;
-  font-size: 0.875rem;
+  font-size: 1.125rem;
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
   color: var(--text);
 }
 
@@ -126,12 +135,23 @@
 .inputGroup select,
 .inputGroup textarea {
   width: 100%;
-  padding: 0.875rem 1.125rem;
+  padding: 1rem 1.25rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  font-size: 1rem;
+  font-size: 1.125rem;
   outline: none;
   transition: border-color 0.2s ease;
+}
+
+.inputGroup select {
+  min-height: 50px;
+  line-height: 1.4;
+  padding-right: 2.5rem;
+}
+
+.timezoneSelect {
+  background-color: #f9fafb;
+  cursor: not-allowed;
 }
 
 .inputGroup input:focus,
@@ -146,17 +166,51 @@
   line-height: 1.6;
 }
 
+.logoUploadGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.logoSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.logoSection h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.logoPreviewWrapper {
+  width: 100%;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+}
+
 .uploadBox {
   border: 2px dashed var(--border);
   border-radius: var(--radius-lg);
-  padding: 4rem 2rem;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 140px;
 }
 
 .uploadBox:hover,
@@ -165,12 +219,26 @@
   background-color: var(--primary-light);
 }
 
+.uploadBox span {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.uploadBox p {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
 .uploadIcon {
   color: var(--primary);
+  margin-bottom: 0.25rem;
 }
 
 .colorSelection {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 2rem;
 }
 
@@ -181,16 +249,17 @@
 .colorInput {
   display: flex;
   align-items: center;
-  gap: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
   background-color: white;
-  transition: border-color 0.2s ease;
+  transition: all 0.2s ease;
+  height: 60px;
 }
 
 .colorInput:focus-within {
   border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 .hexText {
@@ -205,14 +274,16 @@
 }
 
 .pickerWrapper {
-  width: 46px;
-  height: 46px;
-  padding: 4px;
+  width: 40px;
+  height: 40px;
+  margin: 6px;
+  border-radius: var(--radius-sm);
   position: relative;
-  border-left: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .pickerWrapper input[type="color"] {
@@ -232,6 +303,7 @@
 .pickerWrapper input[type="color"]::-webkit-color-swatch {
   border: none;
   border-radius: var(--radius-sm);
+  opacity: 0;
 }
 
 .socialGrid {
@@ -265,8 +337,13 @@
   margin: 0;
 }
 
-.facebookIcon { color: #1877f2; }
-.instagramIcon { color: #e4405f; }
+.facebookIcon {
+  color: #1877f2;
+}
+
+.instagramIcon {
+  color: #e4405f;
+}
 
 .connectBtn {
   background-color: var(--background);
@@ -281,6 +358,20 @@
 .connectBtn:hover {
   border-color: var(--primary);
   color: var(--primary);
+}
+
+.socialInput {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.socialInput:focus {
+  border-color: var(--primary);
 }
 
 .skipBtn {
@@ -326,20 +417,23 @@
   box-shadow: 0 4px 12px var(--primary-light);
 }
 
+
+
 .footer {
-  margin-top: 3rem;
+  margin-top: 0.5rem;
   display: flex;
   justify-content: space-between;
-  padding-top: 2rem;
+  padding-top: 1rem;
   border-top: 1px solid var(--border);
 }
 
 .nextBtn {
   background-color: var(--primary);
   color: white;
-  padding: 0.875rem 2rem;
+  padding: 1rem 2.5rem;
   border-radius: var(--radius-md);
   font-weight: 600;
+  font-size: 1.125rem;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -363,71 +457,31 @@
   cursor: not-allowed;
 }
 
-.logoUploadGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
-  margin-top: 1rem;
-}
-
-.logoSection {
+.previewContainer {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-}
-
-.logoSection h3 {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--text);
-  margin: 0;
-}
-
-.logoPreviewWrapper {
-  width: 100%;
-  height: 180px;
-  display: flex;
   align-items: center;
-  justify-content: center;
-  background-color: white;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 1.5rem;
-  overflow: hidden;
+  gap: 0.75rem;
+  width: 100%;
 }
 
-.logoPreviewWrapper img {
+.previewImage {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
 }
 
-.previewContainer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  width: 100%;
-}
-
-.previewImage {
-  max-width: 200px;
-  max-height: 150px;
-  object-fit: contain;
-  border-radius: var(--radius-md);
-  padding: 1rem;
-  background-color: white;
-  border: 1px solid var(--border);
-}
-
 .removeBtn {
   color: #ef4444;
   font-weight: 500;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   cursor: pointer;
   background: none;
   border: none;
-  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.75rem;
   border-radius: var(--radius-md);
   transition: background-color 0.2s;
 }
@@ -755,13 +809,25 @@
 }
 
 @keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 /* AI Color Button Styles */
@@ -799,22 +865,25 @@
 }
 
 @keyframes pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.6; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+
+  100% {
+    opacity: 1;
+  }
 }
 
 @media (max-width: 640px) {
   .socialGrid {
     grid-template-columns: 1fr;
   }
-  
+
   .stepTitle {
     display: none;
-  }
-
-  .postSelectionGrid {
-    flex-direction: column;
-    align-items: center;
   }
 }

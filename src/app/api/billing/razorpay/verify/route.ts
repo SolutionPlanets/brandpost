@@ -24,7 +24,8 @@ export async function POST(request: Request) {
       currency,
       phone_no,
       mail,
-      payment_source
+      payment_source,
+      billingPeriod
     } = body;
 
     if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature || !planId) {
@@ -73,10 +74,21 @@ export async function POST(request: Request) {
     // Update user plan in DB
     await updateUserPlan(user.id, planId.toLowerCase(), gatewayCustId);
 
+    // Fetch plan from database to validate it
+    const { data: plan } = await supabase
+      .from('plan')
+      .select('name')
+      .eq('id', planId.toLowerCase())
+      .maybeSingle();
+
+    const rawPlanName = plan?.name || planId;
+    const finalPlanName = billingPeriod === 'yearly' ? `${rawPlanName} Yearly` : `${rawPlanName} Monthly`;
+
     // Log the payment in DB
     await logPayment({
       userId: user.id,
       planId: planId.toLowerCase(),
+      planName: finalPlanName,
       amount: paymentDetails ? paymentDetails.amount / 100 : (amount || 0),
       currency: paymentDetails ? paymentDetails.currency : (currency || 'INR'),
       orderId: razorpay_order_id,

@@ -440,6 +440,10 @@ export default function SettingsPage() {
                     )}
                   </div>
                 </div>
+                <div className={styles.socialCardRight}>
+                  <span className={styles.connectedBadge}>Connected</span>
+                  <button className={styles.disconnectBtn} onClick={() => handleDisconnect(page.id)}><Unlink size={14} /> Disconnect</button>
+                </div>
               </div>
             ))
           ) : (
@@ -469,6 +473,10 @@ export default function SettingsPage() {
                       <span className={styles.expiryBadge}><AlertTriangle size={12} /> Expiring soon</span>
                     )}
                   </div>
+                </div>
+                <div className={styles.socialCardRight}>
+                  <span className={styles.connectedBadge}>Connected</span>
+                  <button className={styles.disconnectBtn} onClick={() => handleDisconnect(account.id)}><Unlink size={14} /> Disconnect</button>
                 </div>
               </div>
             ))

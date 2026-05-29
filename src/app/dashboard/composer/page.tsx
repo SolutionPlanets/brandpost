@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 import {
   PartyPopper,
+  Bookmark,
   Tag,
   BookOpen,
   Layers,
@@ -14,8 +15,6 @@ import {
   Sparkles,
   Check,
   Loader2,
-  Facebook,
-  Instagram,
   Edit3,
   ToggleLeft,
   ToggleRight,
@@ -24,10 +23,12 @@ import {
   Image as ImageIcon,
   RefreshCw,
   Download,
+  Edit2,
+  Facebook,
+  Instagram,
   Globe,
   Heart,
   MessageCircle,
-  Bookmark,
   Share2,
 } from 'lucide-react';
 import { useBrand } from '@/contexts/BrandContext';
@@ -74,7 +75,7 @@ interface ComposerForm {
 }
 
 interface GeneratedContent {
-  images: { url: string; id: string }[];
+  images: { url: string; id: any }[];
   captions: string[];
 }
 
@@ -88,28 +89,28 @@ const CONTENT_TYPES = [
 
 const TEMPLATES: Record<ContentType, { id: string; name: string; image: string }[]> = {
   festive: [
-    { id: 'fest-1', name: 'Traditional Glow', image: 'https://picsum.photos/seed/festive1/400/600' },
-    { id: 'fest-2', name: 'Modern Minimal', image: 'https://picsum.photos/seed/festive2/400/600' },
-    { id: 'fest-3', name: 'Vibrant Celebration', image: 'https://picsum.photos/seed/festive3/400/600' },
-    { id: 'fest-4', name: 'Elegant Script', image: 'https://picsum.photos/seed/festive4/400/600' },
+    { id: 'fest-1', name: 'Traditional Glow', image: '/templates/festive/traditional.png' },
+    { id: 'fest-2', name: 'Modern Minimal', image: '/templates/festive/modern.png' },
+    { id: 'fest-3', name: 'Vibrant Celebration', image: '/templates/festive/vibrant.png' },
+    { id: 'fest-4', name: 'Elegant Script', image: '/templates/festive/elegant.png' },
   ],
   offer: [
-    { id: 'off-1', name: 'Big Bold Sale', image: 'https://picsum.photos/seed/offer1/400/600' },
-    { id: 'off-2', name: 'Flash Deal', image: 'https://picsum.photos/seed/offer2/400/600' },
-    { id: 'off-3', name: 'Product Spotlight', image: 'https://picsum.photos/seed/offer3/400/600' },
-    { id: 'off-4', name: 'Discount Badge', image: 'https://picsum.photos/seed/offer4/400/600' },
+    { id: 'off-1', name: 'Big Bold Sale', image: '/templates/offer/bold.png' },
+    { id: 'off-2', name: 'Flash Deal', image: '/templates/offer/flash.png' },
+    { id: 'off-3', name: 'Product Spotlight', image: '/templates/offer/minimal.png' },
+    { id: 'off-4', name: 'Discount Badge', image: '/templates/offer/badge.png' },
   ],
   informational: [
-    { id: 'info-1', name: 'Expert Tips', image: 'https://picsum.photos/seed/info1/400/600' },
-    { id: 'info-2', name: 'Did You Know?', image: 'https://picsum.photos/seed/info2/400/600' },
-    { id: 'info-3', name: 'Step-by-Step', image: 'https://picsum.photos/seed/info3/400/600' },
-    { id: 'info-4', name: 'Clean Listicle', image: 'https://picsum.photos/seed/info4/400/600' },
+    { id: 'info-1', name: 'Expert Tips', image: '/templates/info/tips.png' },
+    { id: 'info-2', name: 'Did You Know?', image: '/templates/info/didyouknow.png' },
+    { id: 'info-3', name: 'Step-by-Step', image: '/templates/info/stepbystep.png' },
+    { id: 'info-4', name: 'Clean Listicle', image: '/templates/info/listicle.png' },
   ],
   general: [
-    { id: 'gen-1', name: 'Daily Quote', image: 'https://picsum.photos/seed/gen1/400/600' },
-    { id: 'gen-2', name: 'Behind the Scenes', image: 'https://picsum.photos/seed/gen2/400/600' },
-    { id: 'gen-3', name: 'Question/Poll', image: 'https://picsum.photos/seed/gen3/400/600' },
-    { id: 'gen-4', name: 'Lifestyle Focus', image: 'https://picsum.photos/seed/gen4/400/600' },
+    { id: 'gen-1', name: 'Daily Quote', image: '/templates/gen/quote.png' },
+    { id: 'gen-2', name: 'Behind the Scenes', image: '/templates/gen/lifestyle.png' },
+    { id: 'gen-3', name: 'Question/Poll', image: '/templates/gen/bts.png' },
+    { id: 'gen-4', name: 'Lifestyle Focus', image: '/templates/gen/question.png' },
   ],
 };
 
@@ -119,7 +120,7 @@ const STEP_LABELS = ['Content Type', 'Template', 'Details', 'AI Generation', 'Pr
 function ComposerPageContent() {
   const searchParams = useSearchParams();
   const { 
-    brandKitName, businessName, brandTone, brandDescription, colors,
+    brandKitName, brandKits, businessName, brandTone, brandDescription, colors,
     fullName, ownerName, address, pincode, timing, logo, logoDark,
     industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid,
     postsUsed, planId, trialEndsAt, refreshBrandData, workspaceId,
@@ -157,7 +158,7 @@ function ComposerPageContent() {
     contentType: null,
     templateId: null,
     topic: '',
-    brandKit: 'main-brand',
+    brandKit: brandKits[0]?.id || 'main-brand',
     platform: 'both',
     extraInstructions: '',
     graphicHeadline: '',
@@ -176,7 +177,49 @@ function ComposerPageContent() {
     heroMessage: '',
   });
 
+  // Update form if brandKits load later
+  useEffect(() => {
+    if (brandKits.length > 0 && form.brandKit === 'main-brand') {
+      setForm(prev => ({ ...prev, brandKit: brandKits[0].id }));
+    }
+  }, [brandKits]);
+
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
+  const [generatedPostIds, setGeneratedPostIds] = useState<number[]>([]);
+
+  // Daily attempts state & local storage tracking
+  const [imageRegenAttempts, setImageRegenAttempts] = useState(3);
+  const [captionRegenAttempts, setCaptionRegenAttempts] = useState(3);
+
+  useEffect(() => {
+    const now = Date.now();
+    const storedLastReset = localStorage.getItem('brandpost_regen_last_reset');
+    const storedImageRegen = localStorage.getItem('brandpost_image_regen_attempts');
+    const storedCaptionRegen = localStorage.getItem('brandpost_caption_regen_attempts');
+
+    if (!storedLastReset || now - parseInt(storedLastReset) > 24 * 60 * 60 * 1000) {
+      localStorage.setItem('brandpost_regen_last_reset', now.toString());
+      localStorage.setItem('brandpost_image_regen_attempts', '3');
+      localStorage.setItem('brandpost_caption_regen_attempts', '3');
+      setImageRegenAttempts(3);
+      setCaptionRegenAttempts(3);
+    } else {
+      setImageRegenAttempts(storedImageRegen ? parseInt(storedImageRegen) : 3);
+      setCaptionRegenAttempts(storedCaptionRegen ? parseInt(storedCaptionRegen) : 3);
+    }
+  }, []);
+
+  const decrementImageRegen = () => {
+    const newVal = Math.max(0, imageRegenAttempts - 1);
+    setImageRegenAttempts(newVal);
+    localStorage.setItem('brandpost_image_regen_attempts', newVal.toString());
+  };
+
+  const decrementCaptionRegen = () => {
+    const newVal = Math.max(0, captionRegenAttempts - 1);
+    setCaptionRegenAttempts(newVal);
+    localStorage.setItem('brandpost_caption_regen_attempts', newVal.toString());
+  };
 
   // ── Auto-Save Draft State ──────────────────────────────────────────
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -460,6 +503,7 @@ function ComposerPageContent() {
         captions: captionsData.captions || [],
         images: imagesData.images || []
       });
+      setGeneratedPostIds(imagesData.postIds || []);
       setSelectedCaption(0);
       setSelectedImage(0);
       if (captionsData.captions && captionsData.captions.length > 0) {
@@ -498,9 +542,10 @@ function ComposerPageContent() {
     }
   };
 
-  const generateCaptions = async (postId?: string) => {
+    const generateCaptions = async (postId?: string) => {
     setIsGeneratingCaptions(true);
     try {
+      const selectedKit = brandKits.find(k => k.id === form.brandKit) || brandKits[0];
       const res = await fetch('/api/generate/captions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -512,9 +557,23 @@ function ComposerPageContent() {
           graphicHeadline: form.graphicHeadline,
           heroObjects: form.heroObjects,
           campaignExpiry: form.campaignExpiry,
-          wordCount: form.wordCount,
-          hashtagCount: form.hashtagCount,
-          brandDetails: { businessName, brandTone, brandDescription, colors, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid },
+          wordCount: typeof form.wordCount === 'number' && !isNaN(form.wordCount) ? Math.min(100, Math.max(10, form.wordCount)) : 100,
+          hashtagCount: typeof form.hashtagCount === 'number' && !isNaN(form.hashtagCount) ? Math.min(30, Math.max(0, form.hashtagCount)) : 6,
+          brandDetails: form.brandKit === 'none' ? null : { 
+            businessName: selectedKit?.brand_kit_name || businessName, 
+            brandTone: selectedKit?.tone || brandTone, 
+            brandDescription: selectedKit?.brand_description || brandDescription, 
+            colors: selectedKit ? {
+              primary: selectedKit.primary_color,
+              secondary: selectedKit.secondary_color,
+              accent: selectedKit.accent_color
+            } : colors,
+            industry: selectedKit?.industry || industry,
+            brandAudience: selectedKit?.target_audience || brandAudience,
+            websiteUrl: selectedKit?.website_url || websiteUrl,
+            phrasesToInclude: selectedKit?.phrases_to_include || phrasesToInclude,
+            phrasesToAvoid: selectedKit?.phrases_to_avoid || phrasesToAvoid,
+          },
           mentionWebsiteInCaption: form.brandKit !== 'none' ? form.mentionWebsiteInCaption : false,
           ...(postId ? { postId } : {}),
         }),
@@ -535,6 +594,7 @@ function ComposerPageContent() {
   const generateImages = async (postId?: string) => {
     setIsGeneratingImages(true);
     try {
+      const selectedKit = brandKits.find(k => k.id === form.brandKit) || brandKits[0];
       const res = await fetch('/api/generate/images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -549,23 +609,27 @@ function ComposerPageContent() {
           wordCount: form.wordCount,
           hashtagCount: form.hashtagCount,
           workspaceId: workspaceId,
-          brandKitId: form.brandKit === 'none' ? null : undefined,
-          brandDetails: form.brandKit === 'none' ? null : { 
-            businessName, 
-            brandDescription, 
-            colors,
+          brandKitId: form.brandKit === 'none' ? null : form.brandKit,
+          brandDetails: form.brandKit === 'none' ? null : {
+            businessName: selectedKit?.brand_kit_name || businessName,
+            brandDescription: selectedKit?.brand_description || brandDescription,
+            colors: selectedKit ? {
+              primary: selectedKit.primary_color,
+              secondary: selectedKit.secondary_color,
+              accent: selectedKit.accent_color
+            } : colors,
             fullName: fullName || ownerName,
-            brandTone,
+            brandTone: selectedKit?.tone || brandTone,
             address,
             pincode,
             timing,
-            logo,
+            logo: selectedKit?.logo_url || logo,
             logoDark,
-            industry,
-            brandAudience,
-            websiteUrl,
-            phrasesToInclude,
-            phrasesToAvoid,
+            industry: selectedKit?.industry || industry,
+            brandAudience: selectedKit?.target_audience || brandAudience,
+            websiteUrl: selectedKit?.website_url || websiteUrl,
+            phrasesToInclude: selectedKit?.phrases_to_include || phrasesToInclude,
+            phrasesToAvoid: selectedKit?.phrases_to_avoid || phrasesToAvoid,
           },
           mentionBrandLogo: form.brandKit !== 'none' ? form.mentionBrandLogo : false,
           brandLogoPosition: form.brandLogoPosition,
@@ -591,7 +655,7 @@ function ComposerPageContent() {
     }
   };
 
-  const handleRegenerateCaptions = async () => {
+    const handleRegenerateCaptions = async () => {
     // Credit check
     if (checkLimitAndRedirect && checkLimitAndRedirect()) {
       return;
@@ -683,6 +747,63 @@ function ComposerPageContent() {
     }
   };
 
+  const [isSavingImage, setIsSavingImage] = useState(false);
+
+  const handleSaveImage = async () => {
+    if (!generated || generated.images.length === 0) return;
+    const currentImageUrl = generated.images[selectedImage]?.url;
+    const generatedPostId = generatedPostIds[selectedImage] || generated.images[selectedImage]?.id;
+    
+    setIsSavingImage(true);
+    try {
+      const supabase = createClient();
+      
+      // If we have an existing post ID (from the generated draft), update it to be 'saved'
+      if (generatedPostId) {
+        const { error } = await supabase
+          .from('posts')
+          .update({ is_saved: true })
+          .eq('id', generatedPostId);
+          
+        if (error) throw error;
+      } else {
+        // If no post ID exists yet (unlikely, but just in case), create a new draft flagged as 'saved'
+        const postData = {
+          title: form.topic,
+          caption: editedCaption,
+          platform: form.platform,
+          content_type: form.contentType,
+          image_url: currentImageUrl,
+          brand_kit_id: form.brandKit === 'main-brand' ? null : form.brandKit,
+          status: 'draft',
+          is_saved: true,
+          workspace_id: workspaceId,
+        };
+        
+        const { data, error } = await supabase
+          .from('posts')
+          .insert([postData])
+          .select();
+          
+        if (error) throw error;
+        if (data && data[0]) {
+          setGeneratedPostIds(prev => {
+            const copy = [...prev];
+            copy[selectedImage] = data[0].id;
+            return copy;
+          });
+        }
+      }
+      
+      alert('Image saved to library successfully!');
+    } catch (error: any) {
+      console.error('Error saving image:', error);
+      alert('Failed to save image: ' + error.message);
+    } finally {
+      setIsSavingImage(false);
+    }
+  };
+
   const handleSaveEditedImage = (editedImageUrl: string) => {
     if (!generated) return;
     const newImages = [...generated.images];
@@ -726,7 +847,7 @@ function ComposerPageContent() {
       return;
     }
 
-    setIsGenerating(true); 
+    setIsGenerating(true);
     hasCompletedDistributionRef.current = true;
     if (autoSaveTimerRef.current) {
       clearInterval(autoSaveTimerRef.current);
@@ -734,8 +855,8 @@ function ComposerPageContent() {
     }
 
     try {
-      const targetId = (editId || draftId || selectedPost?.id) as string;
-      const publishPostIds: string[] = [];
+      const targetId = (editId || draftId || selectedPost?.id);
+      const publishPostIds = [];
 
       // Load original brand kit ID from the draft
       const { data: existingDraft } = await supabase
@@ -749,8 +870,8 @@ function ComposerPageContent() {
       const selectedConns = connections.filter(c => selectedConnectionIds.includes(c.id));
 
       // Resolve scheduled timestamp
-      const scheduledAtISO = isImmediate 
-        ? null 
+      const scheduledAtISO = isImmediate
+        ? null
         : new Date(`${scheduleDate}T${scheduleTime}:00`).toISOString();
 
       for (let i = 0; i < selectedConns.length; i++) {
@@ -812,7 +933,7 @@ function ComposerPageContent() {
           if (error) throw error;
           if (newPost?.id) {
             publishPostIds.push(newPost.id);
-          }
+          } 
         }
       }
 
@@ -845,13 +966,12 @@ function ComposerPageContent() {
           alert('All posts published successfully!');
         }
       } else {
-        alert(selectedConns.length === 1 
-          ? 'Post scheduled successfully!' 
+        alert(selectedConns.length === 1
+          ? 'Post scheduled successfully!'
           : `Posts scheduled successfully for ${selectedConns.length} channels!`
         );
       }
 
-      setShowScheduleModal(false);
       router.push('/dashboard/posts');
     } catch (err: any) {
       console.error('Error saving post:', err);
@@ -972,240 +1092,291 @@ function ComposerPageContent() {
     <div className={styles.stepContent}>
       <h2 className={styles.stepTitle}>Tell us about your post</h2>
       <p className={styles.stepDesc}>Provide details so AI can generate the perfect content.</p>
-      <div className={styles.formGrid}>
-        <div className={styles.formGroup}>
-          <label htmlFor="topic">Topic / Occasion <span className={styles.required}>*</span></label>
-          <input
-            id="topic"
-            type="text"
-            placeholder="e.g. Diwali Sale, Product Launch, Tips Post..."
-            maxLength={150}
-            value={form.topic}
-            onChange={(e) => setForm({ ...form, topic: e.target.value })}
-          />
-          <span className={styles.charCount}>{form.topic.length}/150</span>
-        </div>
-
-        <div className={styles.formRow}>
+      
+      <div className={styles.step3Layout}>
+        {/* Left Column: Post Details */}
+        <div className={styles.step3Left}>
           <div className={styles.formGroup}>
-            <label htmlFor="brandKit">Brand Kit</label>
-            <select
-              id="brandKit"
-              value={form.brandKit}
-              onChange={(e) => setForm({ ...form, brandKit: e.target.value })}
-            >
-              <option value="main-brand">{brandKitName || businessName || 'Main Brand'}</option>
-              <option value="none">No Brand Kit</option>
-            </select>
+            <label htmlFor="topic">Topic / Occasion <span className={styles.required}>*</span></label>
+            <input
+              id="topic"
+              type="text"
+              placeholder="e.g. Diwali Sale, Product Launch, Tips Post..."
+              maxLength={150}
+              value={form.topic}
+              onChange={(e) => setForm({ ...form, topic: e.target.value })}
+            />
+            <span className={styles.charCount}>{form.topic.length}/150</span>
+          </div>
+
+          <div className={styles.formGroup}>
+            <label htmlFor="extra">Post Description / Context</label>
+            <textarea
+              id="extra"
+              placeholder="Explain exactly what the post is about, any specific tone, details, offers, or context..."
+              rows={4}
+              value={form.extraInstructions}
+              onChange={(e) => setForm({ ...form, extraInstructions: e.target.value })}
+            />
+          </div>
+
+          <div className={styles.formRowTwo}>
+            <div className={styles.formGroup}>
+              <label htmlFor="brandKit">Brand Kit</label>
+              <select
+                id="brandKit"
+                value={form.brandKit}
+                onChange={(e) => setForm({ ...form, brandKit: e.target.value })}
+              >
+                {brandKits.length > 0 ? (
+                  brandKits.map(kit => (
+                    <option key={kit.id} value={kit.id}>{kit.brand_kit_name}</option>
+                  ))
+                ) : (
+                  <option value="main-brand">{brandKitName || businessName || 'Main Brand'}</option>
+                )}
+                <option value="none">No Brand Kit</option>
+              </select>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label htmlFor="campaignExpiry">Campaign Expiry (Optional)</label>
+              <input
+                id="campaignExpiry"
+                type="date"
+                value={form.campaignExpiry}
+                onChange={(e) => setForm({ ...form, campaignExpiry: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className={styles.formRowTwo}>
+            <div className={styles.formGroup}>
+              <label htmlFor="graphicHeadline">Graphic Headline</label>
+              <input
+                id="graphicHeadline"
+                type="text"
+                placeholder="e.g. BUY 2 GET 1 FREE!"
+                maxLength={80}
+                value={form.graphicHeadline}
+                onChange={(e) => setForm({ ...form, graphicHeadline: e.target.value })}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="heroObjects">Hero Objects</label>
+              <input
+                id="heroObjects"
+                type="text"
+                placeholder="e.g. Fresh Bread Loaf, Phones"
+                maxLength={200}
+                value={form.heroObjects}
+                onChange={(e) => setForm({ ...form, heroObjects: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className={styles.formRowTwo}>
+            <div className={styles.formGroup}>
+              <label htmlFor="brandTitle">Brand Title</label>
+              <input
+                id="brandTitle"
+                type="text"
+                placeholder="e.g. Bhonsala Military School"
+                maxLength={80}
+                value={form.brandTitle}
+                onChange={(e) => setForm({ ...form, brandTitle: e.target.value })}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="heroMessage">Hero Message</label>
+              <input
+                id="heroMessage"
+                type="text"
+                placeholder="e.g. Discipline, Consistency, Focus"
+                maxLength={150}
+                value={form.heroMessage}
+                onChange={(e) => setForm({ ...form, heroMessage: e.target.value })}
+              />
+            </div>
           </div>
         </div>
 
-        {form.brandKit !== 'none' && (
-          <div className={styles.formRow}>
-            <div className={styles.formGroup} style={{ border: '1px solid var(--border)', padding: '1rem', borderRadius: 'var(--radius)', backgroundColor: 'var(--surface-50)' }}>
-              <h4 style={{ marginBottom: '1rem', fontSize: '0.9375rem', fontWeight: 600 }}>Brand Identity Rules</h4>
+        {/* Right Column: Settings & Rules */}
+        <div className={styles.step3Right}>
+          {form.brandKit !== 'none' && (
+            <div className={styles.brandRulesCard}>
+              <h3>Brand Identity Rules</h3>
+              <p className={styles.cardSubtitle}>Ensure your brand assets are positioned correctly.</p>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <input
-                    type="checkbox"
-                    id="mentionBrandLogo"
-                    checked={form.mentionBrandLogo}
-                    onChange={(e) => setForm({ ...form, mentionBrandLogo: e.target.checked })}
-                    style={{ width: '16px', height: '16px' }}
-                  />
-                  <label htmlFor="mentionBrandLogo" style={{ margin: 0, fontWeight: 500 }}>Mention Brand logo in Generated Post</label>
+              <div className={styles.rulesList}>
+                {/* Logo Rule */}
+                <div className={styles.ruleItem}>
+                  <div className={styles.ruleHeader}>
+                    <label className={styles.toggleContainer}>
+                      <input
+                        type="checkbox"
+                        id="mentionBrandLogo"
+                        checked={form.mentionBrandLogo}
+                        onChange={(e) => setForm({ ...form, mentionBrandLogo: e.target.checked })}
+                      />
+                      <span className={styles.toggleSlider}></span>
+                    </label>
+                    <span className={styles.ruleLabel}>Include Brand Logo on Graphic</span>
+                  </div>
+                  {form.mentionBrandLogo && (
+                    <div className={styles.ruleDetails}>
+                      <label htmlFor="brandLogoPosition">Logo Position</label>
+                      <input
+                        id="brandLogoPosition"
+                        type="text"
+                        placeholder="e.g. Bottom Right"
+                        value={form.brandLogoPosition}
+                        onChange={(e) => setForm({ ...form, brandLogoPosition: e.target.value })}
+                      />
+                    </div>
+                  )}
                 </div>
-                {form.mentionBrandLogo && (
-                  <div style={{ paddingLeft: '1.5rem' }}>
-                    <label htmlFor="brandLogoPosition" style={{ fontSize: '0.8125rem' }}>Brand Logo Position</label>
+
+                {/* Website in Post Rule */}
+                <div className={styles.ruleItem}>
+                  <div className={styles.ruleHeader}>
+                    <label className={styles.toggleContainer}>
+                      <input
+                        type="checkbox"
+                        id="mentionWebsiteInPost"
+                        checked={form.mentionWebsiteInPost}
+                        onChange={(e) => setForm({ ...form, mentionWebsiteInPost: e.target.checked })}
+                      />
+                      <span className={styles.toggleSlider}></span>
+                    </label>
+                    <span className={styles.ruleLabel}>Include Website Link on Graphic</span>
+                  </div>
+                  {form.mentionWebsiteInPost && (
+                    <div className={styles.ruleDetails}>
+                      <label htmlFor="brandLinkPosition">Link Position</label>
+                      <input
+                        id="brandLinkPosition"
+                        type="text"
+                        placeholder="e.g. Bottom Left"
+                        value={form.brandLinkPosition}
+                        onChange={(e) => setForm({ ...form, brandLinkPosition: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* CTA Rule */}
+                <div className={styles.ruleItem}>
+                  <div className={styles.ruleHeader}>
+                    <span className={styles.ruleLabel}>Call-to-Action Button (Optional)</span>
+                  </div>
+                  <div className={styles.ruleInputGroup}>
                     <input
-                      id="brandLogoPosition"
+                      id="ctaText"
                       type="text"
-                      placeholder="e.g. Bottom Right"
-                      value={form.brandLogoPosition}
-                      onChange={(e) => setForm({ ...form, brandLogoPosition: e.target.value })}
-                      style={{ marginTop: '0.25rem' }}
+                      placeholder="e.g. Shop Now, Learn More"
+                      value={form.ctaText}
+                      onChange={(e) => setForm({ ...form, ctaText: e.target.value })}
                     />
                   </div>
-                )}
-
-                <div style={{ height: '1px', backgroundColor: 'var(--border)', margin: '0.5rem 0' }}></div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <input
-                    type="checkbox"
-                    id="mentionWebsiteInPost"
-                    checked={form.mentionWebsiteInPost}
-                    onChange={(e) => setForm({ ...form, mentionWebsiteInPost: e.target.checked })}
-                    style={{ width: '16px', height: '16px' }}
-                  />
-                  <label htmlFor="mentionWebsiteInPost" style={{ margin: 0, fontWeight: 500 }}>Mention Brand Website Link in Generated Post</label>
-                </div>
-                {form.mentionWebsiteInPost && (
-                  <div style={{ paddingLeft: '1.5rem' }}>
-                    <label htmlFor="brandLinkPosition" style={{ fontSize: '0.8125rem' }}>Brand Link Position</label>
-                    <input
-                      id="brandLinkPosition"
-                      type="text"
-                      placeholder="e.g. Bottom Center"
-                      value={form.brandLinkPosition}
-                      onChange={(e) => setForm({ ...form, brandLinkPosition: e.target.value })}
-                      style={{ marginTop: '0.25rem' }}
-                    />
-                  </div>
-                )}
-
-                <div style={{ height: '1px', backgroundColor: 'var(--border)', margin: '0.5rem 0' }}></div>
-
-                <div>
-                  <label htmlFor="ctaText" style={{ fontWeight: 500 }}>Call-to-Action Button (Optional)</label>
-                  <input
-                    id="ctaText"
-                    type="text"
-                    placeholder="e.g. Register Free Today, Shop Now, Learn More"
-                    value={form.ctaText}
-                    onChange={(e) => setForm({ ...form, ctaText: e.target.value })}
-                    style={{ marginTop: '0.25rem' }}
-                  />
                   {form.ctaText.trim() && (
-                    <div style={{ paddingLeft: '0', marginTop: '0.5rem' }}>
-                      <label htmlFor="ctaPosition" style={{ fontSize: '0.8125rem' }}>CTA Position</label>
+                    <div className={styles.ruleDetails} style={{ marginTop: '0.5rem', paddingLeft: 0 }}>
+                      <label htmlFor="ctaPosition">CTA Position</label>
                       <input
                         id="ctaPosition"
                         type="text"
                         placeholder="e.g. Bottom Center"
                         value={form.ctaPosition}
                         onChange={(e) => setForm({ ...form, ctaPosition: e.target.value })}
-                        style={{ marginTop: '0.25rem' }}
                       />
                     </div>
                   )}
                 </div>
 
-                <div style={{ height: '1px', backgroundColor: 'var(--border)', margin: '0.5rem 0' }}></div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <input
-                    type="checkbox"
-                    id="mentionWebsiteInCaption"
-                    checked={form.mentionWebsiteInCaption}
-                    onChange={(e) => setForm({ ...form, mentionWebsiteInCaption: e.target.checked })}
-                    style={{ width: '16px', height: '16px' }}
-                  />
-                  <label htmlFor="mentionWebsiteInCaption" style={{ margin: 0, fontWeight: 500 }}>Mention Brand Website Link in Generated Caption</label>
+                {/* Caption Rule */}
+                <div className={styles.ruleItem}>
+                  <div className={styles.ruleHeader}>
+                    <label className={styles.toggleContainer}>
+                      <input
+                        type="checkbox"
+                        id="mentionWebsiteInCaption"
+                        checked={form.mentionWebsiteInCaption}
+                        onChange={(e) => setForm({ ...form, mentionWebsiteInCaption: e.target.checked })}
+                      />
+                      <span className={styles.toggleSlider}></span>
+                    </label>
+                    <span className={styles.ruleLabel}>Include Website Link in Caption</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div className={styles.formGroup}>
-          <label htmlFor="extra">Post Description</label>
-          <textarea
-            id="extra"
-            placeholder="Explain exactly what the post is about, any specific tone, details, offers, or context..."
-            rows={3}
-            value={form.extraInstructions}
-            onChange={(e) => setForm({ ...form, extraInstructions: e.target.value })}
-          />
-        </div>
-
-        {/* ── Visual Geometry Fields ── */}
-        <div className={styles.formRow}>
-          <div className={styles.formGroup}>
-            <label htmlFor="graphicHeadline">Graphic Headline</label>
-            <input
-              id="graphicHeadline"
-              type="text"
-              placeholder="e.g. BUY 2 GET 1 FREE!"
-              maxLength={80}
-              value={form.graphicHeadline}
-              onChange={(e) => setForm({ ...form, graphicHeadline: e.target.value })}
-            />
+          {/* Caption Tuning Settings */}
+          <div className={styles.tuningCard}>
+            <h3>Caption Settings</h3>
+            <p className={styles.cardSubtitle}>Configure caption length and hashtag count.</p>
+            <div className={styles.formRowTwo}>
+              <div className={styles.formGroup}>
+                <label htmlFor="wordCount">Caption Words</label>
+                <input
+                  id="wordCount"
+                  type="number"
+                  min={10}
+                  max={500}
+                  value={form.wordCount}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setForm({ ...form, wordCount: '' as any });
+                      return;
+                    }
+                    const parsed = parseInt(val);
+                    if (!isNaN(parsed)) {
+                      setForm({ ...form, wordCount: Math.min(500, Math.max(0, parsed)) });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const parsed = parseInt(e.target.value);
+                    if (isNaN(parsed) || parsed < 10) {
+                      setForm({ ...form, wordCount: 10 });
+                    } else if (parsed > 500) {
+                      setForm({ ...form, wordCount: 500 });
+                    }
+                  }}
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label htmlFor="hashtagCount">Hashtags Count</label>
+                <input
+                  id="hashtagCount"
+                  type="number"
+                  min={0}
+                  max={30}
+                  value={form.hashtagCount}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setForm({ ...form, hashtagCount: '' as any });
+                      return;
+                    }
+                    const parsed = parseInt(val);
+                    if (!isNaN(parsed)) {
+                      setForm({ ...form, hashtagCount: Math.min(30, Math.max(0, parsed)) });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const parsed = parseInt(e.target.value);
+                    if (isNaN(parsed) || parsed < 0) {
+                      setForm({ ...form, hashtagCount: 0 });
+                    } else if (parsed > 30) {
+                      setForm({ ...form, hashtagCount: 30 });
+                    }
+                  }}
+                />
+              </div>
+            </div>
           </div>
-          <div className={styles.formGroup}>
-            <label htmlFor="heroObjects">Hero Objects</label>
-            <input
-              id="heroObjects"
-              type="text"
-              placeholder="e.g. Fresh Bread Loaf, Mobile Phones"
-              maxLength={200}
-              value={form.heroObjects}
-              onChange={(e) => setForm({ ...form, heroObjects: e.target.value })}
-            />
-          </div>
-        </div>
-
-        <div className={styles.formRow}>
-          <div className={styles.formGroup}>
-            <label htmlFor="brandTitle">Brand Title</label>
-            <input
-              id="brandTitle"
-              type="text"
-              placeholder="e.g. Bhonsala Military School"
-              maxLength={80}
-              value={form.brandTitle}
-              onChange={(e) => setForm({ ...form, brandTitle: e.target.value })}
-            />
-          </div>
-          <div className={styles.formGroup}>
-            <label htmlFor="heroMessage">Hero Message</label>
-            <input
-              id="heroMessage"
-              type="text"
-              placeholder="e.g. Discipline, Consistency, Focus"
-              maxLength={150}
-              value={form.heroMessage}
-              onChange={(e) => setForm({ ...form, heroMessage: e.target.value })}
-            />
-          </div>
-        </div>
-
-        {/* ── Campaign Urgency & Caption Refinement ── */}
-        <div className={styles.formRow}>
-          <div className={styles.formGroup}>
-            <label htmlFor="campaignExpiry">Campaign/Offer Expiry (Optional)</label>
-            <input
-              id="campaignExpiry"
-              type="date"
-              value={form.campaignExpiry}
-              onChange={(e) => setForm({ ...form, campaignExpiry: e.target.value })}
-            />
-          </div>
-          <div className={styles.formGroup}>
-            <label htmlFor="wordCount">Caption Words</label>
-            <input
-              id="wordCount"
-              type="number"
-              min={10}
-              max={500}
-              value={form.wordCount}
-              onChange={(e) => setForm({ ...form, wordCount: parseInt(e.target.value) || 100 })}
-              onBlur={() => {
-                let val = form.wordCount;
-                if (val < 10) val = 10;
-                if (val > 500) val = 500;
-                setForm({ ...form, wordCount: val });
-              }}
-            />
-          </div>
-          <div className={styles.formGroup}>
-            <label htmlFor="hashtagCount">Hashtags</label>
-            <input
-              id="hashtagCount"
-              type="number"
-              min={0}
-              max={30}
-              value={form.hashtagCount}
-              onChange={(e) => setForm({ ...form, hashtagCount: parseInt(e.target.value) || 6 })}
-              onBlur={() => {
-                let val = form.hashtagCount;
-                if (val < 0) val = 0;
-                if (val > 30) val = 30;
-                setForm({ ...form, hashtagCount: val });
-              }}
-            />
           </div>
         </div>
       </div>
@@ -1250,7 +1421,7 @@ function ComposerPageContent() {
         </h2>
         <p className={styles.generatingDesc}>
           {generationState === 'stopped' ? 'You stopped the AI generation process.' : 
-           'AI is crafting your caption and image based on your brand kit.'}
+           'AI is crafting 3 caption variants and 2 image options based on your brand kit.'}
         </p>
         <div className={styles.generatingSteps}>
           <div className={`${styles.genStep} ${generationState !== 'stopped' ? styles.genStepActive : ''}`}>
@@ -1285,7 +1456,7 @@ function ComposerPageContent() {
               {generated.images[selectedImage] ? (
                 <>
                   <img 
-                    src={generated.images[selectedImage].url} 
+                    src={generated.images[selectedImage]?.url} 
                     alt={`AI Generated ${selectedImage + 1}`} 
                     className={styles.previewImage}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -1321,7 +1492,6 @@ function ComposerPageContent() {
                 </div>
               )}
             </div>
-
             {/* ── Image Options Carousel ────────────────────────────── */}
             {hasMultipleImages && (
               <div className={styles.regenCarousel}>
@@ -1392,15 +1562,37 @@ function ComposerPageContent() {
                     ? `${remainingCaptionRegens} regen${remainingCaptionRegens !== 1 ? 's' : ''} left today`
                     : 'Limit reached today'}
                 </span>
-                <button 
-                  className={`${styles.regenerateBtn} ${remainingCaptionRegens <= 0 ? styles.regenDisabled : ''}`}
-                  onClick={handleRegenerateCaptions}
-                  disabled={isGeneratingCaptions || remainingCaptionRegens <= 0}
-                  title={remainingCaptionRegens <= 0 ? 'Daily regeneration limit reached (3/3)' : `Regenerate caption (${remainingCaptionRegens} left)`}
-                >
-                  {isGeneratingCaptions ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
-                  Regenerate Caption
-                </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <button 
+                    onClick={handleSaveImage}
+                    disabled={isSavingImage}
+                    style={{ 
+                      backgroundColor: '#10b981', 
+                      color: 'white', 
+                      border: 'none', 
+                      padding: '6px 12px', 
+                      borderRadius: '6px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '4px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '500'
+                    }}
+                  >
+                    {isSavingImage ? <Loader2 size={14} className={styles.spinner} /> : <Bookmark size={14} fill="none" />}
+                    Save Image
+                  </button>
+                  <button 
+                    className={`${styles.regenerateBtn} ${remainingCaptionRegens <= 0 ? styles.regenDisabled : ''}`}
+                    onClick={handleRegenerateCaptions}
+                    disabled={isGeneratingCaptions || remainingCaptionRegens <= 0}
+                    title={remainingCaptionRegens <= 0 ? 'Daily regeneration limit reached (3/3)' : `Regenerate caption (${remainingCaptionRegens} left)`}
+                  >
+                    {isGeneratingCaptions ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
+                    Regenerate Caption
+                  </button>
+                </div>
               </div>
             </div>
             <div className={styles.captionEditor}>
