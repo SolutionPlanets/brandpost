@@ -66,15 +66,18 @@ function MockPortalContent() {
     
     let gst = 0;
     let base = total;
+    let roundoff = 0;
     
     if (planIdLower !== 'trial' && total > 0) {
-      base = Number((total / 1.18).toFixed(2));
-      gst = Number((total - base).toFixed(2));
+      base = Math.ceil(total / 1.18);
+      gst = Number((base * 0.18).toFixed(2));
+      roundoff = Number((total - (base + gst)).toFixed(2));
     }
     
     return {
       base,
       gst,
+      roundoff,
       total
     };
   };
@@ -97,15 +100,20 @@ function MockPortalContent() {
   };
 
   const formatCurrency = (amount: number, currency: string) => {
+    const isNegative = amount < 0;
+    const absAmount = Math.abs(amount);
     const symbol = currency.toUpperCase() === 'INR' ? '₹' : '$';
-    const num = Number(amount);
+    const num = Number(absAmount);
     const hasDecimals = num % 1 !== 0;
     const integerPart = Math.floor(num).toLocaleString(currency.toUpperCase() === 'INR' ? 'en-IN' : 'en-US');
+    let formatted = '';
     if (hasDecimals) {
       const decimalPart = num.toFixed(2).split('.')[1];
-      return `${symbol}${integerPart}.${decimalPart}`;
+      formatted = `${symbol}${integerPart}.${decimalPart}`;
+    } else {
+      formatted = `${symbol}${integerPart}`;
     }
-    return `${symbol}${integerPart}`;
+    return isNegative ? `-${formatted}` : formatted;
   };
 
   useEffect(() => {
@@ -365,7 +373,7 @@ function MockPortalContent() {
 
       {/* Invoice Details Modal */}
       {selectedInvoice && (() => {
-        const { base, gst, total } = getTaxBreakdown(selectedInvoice);
+        const { base, gst, roundoff, total } = getTaxBreakdown(selectedInvoice);
         const invoiceIdStr = selectedInvoice.order_id 
           ? selectedInvoice.order_id 
           : `INV-2026-${selectedInvoice.id.toString().substring(0, 8).toUpperCase()}`;
@@ -440,6 +448,13 @@ function MockPortalContent() {
                           <td></td>
                           <td style={{ color: '#64748b' }}>GST (18%)</td>
                           <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(gst, selectedInvoice.currency)}</td>
+                        </tr>
+                      )}
+                      {roundoff !== 0 && (
+                        <tr>
+                          <td></td>
+                          <td style={{ color: '#64748b' }}>Roundoff</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(roundoff, selectedInvoice.currency)}</td>
                         </tr>
                       )}
                       <tr className={styles.totalRow}>

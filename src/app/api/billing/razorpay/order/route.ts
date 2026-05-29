@@ -35,7 +35,8 @@ export async function POST(request: Request) {
     const baseInrPrice = isYearly ? Number(plan.inr_yearly) : Number(plan.inr_monthly);
     const gstPercentage = Number(plan.gst || 0);
     const priceWithGst = baseInrPrice * (1 + gstPercentage / 100);
-    const amountPaisa = Math.round(priceWithGst * 100);
+    const totalPrice = Math.floor(priceWithGst);
+    const amountPaisa = totalPrice * 100;
 
     const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
