@@ -1,0 +1,225 @@
+# 🎨 BrandPost AI Image Generation Inference & Data Flow Document (.imd)
+
+This document outlines the exact data schema, transformations, and payloads exchanged during the image generation lifecycle in **BrandPost**. It describes how the AI Agent receives input from the client frontend, expands it using a text LLM, and formats it for final image model inferencing.
+
+---
+
+## 🔄 End-to-End Architecture Flow
+
+```mermaid
+graph TD
+    A[Client Frontend: composer/page.tsx] -->|POST Request with Raw Form Data| B[API Route: api/generate/images/route.ts]
+    B -->|Fetch Brand Kit & User Session| C[Supabase Database]
+    B -->|Generate Structural System Prompt| D[getImageExpansionPrompt Function]
+    D -->|Request Enhanced Prompt| E[Gemini 2.5 Flash LLM]
+    E -->|JSON Output: expandedPrompts| B
+    B -->|Match Active Model Config| F[IMAGE_MODEL_REGISTRY]
+    F -->|Inference Call| G[Google GenAI SDK]
+    G -->|Imagen or Gemini Image Modality| H[Base64 Image Buffer]
+    H -->|Upload & Store| I[Supabase Storage & Posts Table]
+    I -->|JSON Response with Public URL| A
+```
+
+---
+
+## 📥 1. Client Frontend Payload (How the API Receives It)
+
+The frontend page `src/app/dashboard/composer/page.tsx` collects user selections and compiles them into a POST request.
+
+### **API Endpoint**
+`POST /api/generate/images`
+
+### **Raw Request Body Schema**
+```typescript
+interface ImageGenerationRequest {
+  topic: string;             // The core theme or occasion (up to 150 chars)
+  contentType: string;       // Category: 'festive' | 'offer' | 'informational' | 'general'
+  platform: string;          // Target: 'facebook' | 'instagram' | 'both'
+  extraInstructions: string; // The "Post Description" with high-weight details or text offers
+  workspaceId: string;       // Current Workspace UUID
+  brandKitId?: string | null;// Explicit null if "No Brand Kit" is chosen, else undefined
+  brandDetails: null | {     // Combined brand settings to guide the visual identity
+    businessName: string;
+    brandDescription: string;
+    colors: {
+      primary: string;       // Hex value
+      secondary: string;     // Hex value
+      accent: string;        // Hex value
+    };
+    brandTone: string;
+    fullName?: string;
+    address?: string;
+    pincode?: string;
+    timing?: string;
+    logo?: string;           // URL of uploaded brand logo if present
+  };
+}
+```
+
+### **Example Frontend Payload**
+```json
+{
+  "topic": "Diwali Special Offer",
+  "contentType": "offer",
+  "platform": "both",
+  "extraInstructions": "Get 30% off all apparel this weekend only. Use code DIWALI30 at checkout.",
+  "workspaceId": "d3b07384-d113-4c4e-9c8e-bf8d68967b5f",
+  "brandDetails": {
+    "businessName": "TrendSphere Apparel",
+    "brandDescription": "Modern minimal clothing boutique.",
+    "colors": {
+      "primary": "#1A1A1A",
+      "secondary": "#E5A93C",
+      "accent": "#F5F5F7"
+    },
+    "brandTone": "elegant, luxury, minimalist",
+    "fullName": "TrendSphere Apparel Inc.",
+    "address": "123 Fashion Street, Mumbai",
+    "pincode": "400001",
+    "timing": "10 AM - 9 PM",
+    "logo": "https://supabase.co/.../logos/trendsphere_logo.png"
+  }
+}
+```
+
+---
+
+## 🔮 2. The Prompt Expansion Phase (AI Agent Pre-Processing)
+
+Before requesting image generation, the system passes the raw details to `gemini-2.5-flash` to construct a highly specific, cinematic graphic design prompt.
+
+### **The Expansion Prompt Generator (`prompts.ts`)**
+The function `getImageExpansionPrompt` wraps the inputs in detailed graphic designer system instructions:
+
+```markdown
+You are an Elite Creative Strategist and Graphic Designer. 
+Your goal is to design exactly ONE BESPOKE AND HIGH-IMPACT marketing poster.
+
+CRITICAL: QUALITY & TEXT
+- IMAGE QUALITY: Ultra-HD, 8k resolution, photorealistic, sharp focus, NO BLUR.
+- TEXT CLARITY: Every letter MUST be sharp, crisp, and perfectly legible.
+- LANGUAGE: All text in the image MUST be in CLEAR, FLUENT ENGLISH.
+
+USER INPUTS:
+- Topic: "Diwali Special Offer"
+- Goal: "offer"
+- Platform: "both"
+- Post Description (HIGHEST WEIGHTAGE): "Get 30% off all apparel this weekend only. Use code DIWALI30 at checkout."
+
+CRITICAL PRIORITY: The "Post Description" dictates the core content, text, and visual elements. You MUST visually represent the details, offers, or context mentioned in the Post Description.
+
+BRAND DATABASE (STRICTLY ADHERE TO THESE):
+- Business Name: "TrendSphere Apparel"
+- Logo Reference: Perfectly integrate the visual style of this logo: https://supabase.co/.../logos/trendsphere_logo.png
+- Palette: Primary #1A1A1A, Secondary #E5A93C, Accent #F5F5F7
+- Tone: elegant, luxury, minimalist
+
+BRAND STRUCTURE:
+1. TOP: Premium branding area with "TrendSphere Apparel".
+2. BOTTOM: Clean footer area.
+
+DESIGN SPECIFICATIONS:
+Describe a SINGLE, ISOLATED poster with a clean, high-contrast layout, razor-sharp typography, and a cinematic focal visual representing the Post Description and Topic.
+
+Respond with a JSON object: {"expandedPrompts": ["detailed prompt for the SINGLE poster"]}
+```
+
+### **Output from Prompt Expansion**
+Gemini 2.5 Flash returns a structured JSON payload like:
+```json
+{
+  "expandedPrompts": [
+    "An ultra-premium, 8k resolution marketing poster for TrendSphere Apparel. The design uses a sophisticated dark theme matching the brand colors (#1A1A1A and #E5A93C). In the center is a beautifully styled display of high-end minimal apparel. Sharp, bold, ultra-legible typography is integrated into the poster stating 'Diwali Special Offer - 30% OFF ALL APPAREL'. Underneath, a clean gold tag displays 'Use Code: DIWALI30'. The layout is clean and high-contrast, featuring a cinematic depth of field and premium luxury tone."
+  ]
+}
+```
+
+---
+
+## ⚡ 3. Google GenAI Model Inferencing (The Final Call)
+
+The system selects a target image model from `IMAGE_MODEL_REGISTRY` depending on the `ACTIVE_IMAGE_MODEL` environment variable.
+
+### **Active Registry Config Mapping**
+The system routes the expanded prompt to either the Content API or the dedicated Image Generation API:
+
+| Model ID (Registry Key) | Model Reference | API Method Called | Key Configuration |
+| :--- | :--- | :--- | :--- |
+| **`GEMINI_BANANA`** | `gemini-2.5-flash-image` | `ai.models.generateContent` | `responseModalities: [Modality.IMAGE]` |
+| **`IMAGEN_FAST`** *(Default)* | `imagen-4.0-fast-generate-001` | `ai.models.generateImages` | `numberOfImages: 1`, `aspectRatio: '1:1'`, `outputMimeType: 'image/png'` |
+| **`IMAGEN_STANDARD`** | `imagen-4.0-generate-001` | `ai.models.generateImages` | `numberOfImages: 1`, `aspectRatio: '1:1'`, `outputMimeType: 'image/png'` |
+| **`IMAGEN_ULTRA`** | `imagen-4.0-ultra-generate-001` | `ai.models.generateImages` | `numberOfImages: 1`, `aspectRatio: '1:1'`, `outputMimeType: 'image/png'` |
+
+---
+
+### **Exact Inferencing Payload Forms**
+
+#### **Case A: Using Imagen (e.g. `IMAGEN_FAST` / `IMAGEN_ULTRA`)**
+This is the default pipeline using the dedicated image generation models:
+
+```typescript
+// Google GenAI SDK Call
+const imageResult = await ai.models.generateImages({
+  model: 'imagen-4.0-fast-generate-001',
+  prompt: "An ultra-premium, 8k resolution marketing poster for TrendSphere Apparel...", // <-- The Expanded Prompt
+  config: {
+    numberOfImages: 1,
+    aspectRatio: '1:1',
+    outputMimeType: 'image/png',
+  },
+});
+```
+
+#### **Case B: Using Gemini Image Modality (e.g. `GEMINI_BANANA`)**
+Used when using content generation endpoints that support native image rendering output:
+
+```typescript
+// Google GenAI SDK Call
+const imageResult = await ai.models.generateContent({
+  model: 'gemini-2.5-flash-image',
+  contents: "An ultra-premium, 8k resolution marketing poster for TrendSphere Apparel...", // <-- The Expanded Prompt
+  config: {
+    responseModalities: [Modality.IMAGE],
+  },
+});
+```
+
+---
+
+## 📤 4. Downstream Output Capture
+
+### **1. Extracting the Binary Image**
+The API parses the base64-encoded output string to build a node `Buffer`:
+
+* **For Gemini Modality:**
+  ```typescript
+  const part = imageResult.candidates?.[0]?.content?.parts[0];
+  const imageBuffer = Buffer.from(part.inlineData.data, 'base64');
+  ```
+* **For Imagen:**
+  ```typescript
+  const generatedImage = imageResult.generatedImages?.[0];
+  const imageBuffer = Buffer.from(generatedImage.image.imageBytes, 'base64');
+  ```
+
+### **2. Storage and Database Insertion**
+The buffer is uploaded directly to the Supabase Storage Bucket `BrandPostAI_Post` under the path:
+`{owner_id}/post_{timestamp}_0.png`
+
+The API then saves the post metadata back to the Supabase `posts` table:
+```json
+{
+  "workspace_id": "d3b07384-d113-4c4e-9c8e-bf8d68967b5f",
+  "brand_kit_id": "902d13b3-...",
+  "title": "Diwali Special Offer",
+  "caption": "Generated for Diwali Special Offer on both",
+  "image_url": "https://supabase-project.supabase.co/storage/v1/object/public/BrandPostAI_Post/uid/post_178491823901_0.png",
+  "status": "draft",
+  "platform": "both",
+  "content_type": "offer",
+  "extra_instructions": "Get 30% off all apparel this weekend only. Use code DIWALI30 at checkout."
+}
+```
+
+---
+*Document Created by Antigravity AI Code Assistant*
