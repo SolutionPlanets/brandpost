@@ -69,6 +69,8 @@ interface ComposerForm {
   mentionWebsiteInCaption: boolean;
   ctaText: string;
   ctaPosition: string;
+  brandTitle: string;
+  heroMessage: string;
 }
 
 interface GeneratedContent {
@@ -170,6 +172,8 @@ function ComposerPageContent() {
     mentionWebsiteInCaption: true,
     ctaText: '',
     ctaPosition: 'Bottom Center',
+    brandTitle: '',
+    heroMessage: '',
   });
 
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
@@ -191,6 +195,19 @@ function ComposerPageContent() {
   useEffect(() => { editedCaptionRef.current = editedCaption; }, [editedCaption]);
   useEffect(() => { stepRef.current = step; }, [step]);
   useEffect(() => { draftIdRef.current = draftId; }, [draftId]);
+
+  // Autofetch Brand Title based on user selected brand kit and businessName context
+  useEffect(() => {
+    if (form.brandKit === 'main-brand') {
+      if (!form.brandTitle) {
+        setForm(prev => ({ ...prev, brandTitle: businessName || '' }));
+      }
+    } else if (form.brandKit === 'none') {
+      if (form.brandTitle === businessName) {
+        setForm(prev => ({ ...prev, brandTitle: '' }));
+      }
+    }
+  }, [form.brandKit, businessName]);
 
   // ── Save Draft to Database ─────────────────────────────────────────
   const saveDraftToDb = useCallback(async (isBeacon = false) => {
@@ -224,6 +241,15 @@ function ComposerPageContent() {
         mention_website_in_post: currentForm.mentionWebsiteInPost,
         brand_link_position: currentForm.brandLinkPosition,
         mention_website_in_caption: currentForm.mentionWebsiteInCaption,
+        cta_text: currentForm.ctaText || null,
+        cta_position: currentForm.ctaPosition || null,
+        graphic_headline: currentForm.graphicHeadline || null,
+        hero_objects: currentForm.heroObjects || null,
+        campaign_expiry: currentForm.campaignExpiry || null,
+        word_count: currentForm.wordCount,
+        hashtag_count: currentForm.hashtagCount,
+        brand_title: currentForm.brandTitle || null,
+        hero_message: currentForm.heroMessage || null,
       };
 
       if (currentDraftId) {
@@ -313,11 +339,11 @@ function ComposerPageContent() {
             brandKit: data.brand_kit_id || 'main-brand',
             platform: data.platform || 'both',
             extraInstructions: data.extra_instructions || '',
-            graphicHeadline: '',
-            heroObjects: '',
-            campaignExpiry: '',
-            wordCount: 100,
-            hashtagCount: 6,
+            graphicHeadline: data.graphic_headline || '',
+            heroObjects: data.hero_objects || '',
+            campaignExpiry: data.campaign_expiry || '',
+            wordCount: data.word_count || 100,
+            hashtagCount: data.hashtag_count !== undefined ? data.hashtag_count : 6,
             mentionBrandLogo: data.mention_brand_logo !== undefined ? data.mention_brand_logo : true,
             brandLogoPosition: data.brand_logo_position || 'Bottom Right',
             mentionWebsiteInPost: data.mention_website_in_post !== undefined ? data.mention_website_in_post : true,
@@ -325,6 +351,8 @@ function ComposerPageContent() {
             mentionWebsiteInCaption: data.mention_website_in_caption !== undefined ? data.mention_website_in_caption : true,
             ctaText: data.cta_text || '',
             ctaPosition: data.cta_position || 'Bottom Center',
+            brandTitle: data.brand_title || '',
+            heroMessage: data.hero_message || '',
           });
 
           if (isEdit) {
@@ -517,6 +545,9 @@ function ComposerPageContent() {
           extraInstructions: form.extraInstructions,
           graphicHeadline: form.graphicHeadline,
           heroObjects: form.heroObjects,
+          campaignExpiry: form.campaignExpiry,
+          wordCount: form.wordCount,
+          hashtagCount: form.hashtagCount,
           workspaceId: workspaceId,
           brandKitId: form.brandKit === 'none' ? null : undefined,
           brandDetails: form.brandKit === 'none' ? null : { 
@@ -542,6 +573,8 @@ function ComposerPageContent() {
           brandLinkPosition: form.brandLinkPosition,
           ctaText: form.ctaText,
           ctaPosition: form.ctaPosition,
+          brandTitle: form.brandTitle,
+          heroMessage: form.heroMessage,
           ...(postId ? { postId, currentCaption: editedCaption || generated?.captions[selectedCaption] } : {}),
         }),
       });
@@ -597,6 +630,15 @@ function ComposerPageContent() {
           mention_website_in_post: form.mentionWebsiteInPost,
           brand_link_position: form.brandLinkPosition,
           mention_website_in_caption: form.mentionWebsiteInCaption,
+          cta_text: form.ctaText || null,
+          cta_position: form.ctaPosition || null,
+          graphic_headline: form.graphicHeadline || null,
+          hero_objects: form.heroObjects || null,
+          campaign_expiry: form.campaignExpiry || null,
+          word_count: form.wordCount,
+          hashtag_count: form.hashtagCount,
+          brand_title: form.brandTitle || null,
+          hero_message: form.heroMessage || null,
         }));
         await supabase.from('posts').insert(draftsToInsert);
         refreshBrandData(true); // Reflect credits immediately on dashboard
@@ -735,6 +777,15 @@ function ComposerPageContent() {
           mention_website_in_post: form.mentionWebsiteInPost,
           brand_link_position: form.brandLinkPosition,
           mention_website_in_caption: form.mentionWebsiteInCaption,
+          cta_text: form.ctaText || null,
+          cta_position: form.ctaPosition || null,
+          graphic_headline: form.graphicHeadline || null,
+          hero_objects: form.heroObjects || null,
+          campaign_expiry: form.campaignExpiry || null,
+          word_count: form.wordCount,
+          hashtag_count: form.hashtagCount,
+          brand_title: form.brandTitle || null,
+          hero_message: form.heroMessage || null,
         };
 
         if (i === 0) {
@@ -1086,6 +1137,31 @@ function ComposerPageContent() {
           </div>
         </div>
 
+        <div className={styles.formRow}>
+          <div className={styles.formGroup}>
+            <label htmlFor="brandTitle">Brand Title</label>
+            <input
+              id="brandTitle"
+              type="text"
+              placeholder="e.g. Bhonsala Military School"
+              maxLength={80}
+              value={form.brandTitle}
+              onChange={(e) => setForm({ ...form, brandTitle: e.target.value })}
+            />
+          </div>
+          <div className={styles.formGroup}>
+            <label htmlFor="heroMessage">Hero Message</label>
+            <input
+              id="heroMessage"
+              type="text"
+              placeholder="e.g. Discipline, Consistency, Focus"
+              maxLength={150}
+              value={form.heroMessage}
+              onChange={(e) => setForm({ ...form, heroMessage: e.target.value })}
+            />
+          </div>
+        </div>
+
         {/* ── Campaign Urgency & Caption Refinement ── */}
         <div className={styles.formRow}>
           <div className={styles.formGroup}>
@@ -1106,6 +1182,12 @@ function ComposerPageContent() {
               max={500}
               value={form.wordCount}
               onChange={(e) => setForm({ ...form, wordCount: parseInt(e.target.value) || 100 })}
+              onBlur={() => {
+                let val = form.wordCount;
+                if (val < 10) val = 10;
+                if (val > 500) val = 500;
+                setForm({ ...form, wordCount: val });
+              }}
             />
           </div>
           <div className={styles.formGroup}>
@@ -1117,6 +1199,12 @@ function ComposerPageContent() {
               max={30}
               value={form.hashtagCount}
               onChange={(e) => setForm({ ...form, hashtagCount: parseInt(e.target.value) || 6 })}
+              onBlur={() => {
+                let val = form.hashtagCount;
+                if (val < 0) val = 0;
+                if (val > 30) val = 30;
+                setForm({ ...form, hashtagCount: val });
+              }}
             />
           </div>
         </div>

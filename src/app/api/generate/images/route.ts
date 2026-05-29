@@ -689,6 +689,9 @@ export async function POST(req: Request) {
       postId: regenPostId, // Optional: set when regenerating an existing post's image
       graphicHeadline,
       heroObjects,
+      campaignExpiry,
+      wordCount,
+      hashtagCount,
       currentCaption,
       mentionBrandLogo,
       brandLogoPosition,
@@ -696,6 +699,8 @@ export async function POST(req: Request) {
       brandLinkPosition,
       ctaText,
       ctaPosition,
+      brandTitle,
+      heroMessage,
     } = await req.json();
 
     if (!process.env.GOOGLE_GEMINI_API_KEY) {
@@ -777,7 +782,16 @@ export async function POST(req: Request) {
           mention_brand_logo: mentionBrandLogo,
           brand_logo_position: brandLogoPosition,
           mention_website_in_post: mentionWebsiteInPost,
-          brand_link_position: brandLinkPosition
+          brand_link_position: brandLinkPosition,
+          cta_text: ctaText || null,
+          cta_position: ctaPosition || null,
+          graphic_headline: graphicHeadline || null,
+          hero_objects: heroObjects || null,
+          campaign_expiry: campaignExpiry || null,
+          brand_title: brandTitle || null,
+          hero_message: heroMessage || null,
+          word_count: wordCount,
+          hashtag_count: hashtagCount,
         }])
         .select('id')
         .single();
@@ -810,7 +824,7 @@ export async function POST(req: Request) {
       const promptExpansionMsg = getImageExpansionPrompt(
         brandDetails, topic, contentType, platform, extraInstructions, graphicHeadline, heroObjects,
         mentionBrandLogo, brandLogoPosition, mentionWebsiteInPost, brandLinkPosition,
-        ctaText, ctaPosition
+        ctaText, ctaPosition, brandTitle, heroMessage
       );
 
       const expansionResult = await ai.models.generateContent({
@@ -906,7 +920,9 @@ export async function POST(req: Request) {
         // Extended metadata
         expandedPrompt, mergedNegativePrompt, setup.modelId, aspectRatio,
         regenPostId, currentCaption,
-        mentionBrandLogo, brandLogoPosition, mentionWebsiteInPost, brandLinkPosition
+        mentionBrandLogo, brandLogoPosition, mentionWebsiteInPost, brandLinkPosition,
+        ctaText, ctaPosition, graphicHeadline, heroObjects, campaignExpiry, wordCount, hashtagCount,
+        brandTitle, heroMessage
       );
 
     } catch (imgErr: any) {
@@ -952,7 +968,16 @@ async function processAndStoreBuffer(
   mentionBrandLogo?: boolean,
   brandLogoPosition?: string,
   mentionWebsiteInPost?: boolean,
-  brandLinkPosition?: string
+  brandLinkPosition?: string,
+  ctaText?: string,
+  ctaPosition?: string,
+  graphicHeadline?: string,
+  heroObjects?: string,
+  campaignExpiry?: string,
+  wordCount?: number,
+  hashtagCount?: number,
+  brandTitle?: string,
+  heroMessage?: string
 ) {
   const adminSupabase = createAdminClient();
 
@@ -994,6 +1019,15 @@ async function processAndStoreBuffer(
     if (brandLogoPosition !== undefined) metadataFields.brand_logo_position = brandLogoPosition;
     if (mentionWebsiteInPost !== undefined) metadataFields.mention_website_in_post = mentionWebsiteInPost;
     if (brandLinkPosition !== undefined) metadataFields.brand_link_position = brandLinkPosition;
+    if (ctaText !== undefined) metadataFields.cta_text = ctaText || null;
+    if (ctaPosition !== undefined) metadataFields.cta_position = ctaPosition || null;
+    if (graphicHeadline !== undefined) metadataFields.graphic_headline = graphicHeadline || null;
+    if (heroObjects !== undefined) metadataFields.hero_objects = heroObjects || null;
+    if (campaignExpiry !== undefined) metadataFields.campaign_expiry = campaignExpiry || null;
+    if (wordCount !== undefined) metadataFields.word_count = wordCount;
+    if (hashtagCount !== undefined) metadataFields.hashtag_count = hashtagCount;
+    if (brandTitle !== undefined) metadataFields.brand_title = brandTitle || null;
+    if (heroMessage !== undefined) metadataFields.hero_message = heroMessage || null;
 
     if (draftId && !isRegen) {
       const updatePayload: any = {

@@ -99,3 +99,8 @@ BEGIN
   RETURN EXISTS (SELECT 1 FROM public.users WHERE email = email_to_check);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 7. ADD BRAND_TITLE AND HERO_MESSAGE TO POSTS TABLE
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS brand_title text;
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS hero_message text;
+

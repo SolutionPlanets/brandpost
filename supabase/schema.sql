@@ -78,6 +78,8 @@ CREATE TABLE IF NOT EXISTS public.posts (
     fb_post_id text,
     ig_post_id text,
     error_message text,
+    brand_title text,
+    hero_message text,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now()
 );

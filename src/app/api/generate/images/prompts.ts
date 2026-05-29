@@ -38,7 +38,9 @@ export const getImageExpansionPrompt = (
   mentionWebsiteInPost?: boolean,
   brandLinkPosition?: string,
   ctaText?: string,
-  ctaPosition?: string
+  ctaPosition?: string,
+  brandTitle?: string,
+  heroMessage?: string
 ) => {
   const aspectRatio = PLATFORM_RATIOS[platform] || '1:1';
   const phrasesToInclude = asList(brandDetails?.phrasesToInclude);
@@ -159,7 +161,11 @@ List every visible element the final image MUST contain, in priority order:
        • Every cultural / contextual motif you identified in Step 1
        • Atmospheric backdrop appropriate to the tone
      Render these supporting elements visibly somewhere in the composition (foreground, midground, atmospheric background or soft bokeh). DO NOT strip them out to "simplify" the composition. Stripping them is the most common failure mode of poster generation — explicitly resist it.
-  3. TYPOGRAPHY — headline ${graphicHeadline ? `"${graphicHeadline}"` : '(generate a short punchy headline)'} rendered using the chosen treatment recipe from Step 3b${mentionBrandLogo && brandDetails?.logo ? '. DO NOT paint a brand wordmark, monogram or logo at the logo corner (the real logo will be pasted there post-generation)' : ', plus a discreet brand wordmark integrated into the artwork'}${hasUrlChip ? '. DO NOT paint the website URL or any browser-style address bar anywhere on the image (a real URL chip will be pasted post-generation)' : ''}${hasCtaButton ? '. DO NOT paint any CTA button, "Click Here", "Shop Now" or similar chip (the real CTA will be pasted post-generation)' : ''}.
+  3. TYPOGRAPHY:
+       • Main Headline: ${graphicHeadline ? `"${graphicHeadline}"` : '(generate a short punchy headline)'} rendered using the chosen treatment recipe from Step 3b.
+       • Brand Title: ${brandTitle ? `"${brandTitle}"` : '(none)'} rendered elegantly as a high-quality, professional brand name / signature text, placed cleanly (e.g., at the top or near the logo corner, but outside the quiet zones).
+       • Hero Message: ${heroMessage ? `"${heroMessage}"` : '(none)'} rendered as a beautifully styled subtitle or core value/tagline statement (e.g., "Discipline, Consistency, Focus") positioned in perfect visual balance near the headline.
+       • Rules: ${mentionBrandLogo && brandDetails?.logo ? 'DO NOT paint a brand wordmark, monogram or logo at the logo corner (the real logo will be pasted there post-generation)' : 'plus a discreet brand wordmark integrated into the artwork'}${hasUrlChip ? '. DO NOT paint the website URL or any browser-style address bar anywhere on the image (a real URL chip will be pasted post-generation)' : ''}${hasCtaButton ? '. DO NOT paint any CTA button, "Click Here", "Shop Now" or similar chip (the real CTA will be pasted post-generation)' : ''}.
 
 STEP 5 — COLOUR & LAYOUT
 Map the brand hex codes to specific regions of the composition (primary for dominant tone, secondary for accents, accent for highlights). DO NOT substitute the supplied hex codes.
@@ -184,6 +190,8 @@ USER INPUTS:
 - Post Description: "${extraInstructions || '(none)'}"
 - Graphic Headline (must print on image as largest text element): "${graphicHeadline || '(none — generate one)'}"
 - Hero Objects (primary focal subject): "${heroObjects || '(none — derive from above)'}"
+- Brand Title (must print on image as elegant brand signature text): "${brandTitle || ''}"
+- Hero Message (must print on image as a prominent subtitle/supporting statement): "${heroMessage || ''}"
 - Brand logo overlay (pasted post-generation): ${mentionBrandLogo && brandDetails?.logo ? `yes, at [${brandLogoPosition || 'Bottom Right'}]` : 'no'}
 - Website URL chip overlay (pasted post-generation): ${hasUrlChip ? `yes, "${brandDetails?.websiteUrl || ''}" at [${brandLinkPosition || 'Bottom Center'}]` : 'no'}
 - CTA button overlay (pasted post-generation): ${hasCtaButton ? `yes, "${ctaText}" at [${ctaPosition || 'Bottom Center'}]` : 'no'}
