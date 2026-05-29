@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useBrand } from '@/contexts/BrandContext';
+import { useBrand, BrandProvider } from '@/contexts/BrandContext';
 import { createClient } from '@/utils/supabase/client';
 import { 
   QrCode, 
@@ -155,6 +155,7 @@ function RazorpayCheckoutContent() {
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_signature: response.razorpay_signature,
                   planId: planId,
+                  billingPeriod: period,
                   amount: totalPrice,
                   currency: 'INR',
                   phone_no: cleanPhone,
@@ -825,7 +826,9 @@ function RazorpayCheckoutContent() {
 export default function RazorpayCheckoutPage() {
   return (
     <Suspense fallback={<div className={styles.loadingScreen}>Loading Razorpay Secure Checkout...</div>}>
-      <RazorpayCheckoutContent />
+      <BrandProvider>
+        <RazorpayCheckoutContent />
+      </BrandProvider>
     </Suspense>
   );
 }

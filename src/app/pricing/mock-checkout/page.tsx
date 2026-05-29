@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ShieldCheck, CreditCard, ArrowLeft, Check, HelpCircle } from 'lucide-react';
-import { useBrand } from '@/contexts/BrandContext';
+import { useBrand, BrandProvider } from '@/contexts/BrandContext';
 import styles from './MockBilling.module.css';
 
 const STATIC_PLANS = [
@@ -348,7 +348,9 @@ function MockCheckoutContent() {
 export default function MockCheckoutPage() {
   return (
     <Suspense fallback={<div className={styles.container}>Loading Checkout details...</div>}>
-      <MockCheckoutContent />
+      <BrandProvider>
+        <MockCheckoutContent />
+      </BrandProvider>
     </Suspense>
   );
 }

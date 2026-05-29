@@ -6,7 +6,7 @@ import { Check, X, ArrowLeft, Info } from 'lucide-react';
 import Link from 'next/link';
 import { getUSDToINRRate, formatINR, formatUSD } from '@/utils/currency';
 import { createClient } from '@/utils/supabase/client';
-import { useBrand } from '@/contexts/BrandContext';
+import { useBrand, BrandProvider } from '@/contexts/BrandContext';
 import styles from './Pricing.module.css';
 
 const STATIC_PLANS = [
@@ -303,7 +303,9 @@ function PricingPageContent() {
 export default function PricingPage() {
   return (
     <Suspense fallback={null}>
-      <PricingPageContent />
+      <BrandProvider>
+        <PricingPageContent />
+      </BrandProvider>
     </Suspense>
   );
 }

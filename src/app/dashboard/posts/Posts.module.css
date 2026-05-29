@@ -146,11 +146,12 @@
   background-color: var(--surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
+  overflow: visible;
 }
 
 .tableHeaderRow {
   display: grid;
-  grid-template-columns: 2.5fr 0.75fr 0.75fr 0.75fr 1fr 0.5fr;
+  grid-template-columns: 2fr 0.75fr 0.75fr 0.75fr 0.9fr 0.9fr 0.5fr;
   gap: 0.75rem;
   padding: 0.875rem 1.5rem;
   background-color: var(--background);
@@ -166,7 +167,7 @@
 
 .tableDataRow {
   display: grid;
-  grid-template-columns: 2.5fr 0.75fr 0.75fr 0.75fr 1fr 0.5fr;
+  grid-template-columns: 2fr 0.75fr 0.75fr 0.75fr 0.9fr 0.9fr 0.5fr;
   gap: 0.75rem;
   padding: 1rem 1.5rem;
   align-items: center;
@@ -292,6 +293,11 @@
   color: var(--text-muted);
 }
 
+.colTime {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
 .colActions {
   display: flex;
   justify-content: flex-end;
@@ -387,7 +393,8 @@
   }
 
   .colType,
-  .colDate {
+  .colDate,
+  .colTime {
     display: none;
   }
 }
@@ -416,4 +423,23 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.loadMoreBtn {
+  display: block;
+  margin: 1.5rem auto;
+  padding: 0.625rem 1.5rem;
+  background-color: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.loadMoreBtn:hover {
+  background-color: var(--primary-light);
+  transform: translateY(-1px);
 }

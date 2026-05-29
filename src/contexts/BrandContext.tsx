@@ -14,7 +14,7 @@ if (typeof window !== "undefined") {
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 
-interface BrandKit {
+export interface BrandKit {
   id: string;
   workspace_id: string;
   brand_kit_name: string;
@@ -30,6 +30,12 @@ interface BrandKit {
   instagram_handle: string;
   facebook_handle: string;
   created_at: string;
+  industry?: string;
+  brand_audience?: string;
+  target_audience?: string;
+  website_url?: string;
+  phrases_to_include?: string;
+  phrases_to_avoid?: string;
 }
 
 interface BrandContextType {
@@ -38,7 +44,19 @@ interface BrandContextType {
   businessName: string;
   brandKitName: string;
   brandKits: BrandKit[];
+  address: string;
+  pincode: string;
+  instagram: string;
+  facebook: string;
+  brandTone: string;
+  brandDescription: string;
+  industry: string;
+  brandAudience: string;
+  websiteUrl: string;
+  phrasesToInclude: string;
+  phrasesToAvoid: string;
   logo: string | null;
+  logoDark: string | null;
   profilePhoto: string | null;
   authProvider: string;
   colors: {
@@ -46,12 +64,6 @@ interface BrandContextType {
     secondary: string;
     accent: string;
   };
-  address: string;
-  pincode: string;
-  instagram: string;
-  facebook: string;
-  brandTone: string;
-  brandDescription: string;
   planId: string;
   plans: any[];
   trialEndsAt: string | null;
@@ -60,14 +72,17 @@ interface BrandContextType {
   workspaceId: string | null;
   timezone: string;
   timing: string;
+  isLoading: boolean;
+  hasBrandKit: boolean | null;
   isLimitReached: boolean;
   currentLimit: number;
   brandKitLimit: number;
   setBusinessName: (name: string) => void;
   setLogo: (logo: string | null) => void;
+  setLogoDark: (logo: string | null) => void;
   setProfilePhoto: (photo: string | null) => void;
   setColors: (colors: { primary: string; secondary: string; accent: string }) => void;
-  refreshBrandData: () => Promise<void>;
+  refreshBrandData: (silent?: boolean) => Promise<void>;
   checkLimitAndRedirect: () => boolean;
 }
 
@@ -222,6 +237,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [brandKitName, setBrandKitName] = useState('');
   const [brandKits, setBrandKits] = useState<BrandKit[]>([]);
   const [logo, setLogo] = useState<string | null>(null);
+  const [logoDark, setLogoDark] = useState<string | null>(null);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [authProvider, setAuthProvider] = useState<string>('email');
   const [colors, setColors] = useState({
@@ -235,6 +251,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [facebook, setFacebook] = useState('');
   const [brandTone, setBrandTone] = useState('Professional');
   const [brandDescription, setBrandDescription] = useState('');
+  const [industry, setIndustry] = useState('');
+  const [brandAudience, setBrandAudience] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [phrasesToInclude, setPhrasesToInclude] = useState('');
+  const [phrasesToAvoid, setPhrasesToAvoid] = useState('');
   const [planId, setPlanId] = useState('solo');
   const [plans, setPlans] = useState<any[]>(DEFAULT_PLANS);
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
@@ -243,10 +264,13 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [timing, setTiming] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasBrandKit, setHasBrandKit] = useState<boolean | null>(null);
 
   const supabase = createClient();
 
-  const refreshBrandData = async () => {
+  const refreshBrandData = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     // Fetch active plans dynamically from database
     try {
       const { data: plansData } = await supabase
@@ -261,7 +285,10 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     }
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
 
     // Fetch user profile info
     const { data: userProfile } = await supabase
@@ -309,12 +336,12 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
 
     if (workspace) {
       setWorkspaceId(workspace.id);
-      const bKits = (workspace.brand_kits || []) as BrandKit[];
-      // Sort by creation date to keep slots consistent
-      bKits.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      setBrandKits(bKits);
-      
-      const brandKit = bKits.length > 0 ? bKits[0] : undefined;
+      const bKits = workspace.brand_kits;
+      const brandKitsArray = bKits ? (Array.isArray(bKits) ? bKits : [bKits]) : [];
+      brandKitsArray.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      setBrandKits(brandKitsArray as BrandKit[]);
+      const brandKit = brandKitsArray[0] || undefined;
+      setHasBrandKit(!!brandKit);
       const rawBName = workspace.business_name || '';
       const bName = rawBName.toLowerCase().includes('my workspace') ? '' : rawBName;
       setBusinessName(bName);
@@ -326,7 +353,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       setTimezone(workspace.timezone || 'Asia/Kolkata');
       setTiming(workspace.business_timing || '');
       setLogo(brandKit?.logo_url || null);
-
+      setLogoDark(brandKit?.logo_dark_url || null);
       const socialConns = workspace.social_connections || [];
       const instaConn = Array.isArray(socialConns) ? socialConns.find((c: any) => c.platform === 'instagram') : null;
       const fbConn = Array.isArray(socialConns) ? socialConns.find((c: any) => c.platform === 'facebook') : null;
@@ -335,6 +362,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       setFacebook(fbConn?.page_name || brandKit?.facebook_handle || '');
       setBrandTone(brandKit?.tone || 'Professional');
       setBrandDescription(brandKit?.brand_description || '');
+      setIndustry(brandKit?.industry || '');
+      setBrandAudience(brandKit?.brand_audience || '');
+      setWebsiteUrl(brandKit?.website_url || '');
+      setPhrasesToInclude(brandKit?.phrases_to_include || '');
+      setPhrasesToAvoid(brandKit?.phrases_to_avoid || '');
       if (brandKit?.primary_color) {
         setColors({
           primary: brandKit.primary_color,
@@ -342,7 +374,35 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
           accent: brandKit.accent_color || '#06b6d4'
         });
       }
+      // Sync with localStorage for legacy components
+      const activeInstagram = instaConn?.page_name || brandKit?.instagram_handle || '';
+      const activeFacebook = fbConn?.page_name || brandKit?.facebook_handle || '';
+      localStorage.setItem('brandpost_user_data', JSON.stringify({
+        fullName: userProfile?.full_name || '',
+        ownerName: workspace.owner_name || '',
+        businessName: bName,
+        address: workspace.address || '',
+        pincode: workspace.pincode || '',
+        logo: brandKit?.logo_url || null,
+        logoDark: brandKit?.logo_dark_url || null,
+        profilePhoto: userProfile?.profile_photo || null,
+        instagram: activeInstagram,
+        facebook: activeFacebook,
+        brandTone: brandKit?.tone || 'Professional',
+        brandDescription: brandKit?.brand_description || '',
+        industry: brandKit?.industry || '',
+        brandAudience: brandKit?.brand_audience || '',
+        websiteUrl: brandKit?.website_url || '',
+        phrasesToInclude: brandKit?.phrases_to_include || '',
+        phrasesToAvoid: brandKit?.phrases_to_avoid || '',
+        timezone: workspace.timezone || 'Asia/Kolkata',
+        timing: workspace.business_timing || '',
+      }));
+    } else {
+      setHasBrandKit(false);
     }
+    
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -360,6 +420,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         if (d.facebook) setFacebook(d.facebook);
         if (d.brandTone) setBrandTone(d.brandTone);
         if (d.brandDescription) setBrandDescription(d.brandDescription);
+        if (d.industry) setIndustry(d.industry);
+        if (d.brandAudience) setBrandAudience(d.brandAudience);
+        if (d.websiteUrl) setWebsiteUrl(d.websiteUrl);
+        if (d.phrasesToInclude) setPhrasesToInclude(d.phrasesToInclude);
+        if (d.phrasesToAvoid) setPhrasesToAvoid(d.phrasesToAvoid);
         if (d.planId) setPlanId(d.planId);
         if (d.plans) setPlans(d.plans);
         if (d.trialEndsAt) setTrialEndsAt(d.trialEndsAt);
@@ -368,6 +433,8 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         if (d.timezone) setTimezone(d.timezone);
         if (d.timing) setTiming(d.timing);
         if (d.logo) setLogo(d.logo);
+        if (d.logoDark) setLogoDark(d.logoDark);
+        if (d.profilePhoto) setProfilePhoto(d.profilePhoto);
         if (d.colors) setColors(d.colors);
         if (d.profilePhoto) setProfilePhoto(d.profilePhoto);
         if (d.authProvider) setAuthProvider(d.authProvider);
@@ -391,6 +458,11 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       facebook,
       brandTone,
       brandDescription,
+      industry,
+      brandAudience,
+      websiteUrl,
+      phrasesToInclude,
+      phrasesToAvoid,
       planId,
       plans,
       trialEndsAt,
@@ -398,12 +470,13 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       postsUsed,
       timezone,
       logo,
+      logoDark,
       colors,
       timing,
       profilePhoto,
       authProvider
     }));
-  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, planId, plans, trialEndsAt, createdAt, postsUsed, timezone, logo, colors, timing, profilePhoto, authProvider]);
+  }, [fullName, ownerName, businessName, brandKitName, address, pincode, instagram, facebook, brandTone, brandDescription, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid, planId, plans, trialEndsAt, createdAt, postsUsed, timezone, logo, logoDark, profilePhoto, authProvider, colors, timing]);
 
   // Automatic redirect if trial is expired and user is on a dashboard route
   useEffect(() => {
@@ -451,7 +524,13 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     facebook,
     brandTone,
     brandDescription,
+    industry,
+    brandAudience,
+    websiteUrl,
+    phrasesToInclude,
+    phrasesToAvoid,
     logo,
+    logoDark,
     profilePhoto,
     authProvider,
     colors,
@@ -468,11 +547,14 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     brandKitLimit,
     setBusinessName,
     setLogo,
+    setLogoDark,
     setProfilePhoto,
     setColors,
     refreshBrandData,
-    checkLimitAndRedirect
-  }), [fullName, ownerName, businessName, brandKitName, brandKits, address, pincode, instagram, facebook, brandTone, brandDescription, logo, colors, planId, plans, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, profilePhoto, authProvider, isLimitReached, currentLimit, brandKitLimit]);
+    checkLimitAndRedirect,
+    isLoading,
+    hasBrandKit
+  }), [fullName, ownerName, businessName, brandKitName, brandKits, address, pincode, instagram, facebook, brandTone, brandDescription, industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid, logo, logoDark, profilePhoto, authProvider, colors, planId, plans, trialEndsAt, createdAt, postsUsed, workspaceId, timezone, timing, isLoading, hasBrandKit, isLimitReached, currentLimit, brandKitLimit]);
 
   return (
     <BrandContext.Provider value={value}>

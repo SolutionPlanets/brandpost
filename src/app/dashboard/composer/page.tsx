@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
@@ -26,12 +26,27 @@ import {
   Edit2,
   Facebook,
   Instagram,
+  Globe,
+  Heart,
+  MessageCircle,
+  Share2,
 } from 'lucide-react';
 import { useBrand } from '@/contexts/BrandContext';
 import { ImageEditor } from '@/components/ImageEditor';
 import styles from './Composer.module.css';
 
 // ── Types ────────────────────────────────────────────────────────────
+interface SocialConnection {
+  id: string;
+  workspace_id: string;
+  platform: 'facebook' | 'instagram';
+  page_id: string;
+  page_name: string;
+  picture_url: string | null;
+  access_token: string;
+  token_expires_at?: string;
+}
+
 type ContentType = 'festive' | 'offer' | 'informational' | 'general';
 type Platform = 'facebook' | 'instagram' | 'both';
 type GenerationState = 'generating' | 'paused' | 'stopped';
@@ -43,10 +58,22 @@ interface ComposerForm {
   brandKit: string;
   platform: Platform;
   extraInstructions: string;
+  graphicHeadline: string;
+  heroObjects: string;
+  campaignExpiry: string;
+  wordCount: number;
+  hashtagCount: number;
+  mentionBrandLogo: boolean;
+  brandLogoPosition: string;
+  mentionWebsiteInPost: boolean;
+  brandLinkPosition: string;
+  mentionWebsiteInCaption: boolean;
+  ctaText: string;
+  ctaPosition: string;
 }
 
 interface GeneratedContent {
-  images: string[];
+  images: { url: string; id: any }[];
   captions: string[];
 }
 
@@ -85,15 +112,17 @@ const TEMPLATES: Record<ContentType, { id: string; name: string; image: string }
   ],
 };
 
-const STEP_LABELS = ['Content Type', 'Template', 'Details', 'AI Generation', 'Preview & Edit'];
+const STEP_LABELS = ['Content Type', 'Template', 'Details', 'AI Generation', 'Preview & Edit', 'Social Distribution'];
 
 // ── Component ────────────────────────────────────────────────────────
 function ComposerPageContent() {
   const searchParams = useSearchParams();
   const { 
     brandKitName, brandKits, businessName, brandTone, brandDescription, colors,
-    fullName, ownerName, address, pincode, timing, logo,
-    postsUsed, planId, trialEndsAt, refreshBrandData, workspaceId, checkLimitAndRedirect
+    fullName, ownerName, address, pincode, timing, logo, logoDark,
+    industry, brandAudience, websiteUrl, phrasesToInclude, phrasesToAvoid,
+    postsUsed, planId, trialEndsAt, refreshBrandData, workspaceId,
+    checkLimitAndRedirect
   } = useBrand();
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -107,10 +136,21 @@ function ComposerPageContent() {
   const [editedCaption, setEditedCaption] = useState('');
   const [showLogoOverlay, setShowLogoOverlay] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   const [isImmediate, setIsImmediate] = useState(false);
-  const [showEditor, setShowEditor] = useState(false);
+
+  // ── Step 6 Social Connections State ────────────────────────────────
+  const [connections, setConnections] = useState<SocialConnection[]>([]);
+  const [loadingConnections, setLoadingConnections] = useState(false);
+  const [selectedConnectionIds, setSelectedConnectionIds] = useState<string[]>([]);
+  const [connectionMappings, setConnectionMappings] = useState<Record<string, { imageIndex: number; captionIndex: number }>>({});
+  const [activePreviewPlatform, setActivePreviewPlatform] = useState<'facebook' | 'instagram'>('facebook');
+
+  // ── Regen limit tracking ───────────────────────────────────────────
+  const [remainingImageRegens, setRemainingImageRegens] = useState(3);
+  const [remainingCaptionRegens, setRemainingCaptionRegens] = useState(3);
 
   const [form, setForm] = useState<ComposerForm>({
     contentType: null,
@@ -119,6 +159,18 @@ function ComposerPageContent() {
     brandKit: brandKits[0]?.id || 'main-brand',
     platform: 'both',
     extraInstructions: '',
+    graphicHeadline: '',
+    heroObjects: '',
+    campaignExpiry: '',
+    wordCount: 100,
+    hashtagCount: 6,
+    mentionBrandLogo: true,
+    brandLogoPosition: 'Bottom Right',
+    mentionWebsiteInPost: true,
+    brandLinkPosition: 'Bottom Left',
+    mentionWebsiteInCaption: true,
+    ctaText: '',
+    ctaPosition: 'Bottom Center',
   });
 
   // Update form if brandKits load later
@@ -165,6 +217,120 @@ function ComposerPageContent() {
     localStorage.setItem('brandpost_caption_regen_attempts', newVal.toString());
   };
 
+  // ── Auto-Save Draft State ──────────────────────────────────────────
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const formRef = useRef(form);
+  const generatedRef = useRef(generated);
+  const editedCaptionRef = useRef(editedCaption);
+  const stepRef = useRef(step);
+  const draftIdRef = useRef(draftId);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isSavingRef = useRef(false);
+  const hasCompletedDistributionRef = useRef(false);
+
+  // Keep refs in sync with state
+  useEffect(() => { formRef.current = form; }, [form]);
+  useEffect(() => { generatedRef.current = generated; }, [generated]);
+  useEffect(() => { editedCaptionRef.current = editedCaption; }, [editedCaption]);
+  useEffect(() => { stepRef.current = step; }, [step]);
+  useEffect(() => { draftIdRef.current = draftId; }, [draftId]);
+
+  // ── Save Draft to Database ─────────────────────────────────────────
+  const saveDraftToDb = useCallback(async (isBeacon = false) => {
+    if (hasCompletedDistributionRef.current) return;
+    const currentForm = formRef.current;
+    const currentGenerated = generatedRef.current;
+    const currentEditedCaption = editedCaptionRef.current;
+    const currentStep = stepRef.current;
+    const currentDraftId = draftIdRef.current;
+
+    // Only save if user has made meaningful progress (at least a topic on step ≥ 3)
+    if (currentStep < 3 || !currentForm.topic.trim()) return;
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
+
+    try {
+      const supabase = createClient();
+      const caption = currentEditedCaption || currentGenerated?.captions?.[0] || `Draft: ${currentForm.topic}`;
+      const imageUrl = currentGenerated?.images?.[0]?.url || null;
+
+      const payload: any = {
+        title: currentForm.topic,
+        content_type: currentForm.contentType || 'general',
+        platform: currentForm.platform || 'both',
+        status: 'draft',
+        extra_instructions: currentForm.extraInstructions || null,
+        caption,
+        image_url: imageUrl,
+        mention_brand_logo: currentForm.mentionBrandLogo,
+        brand_logo_position: currentForm.brandLogoPosition,
+        mention_website_in_post: currentForm.mentionWebsiteInPost,
+        brand_link_position: currentForm.brandLinkPosition,
+        mention_website_in_caption: currentForm.mentionWebsiteInCaption,
+      };
+
+      if (currentDraftId) {
+        // Update existing draft
+        await supabase.from('posts').update(payload).eq('id', currentDraftId);
+      } else if (workspaceId) {
+        // Create new draft
+        payload.workspace_id = workspaceId;
+        const { data } = await supabase.from('posts').insert([payload]).select('id').single();
+        if (data?.id) {
+          setDraftId(data.id);
+          draftIdRef.current = data.id;
+        }
+      }
+    } catch (err) {
+      console.error('Auto-save draft error:', err);
+    } finally {
+      isSavingRef.current = false;
+    }
+  }, [workspaceId]);
+
+  // ── Auto-Save: beforeunload + periodic save ────────────────────────
+  useEffect(() => {
+    // Browser close / tab close
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const currentStep = stepRef.current;
+      const currentForm = formRef.current;
+      if (currentStep >= 3 && currentForm.topic.trim()) {
+        // Fire and forget — use sendBeacon for reliability
+        saveDraftToDb(true);
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Periodic auto-save every 30 seconds
+    autoSaveTimerRef.current = setInterval(() => {
+      saveDraftToDb();
+    }, 30000);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (autoSaveTimerRef.current) {
+        clearInterval(autoSaveTimerRef.current);
+      }
+    };
+  }, [saveDraftToDb]);
+
+  // Save draft when user navigates away via Next.js router (sidebar clicks)
+  useEffect(() => {
+    const handleRouteChange = () => {
+      saveDraftToDb();
+    };
+
+    // Listen for popstate (back/forward navigation)
+    window.addEventListener('popstate', handleRouteChange);
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+      // Final save on component unmount (sidebar navigation)
+      saveDraftToDb();
+    };
+  }, [saveDraftToDb]);
+
   // Pre-fill from calendar link or Edit/Duplicate
   useEffect(() => {
     const editId = searchParams.get('editId');
@@ -187,18 +353,37 @@ function ComposerPageContent() {
             contentType: data.content_type || 'general',
             templateId: 'none',
             topic: data.title || data.caption?.substring(0, 30) || 'Previous Post',
-            brandKit: 'main-brand',
+            brandKit: data.brand_kit_id || 'main-brand',
             platform: data.platform || 'both',
-            extraInstructions: '',
+            extraInstructions: data.extra_instructions || '',
+            graphicHeadline: '',
+            heroObjects: '',
+            campaignExpiry: '',
+            wordCount: 100,
+            hashtagCount: 6,
+            mentionBrandLogo: data.mention_brand_logo !== undefined ? data.mention_brand_logo : true,
+            brandLogoPosition: data.brand_logo_position || 'Bottom Right',
+            mentionWebsiteInPost: data.mention_website_in_post !== undefined ? data.mention_website_in_post : true,
+            brandLinkPosition: data.brand_link_position || 'Bottom Left',
+            mentionWebsiteInCaption: data.mention_website_in_caption !== undefined ? data.mention_website_in_caption : true,
+            ctaText: data.cta_text || '',
+            ctaPosition: data.cta_position || 'Bottom Center',
           });
 
           if (isEdit) {
-            setGenerated({
-              captions: [data.caption || ''],
-              images: [data.image_url || '']
-            });
-            setEditedCaption(data.caption || '');
-            setStep(5);
+            setDraftId(data.id);
+            draftIdRef.current = data.id;
+            if (!data.image_url) {
+              // Redirect empty drafts directly to the renderStep3 details form
+              setStep(3);
+            } else {
+              setGenerated({
+                captions: [data.caption || ''],
+                images: [{ url: data.image_url || '', id: data.id }]
+              });
+              setEditedCaption(data.caption || '');
+              setStep(5);
+            }
           } else {
             // Duplicate: Just pre-fill and go to details step
             setStep(3);
@@ -224,13 +409,54 @@ function ComposerPageContent() {
     }
   }, [searchParams]);
 
+  // Fetch social connections
+  useEffect(() => {
+    if (!workspaceId) return;
+    async function fetchConnections() {
+      setLoadingConnections(true);
+      const supabase = createClient();
+      try {
+        const { data, error } = await supabase
+          .from('social_connections')
+          .select('*')
+          .eq('workspace_id', workspaceId);
+        if (error) throw error;
+        const fetchedConns = (data || []) as SocialConnection[];
+        setConnections(fetchedConns);
+        setSelectedConnectionIds(fetchedConns.map(c => c.id));
+        const initialMappings: Record<string, { imageIndex: number; captionIndex: number }> = {};
+        fetchedConns.forEach(c => {
+          initialMappings[c.id] = { imageIndex: 0, captionIndex: 0 };
+        });
+        setConnectionMappings(initialMappings);
+        if (fetchedConns.length > 0) {
+          const firstPlatform = fetchedConns[0].platform;
+          setActivePreviewPlatform(firstPlatform);
+        }
+      } catch (err) {
+        console.error('Error fetching social connections:', err);
+      } finally {
+        setLoadingConnections(false);
+      }
+    }
+    fetchConnections();
+  }, [workspaceId]);
+
   const canProceedStep2 = form.contentType !== null;
   const canProceedStep3 = form.templateId !== null || form.templateId === 'none';
   const canProceedStep4 = form.topic.trim().length > 0;
 
-  const handleGenerateFull = async () => {
+  // ── Get the current post ID (for regen calls) ─────────────────────
+  const getCurrentPostId = (): string | undefined => {
+    if (!generated?.images?.length) return undefined;
+    // Use the first image's ID as the canonical post ID
+    return generated.images[0]?.id || undefined;
+  };
+
+  const handleGenerateFull = async (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
     // Credit check
-    if (checkLimitAndRedirect()) {
+    if (checkLimitAndRedirect && checkLimitAndRedirect()) {
       return;
     }
 
@@ -252,8 +478,33 @@ function ComposerPageContent() {
       setGeneratedPostIds(imagesData.postIds || []);
       setSelectedCaption(0);
       setSelectedImage(0);
+      if (captionsData.captions && captionsData.captions.length > 0) {
+        setEditedCaption(captionsData.captions[0]);
+      }
+
+      // Wire up the draftId from the generated post so subsequent saves update the same row
+      const firstImageId = imagesData.images?.[0]?.id;
+      const firstCaption = captionsData.captions?.[0];
+      if (firstImageId) {
+        setDraftId(firstImageId);
+        draftIdRef.current = firstImageId;
+        // Update the draft's caption in the database with the AI generated one
+        if (firstCaption) {
+          const supabase = createClient();
+          await supabase.from('posts').update({ caption: firstCaption }).eq('id', firstImageId);
+        }
+      }
+
+      // Update remaining regen counts from API response
+      if (typeof imagesData.remainingImageRegens === 'number') {
+        setRemainingImageRegens(imagesData.remainingImageRegens);
+      }
+      if (typeof captionsData.remainingCaptionRegens === 'number') {
+        setRemainingCaptionRegens(captionsData.remainingCaptionRegens);
+      }
+
       setStep(5);
-      refreshBrandData(); // Update credits and history
+      refreshBrandData(true); // Silently update credits and history
     } catch (error: any) {
       console.error('Generation failed:', error);
       alert(error.message || 'Generation failed. Please try again.');
@@ -263,7 +514,7 @@ function ComposerPageContent() {
     }
   };
 
-  const generateCaptions = async () => {
+    const generateCaptions = async (postId?: string) => {
     setIsGeneratingCaptions(true);
     try {
       const selectedKit = brandKits.find(k => k.id === form.brandKit) || brandKits[0];
@@ -275,7 +526,12 @@ function ComposerPageContent() {
           contentType: form.contentType,
           platform: form.platform,
           extraInstructions: form.extraInstructions,
-          brandDetails: { 
+          graphicHeadline: form.graphicHeadline,
+          heroObjects: form.heroObjects,
+          campaignExpiry: form.campaignExpiry,
+          wordCount: typeof form.wordCount === 'number' && !isNaN(form.wordCount) ? Math.min(100, Math.max(10, form.wordCount)) : 100,
+          hashtagCount: typeof form.hashtagCount === 'number' && !isNaN(form.hashtagCount) ? Math.min(30, Math.max(0, form.hashtagCount)) : 6,
+          brandDetails: form.brandKit === 'none' ? null : { 
             businessName: selectedKit?.brand_kit_name || businessName, 
             brandTone: selectedKit?.tone || brandTone, 
             brandDescription: selectedKit?.brand_description || brandDescription, 
@@ -283,19 +539,31 @@ function ComposerPageContent() {
               primary: selectedKit.primary_color,
               secondary: selectedKit.secondary_color,
               accent: selectedKit.accent_color
-            } : colors 
-          }
+            } : colors,
+            industry: selectedKit?.industry || industry,
+            brandAudience: selectedKit?.target_audience || brandAudience,
+            websiteUrl: selectedKit?.website_url || websiteUrl,
+            phrasesToInclude: selectedKit?.phrases_to_include || phrasesToInclude,
+            phrasesToAvoid: selectedKit?.phrases_to_avoid || phrasesToAvoid,
+          },
+          mentionWebsiteInCaption: form.brandKit !== 'none' ? form.mentionWebsiteInCaption : false,
+          ...(postId ? { postId } : {}),
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to generate captions');
+      if (!res.ok) {
+        const errMsg = data.code === 'REGEN_LIMIT_REACHED'
+          ? data.error
+          : data.code ? `[Error ${data.code}] ${data.error}` : data.error;
+        throw new Error(errMsg || 'Failed to generate captions');
+      }
       return data;
     } finally {
       setIsGeneratingCaptions(false);
     }
   };
 
-  const generateImages = async (single = false) => {
+  const generateImages = async (postId?: string) => {
     setIsGeneratingImages(true);
     try {
       const selectedKit = brandKits.find(k => k.id === form.brandKit) || brandKits[0];
@@ -307,11 +575,13 @@ function ComposerPageContent() {
           contentType: form.contentType,
           platform: form.platform,
           extraInstructions: form.extraInstructions,
+          graphicHeadline: form.graphicHeadline,
+          heroObjects: form.heroObjects,
           workspaceId: workspaceId,
-          single,
-          brandDetails: { 
-            businessName: selectedKit?.brand_kit_name || businessName, 
-            brandDescription: selectedKit?.brand_description || brandDescription, 
+          brandKitId: form.brandKit === 'none' ? null : form.brandKit,
+          brandDetails: form.brandKit === 'none' ? null : {
+            businessName: selectedKit?.brand_kit_name || businessName,
+            brandDescription: selectedKit?.brand_description || brandDescription,
             colors: selectedKit ? {
               primary: selectedKit.primary_color,
               secondary: selectedKit.secondary_color,
@@ -322,29 +592,82 @@ function ComposerPageContent() {
             address,
             pincode,
             timing,
-            logo: selectedKit?.logo_url || logo
-          }
+            logo: selectedKit?.logo_url || logo,
+            logoDark,
+            industry: selectedKit?.industry || industry,
+            brandAudience: selectedKit?.target_audience || brandAudience,
+            websiteUrl: selectedKit?.website_url || websiteUrl,
+            phrasesToInclude: selectedKit?.phrases_to_include || phrasesToInclude,
+            phrasesToAvoid: selectedKit?.phrases_to_avoid || phrasesToAvoid,
+          },
+          mentionBrandLogo: form.brandKit !== 'none' ? form.mentionBrandLogo : false,
+          brandLogoPosition: form.brandLogoPosition,
+          mentionWebsiteInPost: form.brandKit !== 'none' ? form.mentionWebsiteInPost : false,
+          brandLinkPosition: form.brandLinkPosition,
+          ctaText: form.ctaText,
+          ctaPosition: form.ctaPosition,
+          ...(postId ? { postId, currentCaption: editedCaption || generated?.captions[selectedCaption] } : {}),
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to generate images');
+      if (!res.ok) {
+        const errMsg = data.code === 'REGEN_LIMIT_REACHED'
+          ? data.error
+          : data.code ? `[Error ${data.code}] ${data.error}` : data.error;
+        throw new Error(errMsg || 'Failed to generate images');
+      }
       return data;
     } finally {
       setIsGeneratingImages(false);
     }
   };
 
-  const handleRegenerateCaptions = async () => {
-    if (captionRegenAttempts <= 0) {
-      alert("You have exceeded today's regeneration limit.");
+    const handleRegenerateCaptions = async () => {
+    // Credit check
+    if (checkLimitAndRedirect && checkLimitAndRedirect()) {
       return;
     }
+    const postId = getCurrentPostId();
     try {
-      const data = await generateCaptions();
+      const data = await generateCaptions(postId);
       if (data.captions) {
-        setGenerated(prev => prev ? { ...prev, captions: data.captions } : null);
-        setSelectedCaption(0);
-        decrementCaptionRegen();
+        // Append new captions to existing array (carousel behaviour)
+        setGenerated(prev => {
+          if (!prev) return null;
+          const newCaptions = [...prev.captions, ...data.captions];
+          return { ...prev, captions: newCaptions };
+        });
+        // Auto-select the newly generated caption
+        setSelectedCaption(prev => {
+          const currentLen = generated?.captions?.length || 0;
+          return currentLen; // Index of the first new caption
+        });
+
+        // Insert new captions as drafts so they appear in Post History
+        const supabase = createClient();
+        const currentImageUrl = generated?.images[selectedImage]?.url || '';
+        const draftsToInsert = data.captions.map((cap: string) => ({
+          workspace_id: workspaceId,
+          brand_kit_id: form.brandKit === 'none' ? null : form.brandKit,
+          title: form.topic,
+          platform: form.platform,
+          content_type: form.contentType,
+          status: 'draft',
+          extra_instructions: form.extraInstructions,
+          caption: cap,
+          image_url: currentImageUrl,
+          mention_brand_logo: form.mentionBrandLogo,
+          brand_logo_position: form.brandLogoPosition,
+          mention_website_in_post: form.mentionWebsiteInPost,
+          brand_link_position: form.brandLinkPosition,
+          mention_website_in_caption: form.mentionWebsiteInCaption,
+        }));
+        await supabase.from('posts').insert(draftsToInsert);
+        refreshBrandData(true); // Reflect credits immediately on dashboard
+      }
+      // Update remaining regen count
+      if (typeof data.remainingCaptionRegens === 'number') {
+        setRemainingCaptionRegens(data.remainingCaptionRegens);
       }
     } catch (error: any) {
       alert(error.message);
@@ -352,23 +675,30 @@ function ComposerPageContent() {
   };
 
   const handleRegenerateImages = async () => {
-    if (imageRegenAttempts <= 0) {
-      alert("You have exceeded today's regeneration limit.");
+    // Credit check
+    if (checkLimitAndRedirect && checkLimitAndRedirect()) {
       return;
     }
+    const postId = getCurrentPostId();
     try {
-      const data = await generateImages(true);
-      if (data.images && data.images.length > 0) {
+      const data = await generateImages(postId);
+      if (data.images) {
+        // Append new images to existing array (carousel behaviour)
         setGenerated(prev => {
           if (!prev) return null;
-          const newImages = [...prev.images, data.images[0]];
-          setSelectedImage(newImages.length - 1);
+          const newImages = [...prev.images, ...data.images];
           return { ...prev, images: newImages };
         });
-        if (data.postIds && data.postIds.length > 0) {
-          setGeneratedPostIds(prev => [...prev, data.postIds[0]]);
-        }
-        decrementImageRegen();
+        // Auto-select the newly generated image
+        setSelectedImage(prev => {
+          const currentLen = generated?.images?.length || 0;
+          return currentLen; // Index of the first new image
+        });
+        refreshBrandData(true); // Reflect credits immediately on dashboard
+      }
+      // Update remaining regen count
+      if (typeof data.remainingImageRegens === 'number') {
+        setRemainingImageRegens(data.remainingImageRegens);
       }
     } catch (error: any) {
       alert(error.message);
@@ -379,8 +709,8 @@ function ComposerPageContent() {
 
   const handleSaveImage = async () => {
     if (!generated || generated.images.length === 0) return;
-    const currentImageUrl = generated.images[selectedImage];
-    const generatedPostId = generatedPostIds[selectedImage];
+    const currentImageUrl = generated.images[selectedImage]?.url;
+    const generatedPostId = generatedPostIds[selectedImage] || generated.images[selectedImage]?.id;
     
     setIsSavingImage(true);
     try {
@@ -435,15 +765,18 @@ function ComposerPageContent() {
   const handleSaveEditedImage = (editedImageUrl: string) => {
     if (!generated) return;
     const newImages = [...generated.images];
-    newImages[selectedImage] = editedImageUrl;
+    newImages[selectedImage] = {
+      ...newImages[selectedImage],
+      url: editedImageUrl
+    };
     setGenerated({ ...generated, images: newImages });
     setShowEditor(false);
   };
 
   const downloadImage = async () => {
-    if (!generated?.images[selectedImage]) return;
+    if (!generated?.images[selectedImage]?.url) return;
     try {
-      const response = await fetch(generated.images[selectedImage]);
+      const response = await fetch(generated.images[selectedImage].url);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -460,65 +793,143 @@ function ComposerPageContent() {
   const handleConfirmSchedule = async () => {
     const supabase = createClient();
     const editId = searchParams.get('editId');
+    const selectedPost = generated?.images[selectedImage];
     
-    setIsGenerating(true); // Reuse loading state for saving
+    if (!editId && !draftId && !selectedPost?.id) {
+      alert('Error: No post ID found to update. Please regenerate images.');
+      return;
+    }
+
+    if (selectedConnectionIds.length === 0) {
+      alert('Please select at least one social connection to publish/schedule.');
+      return;
+    }
+
+    setIsGenerating(true);
+    hasCompletedDistributionRef.current = true;
+    if (autoSaveTimerRef.current) {
+      clearInterval(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
     try {
-      const postData = {
-        title: form.topic,
-        caption: editedCaption,
-        platform: form.platform,
-        content_type: form.contentType,
-        image_url: generated?.images[selectedImage],
-        brand_kit_id: form.brandKit === 'main-brand' ? null : form.brandKit,
-        status: 'scheduled',
-        scheduled_at: isImmediate ? new Date().toISOString() : `${scheduleDate}T${scheduleTime}:00`,
-        workspace_id: workspaceId,
-      };
+      const targetId = (editId || draftId || selectedPost?.id);
+      const publishPostIds = [];
 
-      const generatedPostId = generatedPostIds[selectedImage];
-      let savedPostId = editId || (generatedPostId ? String(generatedPostId) : null);
+      // Load original brand kit ID from the draft
+      const { data: existingDraft } = await supabase
+        .from('posts')
+        .select('brand_kit_id')
+        .eq('id', targetId)
+        .single();
+      const brandKitId = existingDraft?.brand_kit_id || null;
 
-      if (savedPostId) {
-        const { error } = await supabase
-          .from('posts')
-          .update(postData)
-          .eq('id', savedPostId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from('posts')
-          .insert([postData])
-          .select();
-        if (error) throw error;
-        if (data && data[0]) {
-          savedPostId = data[0].id;
+      // Filter to selected connections
+      const selectedConns = connections.filter(c => selectedConnectionIds.includes(c.id));
+
+      // Resolve scheduled timestamp
+      const scheduledAtISO = isImmediate
+        ? null
+        : new Date(`${scheduleDate}T${scheduleTime}:00`).toISOString();
+
+      for (let i = 0; i < selectedConns.length; i++) {
+        const conn = selectedConns[i];
+        const mapping = connectionMappings[conn.id] || { imageIndex: 0, captionIndex: 0 };
+        
+        const mappedImage = generated?.images[mapping.imageIndex]?.url || selectedPost?.url || '';
+        const mappedCaption = (mapping.captionIndex === selectedCaption && editedCaption)
+          ? editedCaption
+          : (generated?.captions[mapping.captionIndex] || editedCaption);
+
+        const postData = {
+          title: form.topic,
+          caption: mappedCaption,
+          platform: conn.platform,
+          content_type: form.contentType,
+          image_url: mappedImage,
+          status: isImmediate ? 'published' : 'scheduled',
+          scheduled_at: scheduledAtISO,
+          workspace_id: workspaceId,
+          extra_instructions: form.extraInstructions,
+          mention_brand_logo: form.mentionBrandLogo,
+          brand_logo_position: form.brandLogoPosition,
+          mention_website_in_post: form.mentionWebsiteInPost,
+          brand_link_position: form.brandLinkPosition,
+          mention_website_in_caption: form.mentionWebsiteInCaption,
+        };
+
+        if (i === 0) {
+          // Update the first post (which is our existing draft)
+          const { error } = await supabase
+            .from('posts')
+            .update({
+              ...postData,
+              brand_kit_id: brandKitId
+            })
+            .eq('id', targetId);
+          if (error) throw error;
+          publishPostIds.push(targetId);
+        } else {
+          // Insert a new post row for other connections
+          const { data: newPost, error } = await supabase
+            .from('posts')
+            .insert([{
+              ...postData,
+              brand_kit_id: brandKitId
+            }])
+            .select('id')
+            .single();
+          if (error) throw error;
+          if (newPost?.id) {
+            publishPostIds.push(newPost.id);
+          } 
         }
       }
 
-      if (isImmediate && savedPostId) {
-        console.log('Publishing post immediately via API...');
-        const pubRes = await fetch('/api/social/publish', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ postId: savedPostId })
+      // If immediate, trigger the actual social media publish for each post
+      if (isImmediate) {
+        const publishPromises = publishPostIds.map(async (id) => {
+          try {
+            const pubRes = await fetch('/api/social/publish', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ postId: id })
+            });
+            const pubData = await pubRes.json();
+            if (!pubRes.ok) {
+              console.warn(`Social publish failed for post ID ${id}:`, pubData.error);
+              return { id, success: false, error: pubData.error };
+            }
+            return { id, success: true };
+          } catch (pubErr: any) {
+            console.error(`Publish API call failed for post ID ${id}:`, pubErr);
+            return { id, success: false, error: pubErr.message };
+          }
         });
-        
-        const pubData = await pubRes.json();
-        if (!pubRes.ok || !pubData.success) {
-          const errMsg = pubData.errors ? pubData.errors.join(', ') : (pubData.error || 'Unknown error');
-          throw new Error(`Post saved, but publishing to social media failed: ${errMsg}`);
+
+        const publishResults = await Promise.all(publishPromises);
+        const failures = publishResults.filter(r => !r.success);
+        if (failures.length > 0) {
+          alert(`Publishing completed with warnings. Failed channels: ${failures.map(f => f.error).join(', ')}`);
+        } else {
+          alert('All posts published successfully!');
         }
-        
-        alert('Post published successfully to social media!');
       } else {
-        alert(isImmediate ? 'Post published successfully!' : 'Post scheduled successfully!');
+        alert(selectedConns.length === 1
+          ? 'Post scheduled successfully!'
+          : `Posts scheduled successfully for ${selectedConns.length} channels!`
+        );
       }
-      
-      setShowScheduleModal(false);
+
       router.push('/dashboard/posts');
     } catch (err: any) {
-      console.error('Error saving/publishing post:', err);
-      alert(err.message || 'Failed to save or publish post.');
+      console.error('Error saving post:', err);
+      alert(err.message || 'Failed to save post.');
+      // Re-enable auto-save on failure
+      hasCompletedDistributionRef.current = false;
+      autoSaveTimerRef.current = setInterval(() => {
+        saveDraftToDb();
+      }, 30000);
     } finally {
       setIsGenerating(false);
     }
@@ -630,65 +1041,266 @@ function ComposerPageContent() {
     <div className={styles.stepContent}>
       <h2 className={styles.stepTitle}>Tell us about your post</h2>
       <p className={styles.stepDesc}>Provide details so AI can generate the perfect content.</p>
-      <div className={styles.formGrid}>
-        <div className={styles.formGroup}>
-          <label htmlFor="topic">Topic / Occasion <span className={styles.required}>*</span></label>
-          <input
-            id="topic"
-            type="text"
-            placeholder="e.g. Diwali Sale, Product Launch, Tips Post..."
-            maxLength={150}
-            value={form.topic}
-            onChange={(e) => setForm({ ...form, topic: e.target.value })}
-          />
-          <span className={styles.charCount}>{form.topic.length}/150</span>
-        </div>
-
-        <div className={styles.formRow}>
+      
+      <div className={styles.step3Layout}>
+        {/* Left Column: Post Details */}
+        <div className={styles.step3Left}>
           <div className={styles.formGroup}>
-            <label htmlFor="brandKit">Brand Kit</label>
-            <select
-              id="brandKit"
-              value={form.brandKit}
-              onChange={(e) => setForm({ ...form, brandKit: e.target.value })}
-            >
-              {brandKits.length > 0 ? (
-                brandKits.map(kit => (
-                  <option key={kit.id} value={kit.id}>{kit.brand_kit_name}</option>
-                ))
-              ) : (
-                <option value="main-brand">{brandKitName || businessName || 'Main Brand'}</option>
-              )}
-            </select>
+            <label htmlFor="topic">Topic / Occasion <span className={styles.required}>*</span></label>
+            <input
+              id="topic"
+              type="text"
+              placeholder="e.g. Diwali Sale, Product Launch, Tips Post..."
+              maxLength={150}
+              value={form.topic}
+              onChange={(e) => setForm({ ...form, topic: e.target.value })}
+            />
+            <span className={styles.charCount}>{form.topic.length}/150</span>
           </div>
 
           <div className={styles.formGroup}>
-            <label>Platform</label>
-            <div className={styles.platformSelector}>
-              {(['facebook', 'instagram', 'both'] as Platform[]).map((p) => (
-                <button
-                  key={p}
-                  className={`${styles.platformBtn} ${form.platform === p ? styles.platformBtnActive : ''}`}
-                  onClick={() => setForm({ ...form, platform: p })}
-                >
-                  {p === 'facebook' && <><Facebook size={16} /> Facebook</>}
-                  {p === 'instagram' && <><Instagram size={16} /> Instagram</>}
-                  {p === 'both' && <>Both</>}
-                </button>
-              ))}
+            <label htmlFor="extra">Post Description / Context</label>
+            <textarea
+              id="extra"
+              placeholder="Explain exactly what the post is about, any specific tone, details, offers, or context..."
+              rows={4}
+              value={form.extraInstructions}
+              onChange={(e) => setForm({ ...form, extraInstructions: e.target.value })}
+            />
+          </div>
+
+          <div className={styles.formRowTwo}>
+            <div className={styles.formGroup}>
+              <label htmlFor="brandKit">Brand Kit</label>
+              <select
+                id="brandKit"
+                value={form.brandKit}
+                onChange={(e) => setForm({ ...form, brandKit: e.target.value })}
+              >
+                {brandKits.length > 0 ? (
+                  brandKits.map(kit => (
+                    <option key={kit.id} value={kit.id}>{kit.brand_kit_name}</option>
+                  ))
+                ) : (
+                  <option value="main-brand">{brandKitName || businessName || 'Main Brand'}</option>
+                )}
+                <option value="none">No Brand Kit</option>
+              </select>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label htmlFor="campaignExpiry">Campaign Expiry (Optional)</label>
+              <input
+                id="campaignExpiry"
+                type="date"
+                value={form.campaignExpiry}
+                onChange={(e) => setForm({ ...form, campaignExpiry: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className={styles.formRowTwo}>
+            <div className={styles.formGroup}>
+              <label htmlFor="graphicHeadline">Graphic Headline</label>
+              <input
+                id="graphicHeadline"
+                type="text"
+                placeholder="e.g. BUY 2 GET 1 FREE!"
+                maxLength={80}
+                value={form.graphicHeadline}
+                onChange={(e) => setForm({ ...form, graphicHeadline: e.target.value })}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="heroObjects">Hero Objects</label>
+              <input
+                id="heroObjects"
+                type="text"
+                placeholder="e.g. Fresh Bread Loaf, Phones"
+                maxLength={200}
+                value={form.heroObjects}
+                onChange={(e) => setForm({ ...form, heroObjects: e.target.value })}
+              />
             </div>
           </div>
         </div>
 
-        <div className={styles.formGroup}>
-          <label htmlFor="extra">Extra Instructions</label>
-          <textarea
-            id="extra"
-            placeholder="Any specific tone, hashtags, or details you want included..."
-            rows={3}
-            value={form.extraInstructions}
-            onChange={(e) => setForm({ ...form, extraInstructions: e.target.value })}
-          />
+        {/* Right Column: Settings & Rules */}
+        <div className={styles.step3Right}>
+          {form.brandKit !== 'none' && (
+            <div className={styles.brandRulesCard}>
+              <h3>Brand Identity Rules</h3>
+              <p className={styles.cardSubtitle}>Ensure your brand assets are positioned correctly.</p>
+              
+              <div className={styles.rulesList}>
+                {/* Logo Rule */}
+                <div className={styles.ruleItem}>
+                  <div className={styles.ruleHeader}>
+                    <label className={styles.toggleContainer}>
+                      <input
+                        type="checkbox"
+                        id="mentionBrandLogo"
+                        checked={form.mentionBrandLogo}
+                        onChange={(e) => setForm({ ...form, mentionBrandLogo: e.target.checked })}
+                      />
+                      <span className={styles.toggleSlider}></span>
+                    </label>
+                    <span className={styles.ruleLabel}>Include Brand Logo on Graphic</span>
+                  </div>
+                  {form.mentionBrandLogo && (
+                    <div className={styles.ruleDetails}>
+                      <label htmlFor="brandLogoPosition">Logo Position</label>
+                      <input
+                        id="brandLogoPosition"
+                        type="text"
+                        placeholder="e.g. Bottom Right"
+                        value={form.brandLogoPosition}
+                        onChange={(e) => setForm({ ...form, brandLogoPosition: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Website in Post Rule */}
+                <div className={styles.ruleItem}>
+                  <div className={styles.ruleHeader}>
+                    <label className={styles.toggleContainer}>
+                      <input
+                        type="checkbox"
+                        id="mentionWebsiteInPost"
+                        checked={form.mentionWebsiteInPost}
+                        onChange={(e) => setForm({ ...form, mentionWebsiteInPost: e.target.checked })}
+                      />
+                      <span className={styles.toggleSlider}></span>
+                    </label>
+                    <span className={styles.ruleLabel}>Include Website Link on Graphic</span>
+                  </div>
+                  {form.mentionWebsiteInPost && (
+                    <div className={styles.ruleDetails}>
+                      <label htmlFor="brandLinkPosition">Link Position</label>
+                      <input
+                        id="brandLinkPosition"
+                        type="text"
+                        placeholder="e.g. Bottom Left"
+                        value={form.brandLinkPosition}
+                        onChange={(e) => setForm({ ...form, brandLinkPosition: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* CTA Rule */}
+                <div className={styles.ruleItem}>
+                  <div className={styles.ruleHeader}>
+                    <span className={styles.ruleLabel}>Call-to-Action Button (Optional)</span>
+                  </div>
+                  <div className={styles.ruleInputGroup}>
+                    <input
+                      id="ctaText"
+                      type="text"
+                      placeholder="e.g. Shop Now, Learn More"
+                      value={form.ctaText}
+                      onChange={(e) => setForm({ ...form, ctaText: e.target.value })}
+                    />
+                  </div>
+                  {form.ctaText.trim() && (
+                    <div className={styles.ruleDetails} style={{ marginTop: '0.5rem', paddingLeft: 0 }}>
+                      <label htmlFor="ctaPosition">CTA Position</label>
+                      <input
+                        id="ctaPosition"
+                        type="text"
+                        placeholder="e.g. Bottom Center"
+                        value={form.ctaPosition}
+                        onChange={(e) => setForm({ ...form, ctaPosition: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Caption Rule */}
+                <div className={styles.ruleItem}>
+                  <div className={styles.ruleHeader}>
+                    <label className={styles.toggleContainer}>
+                      <input
+                        type="checkbox"
+                        id="mentionWebsiteInCaption"
+                        checked={form.mentionWebsiteInCaption}
+                        onChange={(e) => setForm({ ...form, mentionWebsiteInCaption: e.target.checked })}
+                      />
+                      <span className={styles.toggleSlider}></span>
+                    </label>
+                    <span className={styles.ruleLabel}>Include Website Link in Caption</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Caption Tuning Settings */}
+          <div className={styles.tuningCard}>
+            <h3>Caption Settings</h3>
+            <p className={styles.cardSubtitle}>Configure caption length and hashtag count.</p>
+            <div className={styles.formRowTwo}>
+              <div className={styles.formGroup}>
+                <label htmlFor="wordCount">Caption Words</label>
+                <input
+                  id="wordCount"
+                  type="number"
+                  min={10}
+                  max={100}
+                  value={form.wordCount}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setForm({ ...form, wordCount: '' as any });
+                      return;
+                    }
+                    const parsed = parseInt(val);
+                    if (!isNaN(parsed)) {
+                      setForm({ ...form, wordCount: Math.min(100, Math.max(0, parsed)) });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const parsed = parseInt(e.target.value);
+                    if (isNaN(parsed) || parsed < 10) {
+                      setForm({ ...form, wordCount: 10 });
+                    } else if (parsed > 100) {
+                      setForm({ ...form, wordCount: 100 });
+                    }
+                  }}
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label htmlFor="hashtagCount">Hashtags Count</label>
+                <input
+                  id="hashtagCount"
+                  type="number"
+                  min={0}
+                  max={30}
+                  value={form.hashtagCount}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setForm({ ...form, hashtagCount: '' as any });
+                      return;
+                    }
+                    const parsed = parseInt(val);
+                    if (!isNaN(parsed)) {
+                      setForm({ ...form, hashtagCount: Math.min(30, Math.max(0, parsed)) });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const parsed = parseInt(e.target.value);
+                    if (isNaN(parsed) || parsed < 0) {
+                      setForm({ ...form, hashtagCount: 0 });
+                    } else if (parsed > 30) {
+                      setForm({ ...form, hashtagCount: 30 });
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -739,10 +1351,10 @@ function ComposerPageContent() {
             <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: generationState === 'paused' || generationState === 'stopped' ? 'paused' : 'running' }} /> Analyzing brand tone &amp; style...
           </div>
           <div className={styles.genStep}>
-            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: (isGenerating || isGeneratingCaptions) ? 'running' : 'paused' }} /> Generating captions via OpenAI...
+            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: (isGenerating || isGeneratingCaptions) ? 'running' : 'paused' }} /> Generating captions via Gemini...
           </div>
           <div className={styles.genStep}>
-            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: (isGenerating || isGeneratingImages) ? 'running' : 'paused' }} /> Creating images via DALL·E 3...
+            <Loader2 size={16} className={styles.spinner} style={{ animationPlayState: (isGenerating || isGeneratingImages) ? 'running' : 'paused' }} /> Creating images via Imagen...
           </div>
         </div>
       </div>
@@ -752,6 +1364,9 @@ function ComposerPageContent() {
   // ── Step 5: Preview & Edit ─────────────────────────────────────────
   const renderStep5 = () => {
     if (!generated) return null;
+    const hasMultipleImages = generated.images.length > 1;
+    const hasMultipleCaptions = generated.captions.length > 1;
+
     return (
       <div className={styles.stepContent}>
         <h2 className={styles.stepTitle}>Preview &amp; Edit</h2>
@@ -764,7 +1379,7 @@ function ComposerPageContent() {
               {generated.images[selectedImage] ? (
                 <>
                   <img 
-                    src={generated.images[selectedImage]} 
+                    src={generated.images[selectedImage]?.url} 
                     alt={`AI Generated ${selectedImage + 1}`} 
                     className={styles.previewImage}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -775,7 +1390,7 @@ function ComposerPageContent() {
                       onClick={() => setShowEditor(true)}
                       title="Edit Image"
                     >
-                      <Edit2 size={18} />
+                      <Edit3 size={18} />
                       <span>Edit</span>
                     </button>
                     <button 
@@ -800,33 +1415,38 @@ function ComposerPageContent() {
                 </div>
               )}
             </div>
-            <div className={styles.imageOptions}>
-              <span className={styles.optionLabel}>Image Options:</span>
-              {generated.images.map((_, i) => (
-                <button
-                  key={i}
-                  className={`${styles.imageOptionBtn} ${selectedImage === i ? styles.imageOptionActive : ''}`}
-                  onClick={() => setSelectedImage(i)}
-                >
-                  Option {i + 1}
-                </button>
-              ))}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', marginLeft: 'auto' }}>
-                <button 
-                  className={styles.regenerateBtn} 
-                  onClick={handleRegenerateImages}
-                  disabled={isGeneratingImages || imageRegenAttempts <= 0}
-                  style={{ width: 'fit-content' }}
-                >
-                  {isGeneratingImages ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
-                  Regen Image
-                </button>
-                <span className={styles.regenAttemptsLabel}>
-                  {imageRegenAttempts > 0 
-                    ? `${imageRegenAttempts} ${imageRegenAttempts === 1 ? 'attempt' : 'attempts'} remaining today` 
-                    : "Today's limit has been exceeded"}
-                </span>
+            {/* ── Image Options Carousel ────────────────────────────── */}
+            {hasMultipleImages && (
+              <div className={styles.regenCarousel}>
+                {generated.images.map((img, idx) => (
+                  <button
+                    key={idx}
+                    className={`${styles.regenCard} ${selectedImage === idx ? styles.regenCardActive : ''}`}
+                    onClick={() => setSelectedImage(idx)}
+                    title={`Option ${idx + 1}`}
+                  >
+                    <img src={img.url} alt={`Option ${idx + 1}`} className={styles.regenThumb} />
+                    <span className={styles.regenLabel}>Option {idx + 1}</span>
+                  </button>
+                ))}
               </div>
+            )}
+
+            <div className={styles.imageOptions} style={{ justifyContent: 'space-between' }}>
+              <span className={styles.regenBadge}>
+                {remainingImageRegens > 0 
+                  ? `${remainingImageRegens} regen${remainingImageRegens !== 1 ? 's' : ''} left today`
+                  : 'Limit reached today'}
+              </span>
+              <button 
+                className={`${styles.regenerateBtn} ${remainingImageRegens <= 0 ? styles.regenDisabled : ''}`}
+                onClick={handleRegenerateImages}
+                disabled={isGeneratingImages || remainingImageRegens <= 0}
+                title={remainingImageRegens <= 0 ? 'Daily regeneration limit reached (3/3)' : `Regenerate image (${remainingImageRegens} left)`}
+              >
+                {isGeneratingImages ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
+                Regenerate Image
+              </button>
             </div>
             <button
               className={styles.logoToggle}
@@ -839,10 +1459,33 @@ function ComposerPageContent() {
 
           {/* Right: Caption Editor */}
           <div className={styles.previewCaptionSection}>
+            {/* ── Caption Options Carousel ──────────────────────────── */}
+            {hasMultipleCaptions && (
+              <div className={styles.regenCarousel}>
+                {generated.captions.map((cap, idx) => (
+                  <button
+                    key={idx}
+                    className={`${styles.regenCard} ${styles.regenCardCaption} ${selectedCaption === idx ? styles.regenCardActive : ''}`}
+                    onClick={() => setSelectedCaption(idx)}
+                    title={`Caption ${idx + 1}`}
+                  >
+                    <span className={styles.regenCaptionPreview}>
+                      {cap.substring(0, 60)}{cap.length > 60 ? '…' : ''}
+                    </span>
+                    <span className={styles.regenLabel}>Caption {idx + 1}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className={styles.captionVariants}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className={styles.optionLabel}>Caption Variants:</span>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                <span className={styles.regenBadge}>
+                  {remainingCaptionRegens > 0
+                    ? `${remainingCaptionRegens} regen${remainingCaptionRegens !== 1 ? 's' : ''} left today`
+                    : 'Limit reached today'}
+                </span>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <button 
                     onClick={handleSaveImage}
                     disabled={isSavingImage}
@@ -857,38 +1500,22 @@ function ComposerPageContent() {
                       gap: '4px',
                       cursor: 'pointer',
                       fontSize: '13px',
-                      fontWeight: '500',
-                      marginBottom: '4px'
+                      fontWeight: '500'
                     }}
                   >
                     {isSavingImage ? <Loader2 size={14} className={styles.spinner} /> : <Bookmark size={14} fill="none" />}
                     Save Image
                   </button>
                   <button 
-                    className={styles.regenerateBtn} 
+                    className={`${styles.regenerateBtn} ${remainingCaptionRegens <= 0 ? styles.regenDisabled : ''}`}
                     onClick={handleRegenerateCaptions}
-                    disabled={isGeneratingCaptions || captionRegenAttempts <= 0}
+                    disabled={isGeneratingCaptions || remainingCaptionRegens <= 0}
+                    title={remainingCaptionRegens <= 0 ? 'Daily regeneration limit reached (3/3)' : `Regenerate caption (${remainingCaptionRegens} left)`}
                   >
                     {isGeneratingCaptions ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
-                    Regen Captions
+                    Regenerate Caption
                   </button>
-                  <span className={styles.regenAttemptsLabel}>
-                    {captionRegenAttempts > 0 
-                      ? `${captionRegenAttempts} ${captionRegenAttempts === 1 ? 'attempt' : 'attempts'} remaining today` 
-                      : "Today's limit has been exceeded"}
-                  </span>
                 </div>
-              </div>
-              <div className={styles.variantTabs}>
-                {generated.captions.map((_, i) => (
-                  <button
-                    key={i}
-                    className={`${styles.variantTab} ${selectedCaption === i ? styles.variantTabActive : ''}`}
-                    onClick={() => setSelectedCaption(i)}
-                  >
-                    Variant {i + 1}
-                  </button>
-                ))}
               </div>
             </div>
             <div className={styles.captionEditor}>
@@ -905,14 +1532,6 @@ function ComposerPageContent() {
             </div>
             <div className={styles.previewMeta}>
               <div className={styles.metaItem}>
-                <span className={styles.metaLabel}>Platform</span>
-                <span className={styles.metaValue}>
-                  {form.platform === 'facebook' && <><Facebook size={14} /> Facebook</>}
-                  {form.platform === 'instagram' && <><Instagram size={14} /> Instagram</>}
-                  {form.platform === 'both' && <><Facebook size={14} /> <Instagram size={14} /> Both</>}
-                </span>
-              </div>
-              <div className={styles.metaItem}>
                 <span className={styles.metaLabel}>Content Type</span>
                 <span className={styles.metaValue} style={{ textTransform: 'capitalize' }}>{form.contentType}</span>
               </div>
@@ -923,82 +1542,284 @@ function ComposerPageContent() {
     );
   };
 
-  // ── Schedule Modal ─────────────────────────────────────────────────
-  const renderScheduleModal = () => {
-    if (!showScheduleModal) return null;
-    return (
-      <div className={styles.modalOverlay} onClick={() => setShowScheduleModal(false)}>
-        <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-          <h3 className={styles.modalTitle}>Schedule Post</h3>
-          <p className={styles.modalDesc}>Choose when to publish your post.</p>
+  // ── Step 6: Social Distribution ──────────────────────────────────
+  const renderStep6 = () => {
+    if (loadingConnections) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '1rem' }}>
+          <Loader2 size={36} className={styles.spinner} />
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.9375rem' }}>Loading your social accounts...</span>
+        </div>
+      );
+    }
 
-          <div className={styles.scheduleModeToggle}>
-            <button
-              className={`${styles.modeBtn} ${!isImmediate ? styles.modeBtnActive : ''}`}
-              onClick={() => setIsImmediate(false)}
-            >
-              <CalendarClock size={18} /> Schedule for Later
-            </button>
-            <button
-              className={`${styles.modeBtn} ${isImmediate ? styles.modeBtnActive : ''}`}
-              onClick={() => setIsImmediate(true)}
-            >
-              <Send size={18} /> Publish Now
-            </button>
+    if (connections.length === 0) {
+      return (
+        <div className={styles.stepContent}>
+          <h2 className={styles.stepTitle}>Social Distribution</h2>
+          <p className={styles.stepDesc}>Publish or schedule your post across channels.</p>
+          <div className={styles.noConnectionsMessage}>
+            <Share2 size={48} style={{ color: 'var(--text-muted)', opacity: 0.5 }} />
+            <h3>No connected social channels</h3>
+            <p>You need to connect at least one Facebook Page or Instagram Business account to distribute your content.</p>
+            <Link href="/dashboard/settings" className={styles.connectButton}>
+              Go to Settings
+            </Link>
+          </div>
+        </div>
+      );
+    }
+
+    // Filter connections based on what's active / selected
+    const selectedConns = connections.filter(c => selectedConnectionIds.includes(c.id));
+    
+    // Find preview connection for active tab
+    const previewConn = selectedConns.find(c => c.platform === activePreviewPlatform) 
+      || connections.find(c => c.platform === activePreviewPlatform);
+
+    // Get preview asset indices
+    const previewMapping = previewConn ? (connectionMappings[previewConn.id] || { imageIndex: 0, captionIndex: 0 }) : { imageIndex: selectedImage, captionIndex: selectedCaption };
+    const previewImage = generated?.images[previewMapping.imageIndex]?.url || generated?.images[selectedImage]?.url || '';
+    const previewCaption = (previewMapping.captionIndex === selectedCaption) 
+      ? editedCaption 
+      : (generated?.captions[previewMapping.captionIndex] || editedCaption);
+
+    return (
+      <div className={styles.stepContent}>
+        <h2 className={styles.stepTitle}>Social Distribution</h2>
+        <p className={styles.stepDesc}>Select channels, map your generated assets, and schedule publication.</p>
+
+        <div className={styles.previewLayout}>
+          {/* Left Column: Channels & Scheduling */}
+          <div>
+            <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)', marginBottom: '1rem' }}>Select Accounts</h3>
+            <div className={styles.connectionsList}>
+              {connections.map((conn) => {
+                const isSelected = selectedConnectionIds.includes(conn.id);
+                const mapping = connectionMappings[conn.id] || { imageIndex: 0, captionIndex: 0 };
+                
+                return (
+                  <div key={conn.id} className={`${styles.connectionCard} ${isSelected ? styles.connectionCardActive : ''}`}>
+                    <div className={styles.connectionHeader}>
+                      <input
+                        type="checkbox"
+                        className={styles.connectionCheckbox}
+                        checked={isSelected}
+                        onChange={() => {
+                          setSelectedConnectionIds(prev => 
+                            prev.includes(conn.id) ? prev.filter(id => id !== conn.id) : [...prev, conn.id]
+                          );
+                        }}
+                      />
+                      <div className={styles.connectionAvatar}>
+                        {conn.picture_url ? (
+                          <img src={conn.picture_url} alt={conn.page_name} />
+                        ) : (
+                          conn.page_name?.charAt(0) || 'P'
+                        )}
+                      </div>
+                      <div className={styles.connectionDetails}>
+                        <span className={styles.connectionName}>{conn.page_name}</span>
+                        <span className={conn.platform === 'facebook' ? `${styles.connectionBadge} ${styles.connectionBadgeFb}` : `${styles.connectionBadge} ${styles.connectionBadgeIg}`}>
+                          {conn.platform === 'facebook' ? <Facebook size={12} /> : <Instagram size={12} />}
+                          {conn.platform === 'facebook' ? ' Facebook Page' : ' Instagram Business'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {isSelected && (
+                      <div className={styles.connectionSettings}>
+                        <div className={styles.selectorGroup}>
+                          <label>Image Option</label>
+                          <select
+                            value={mapping.imageIndex}
+                            onChange={(e) => {
+                              const newIndex = parseInt(e.target.value, 10);
+                              setConnectionMappings(prev => ({
+                                ...prev,
+                                [conn.id]: { ...prev[conn.id], imageIndex: newIndex }
+                              }));
+                            }}
+                          >
+                            {generated?.images.map((_, idx) => (
+                              <option key={idx} value={idx}>Option {idx + 1}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className={styles.selectorGroup}>
+                          <label>Caption Option</label>
+                          <select
+                            value={mapping.captionIndex}
+                            onChange={(e) => {
+                              const newIndex = parseInt(e.target.value, 10);
+                              setConnectionMappings(prev => ({
+                                ...prev,
+                                [conn.id]: { ...prev[conn.id], captionIndex: newIndex }
+                              }));
+                            }}
+                          >
+                            {generated?.captions.map((cap, idx) => (
+                              <option key={idx} value={idx}>Caption {idx + 1} ({cap.substring(0, 20)}...)</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Execution / Scheduler Card */}
+            {selectedConnectionIds.length > 0 && (
+              <div className={styles.schedulerCard}>
+                <span className={styles.schedulerTitle}>Scheduling Options</span>
+                <div className={styles.scheduleModeToggle} style={{ margin: 0 }}>
+                  <button
+                    className={`${styles.modeBtn} ${!isImmediate ? styles.modeBtnActive : ''}`}
+                    onClick={() => setIsImmediate(false)}
+                  >
+                    <CalendarClock size={16} /> Schedule for Later
+                  </button>
+                  <button
+                    className={`${styles.modeBtn} ${isImmediate ? styles.modeBtnActive : ''}`}
+                    onClick={() => setIsImmediate(true)}
+                  >
+                    <Send size={16} /> Publish Now
+                  </button>
+                </div>
+
+                {!isImmediate && (
+                  <div className={styles.scheduleInputs} style={{ margin: 0 }}>
+                    <div className={styles.customDateWrapper}>
+                      <label htmlFor="distScheduleDate" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.375rem' }}>Date</label>
+                      <input
+                        id="distScheduleDate"
+                        type="text"
+                        placeholder="DD/MM/YY"
+                        value={formatDateToDDMMYY(scheduleDate)}
+                        readOnly
+                        onClick={() => {
+                          const input = document.getElementById('distHiddenDateInput');
+                          if (input) (input as any).showPicker();
+                        }}
+                      />
+                      <input
+                        id="distHiddenDateInput"
+                        type="date"
+                        className={styles.hiddenNativeDate}
+                        value={scheduleDate}
+                        onChange={(e) => setScheduleDate(e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label htmlFor="distScheduleTime" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Time</label>
+                      <input
+                        id="distScheduleTime"
+                        type="time"
+                        value={scheduleTime}
+                        onChange={(e) => setScheduleTime(e.target.value)}
+                        style={{ padding: '0.75rem 1rem' }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {!isImmediate && (
-            <div className={styles.scheduleInputs}>
-                <label htmlFor="scheduleDate">Date (DD/MM/YY)</label>
-                <div className={styles.customDateWrapper}>
-                  <input
-                    id="scheduleDate"
-                    type="text"
-                    placeholder="DD/MM/YY"
-                    value={formatDateToDDMMYY(scheduleDate)}
-                    readOnly
-                    onClick={() => {
-                      const input = document.getElementById('hiddenDateInput');
-                      if (input) (input as any).showPicker();
-                    }}
-                  />
-                  <input
-                    id="hiddenDateInput"
-                    type="date"
-                    className={styles.hiddenNativeDate}
-                    value={scheduleDate}
-                    onChange={(e) => setScheduleDate(e.target.value)}
-                  />
-                </div>
-              <div className={styles.formGroup}>
-                <label htmlFor="scheduleTime">Time</label>
-                <input
-                  id="scheduleTime"
-                  type="time"
-                  value={scheduleTime}
-                  onChange={(e) => setScheduleTime(e.target.value)}
-                />
-              </div>
+          {/* Right Column: Previews */}
+          <div>
+            <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)', marginBottom: '1rem' }}>Platform Preview</h3>
+            
+            <div className={styles.previewTabs}>
+              <button
+                className={`${styles.previewTab} ${activePreviewPlatform === 'facebook' ? styles.previewTabActive : ''}`}
+                onClick={() => setActivePreviewPlatform('facebook')}
+              >
+                Facebook Feed
+              </button>
+              <button
+                className={`${styles.previewTab} ${activePreviewPlatform === 'instagram' ? styles.previewTabActive : ''}`}
+                onClick={() => setActivePreviewPlatform('instagram')}
+              >
+                Instagram Feed
+              </button>
             </div>
-          )}
 
-          <div className={styles.modalActions}>
-            <button className={styles.modalCancel} onClick={() => setShowScheduleModal(false)}>
-              Cancel
-            </button>
-            <button 
-              className={styles.modalConfirm} 
-              onClick={handleConfirmSchedule}
-              disabled={isGenerating}
-            >
-              {isGenerating ? <Loader2 size={16} className={styles.spinner} /> : (
-                isImmediate ? (
-                  <><Send size={16} /> Publish Now</>
-                ) : (
-                  <><CalendarClock size={16} /> Schedule Post</>
-                )
-              )}
-            </button>
+            {activePreviewPlatform === 'facebook' ? (
+              <div className={styles.fbMockup}>
+                <div className={styles.fbHeader}>
+                  <div className={styles.fbAvatar}>
+                    {previewConn?.picture_url ? (
+                      <img src={previewConn.picture_url} alt={previewConn.page_name} />
+                    ) : (
+                      previewConn?.page_name?.charAt(0) || 'F'
+                    )}
+                  </div>
+                  <div className={styles.fbHeaderInfo}>
+                    <span className={styles.fbPageName}>{previewConn?.page_name || 'Facebook Page'}</span>
+                    <span className={styles.fbPostTime}>
+                      {isImmediate ? 'Just now' : `${formatDateToDDMMYY(scheduleDate) || 'Today'} at ${scheduleTime || '12:00'}`} · <Globe size={12} />
+                    </span>
+                  </div>
+                </div>
+                <div className={styles.fbTextContent}>
+                  {previewCaption || 'This is where your Facebook caption will go...'}
+                </div>
+                <div className={styles.fbImageContent}>
+                  {previewImage ? (
+                    <img src={previewImage} alt="Facebook Post Preview" />
+                  ) : (
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No image option selected</div>
+                  )}
+                </div>
+                <div className={styles.fbActions}>
+                  <button className={styles.fbActionBtn}>Like</button>
+                  <button className={styles.fbActionBtn}>Comment</button>
+                  <button className={styles.fbActionBtn}>Share</button>
+                </div>
+              </div>
+            ) : (
+              <div className={styles.igMockup}>
+                <div className={styles.igHeader}>
+                  <div className={styles.igAvatar}>
+                    {previewConn?.picture_url ? (
+                      <img src={previewConn.picture_url} alt={previewConn.page_name} />
+                    ) : (
+                      previewConn?.page_name?.charAt(0) || 'I'
+                    )}
+                  </div>
+                  <span className={styles.igUsername}>
+                    {previewConn?.page_name?.toLowerCase().replace(/\s+/g, '_') || 'instagram_account'}
+                  </span>
+                </div>
+                <div className={styles.igImageContent}>
+                  {previewImage ? (
+                    <img src={previewImage} alt="Instagram Post Preview" />
+                  ) : (
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No image option selected</div>
+                  )}
+                </div>
+                <div className={styles.igActions}>
+                  <Heart size={20} className={styles.igActionIcon} />
+                  <MessageCircle size={20} className={styles.igActionIcon} />
+                  <Send size={20} className={styles.igActionIcon} />
+                  <Bookmark size={20} className={styles.igActionIcon} style={{ marginLeft: 'auto' }} />
+                </div>
+                <div className={styles.igDetails}>
+                  <div className={styles.igCaption}>
+                    <span className={styles.igCaptionUsername}>
+                      {previewConn?.page_name?.toLowerCase().replace(/\s+/g, '_') || 'instagram_account'}
+                    </span>
+                    {previewCaption || 'This is where your Instagram caption will go...'}
+                  </div>
+                  <div className={styles.igTime}>
+                    {isImmediate ? 'Just now' : `${formatDateToDDMMYY(scheduleDate) || 'TODAY'} · ${scheduleTime || '12:00'}`}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1022,6 +1843,7 @@ function ComposerPageContent() {
         {step === 3 && renderStep3()}
         {step === 4 && renderStep4()}
         {step === 5 && renderStep5()}
+        {step === 6 && renderStep6()}
       </div>
 
       {/* Footer Navigation */}
@@ -1052,6 +1874,7 @@ function ComposerPageContent() {
           )}
           {step === 3 && (
             <button
+              type="button"
               className={styles.generateBtn}
               disabled={!canProceedStep4}
               onClick={handleGenerateFull}
@@ -1061,20 +1884,32 @@ function ComposerPageContent() {
           )}
           {step === 5 && (
             <>
-              <button className={styles.scheduleBtn} onClick={() => setShowScheduleModal(true)}>
-                <CalendarClock size={18} /> Schedule / Publish
+              <button className={styles.scheduleBtn} onClick={() => setStep(6)}>
+                Next: Distribution <ArrowRight size={18} />
               </button>
             </>
           )}
+          {step === 6 && (
+            <button
+              className={styles.scheduleBtn}
+              onClick={handleConfirmSchedule}
+              disabled={isGenerating || selectedConnectionIds.length === 0}
+            >
+              {isGenerating ? <Loader2 size={16} className={styles.spinner} /> : (
+                isImmediate ? (
+                  <><Send size={16} /> Publish Now</>
+                ) : (
+                  <><CalendarClock size={16} /> Schedule Distribution</>
+                )
+              )}
+            </button>
+          )}
         </div>
       </div>
-
-      {renderScheduleModal()}
-
       {showEditor && generated && (
         <ImageEditor
-          key={`editor-${selectedImage}-${generated.images[selectedImage]}`}
-          imageUrl={generated.images[selectedImage]}
+          key={`editor-${selectedImage}-${generated.images[selectedImage]?.url}`}
+          imageUrl={generated.images[selectedImage]?.url}
           logoUrl={logo || undefined}
           onSave={handleSaveEditedImage}
           onClose={() => setShowEditor(false)}

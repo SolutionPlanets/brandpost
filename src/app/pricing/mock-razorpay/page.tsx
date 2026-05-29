@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useBrand } from '@/contexts/BrandContext';
+import { useBrand, BrandProvider } from '@/contexts/BrandContext';
 import { 
   QrCode, 
   CreditCard, 
@@ -430,7 +430,9 @@ function MockRazorpayContent() {
 export default function MockRazorpayPage() {
   return (
     <Suspense fallback={<div className={styles.container}>Loading payment portal...</div>}>
-      <MockRazorpayContent />
+      <BrandProvider>
+        <MockRazorpayContent />
+      </BrandProvider>
     </Suspense>
   );
 }

@@ -200,3 +200,108 @@
   border-radius: var(--radius);
   border: 1px solid var(--border);
 }
+
+.detailsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .detailsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.detailItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background-color: var(--background);
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+
+.detailLabel {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.detailValue {
+  font-size: 0.9375rem;
+  color: var(--text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailLink {
+  font-size: 0.9375rem;
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+.detailLink:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+
+.phrasesGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .phrasesGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.phrasesBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.phrasesLabel {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.phrasesContent {
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.phrasesText {
+  font-size: 0.875rem;
+  color: var(--text);
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.noPhrases {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-style: italic;
+}

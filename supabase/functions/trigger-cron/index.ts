@@ -19,12 +19,23 @@ serve(async (req) => {
     const res = await fetch(`${appUrl}/api/cron/publish-scheduled`, {
       method: "GET",
       headers: {
-        "Authorization": `Bearer ${cronSecret}`
+        "Authorization": `Bearer ${cronSecret}`,
+        // Bypass ngrok's "You are about to visit..." intermediate HTML warning page
+        "ngrok-skip-browser-warning": "true"
       }
     });
 
-    const data = await res.json();
-    console.log("Cron response:", data);
+    const rawText = await res.text();
+    console.log(`Response status: ${res.status}`);
+    console.log("Raw response text:", rawText);
+
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      console.warn("Response is not JSON. Returning raw text as payload.");
+      data = { rawResponse: rawText };
+    }
 
     return new Response(JSON.stringify(data), {
       headers: { "Content-Type": "application/json" },
@@ -32,8 +43,8 @@ serve(async (req) => {
     });
 
   } catch (err: any) {
-    console.error("Cron trigger failed:", err);
-    return new Response(JSON.stringify({ error: err.message }), { 
+    console.error("Cron trigger fatal exception:", err);
+    return new Response(JSON.stringify({ error: err.message, stack: err.stack }), { 
       status: 500, 
       headers: { "Content-Type": "application/json" } 
     });

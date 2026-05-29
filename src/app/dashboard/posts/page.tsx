@@ -38,20 +38,15 @@ interface Post {
   publishedAt: string | null;
 }
 
-const MOCK_POSTS: Post[] = [
-  { id: 1, title: 'Diwali Festival Sale – 20% Off!', caption: '🪔 Celebrate Diwali with amazing deals...', platform: 'both', status: 'published', contentType: 'festive', createdAt: '2026-04-10', scheduledAt: null, publishedAt: '2026-04-10' },
-  { id: 2, title: 'Brand Story: Our Journey So Far', caption: '📖 From humble beginnings to where we are today...', platform: 'instagram', status: 'scheduled', contentType: 'informational', createdAt: '2026-04-15', scheduledAt: '2026-04-25', publishedAt: null },
-  { id: 3, title: 'Weekend Flash Offer – Limited Time', caption: '⚡ This weekend only! Get flat 30% off...', platform: 'facebook', status: 'draft', contentType: 'offer', createdAt: '2026-04-18', scheduledAt: null, publishedAt: null },
-  { id: 4, title: 'Team Appreciation Post', caption: '🙌 Our team is the backbone of everything...', platform: 'both', status: 'published', contentType: 'general', createdAt: '2026-04-08', scheduledAt: null, publishedAt: '2026-04-08' },
-  { id: 5, title: 'Earth Day – Go Green Campaign', caption: '🌍 This Earth Day, join us in making...', platform: 'instagram', status: 'failed', contentType: 'festive', createdAt: '2026-04-20', scheduledAt: '2026-04-22', publishedAt: null },
-  { id: 6, title: 'New Product Launch Teaser', caption: '🚀 Something exciting is coming your way...', platform: 'both', status: 'scheduled', contentType: 'general', createdAt: '2026-04-19', scheduledAt: '2026-04-28', publishedAt: null },
-  { id: 7, title: 'Customer Testimonial Spotlight', caption: '⭐ Here is what our amazing customers...', platform: 'facebook', status: 'published', contentType: 'informational', createdAt: '2026-04-05', scheduledAt: null, publishedAt: '2026-04-05' },
-  { id: 8, title: 'Summer Collection Preview', caption: '☀️ Get ready for summer with our brand new...', platform: 'instagram', status: 'draft', contentType: 'offer', createdAt: '2026-04-19', scheduledAt: null, publishedAt: null },
-];
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function formatTime(dateStr: string | null): string {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
 export default function PostsPage() {
@@ -64,8 +59,28 @@ export default function PostsPage() {
   const [selectedViewerImage, setSelectedViewerImage] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  const [postsLimit, setPostsLimit] = useState(10);
   const supabase = createClient();
   const router = useRouter();
+
+  useEffect(() => {
+    setMounted(true);
+
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(`.${styles.actionMenu}`)) {
+        setOpenMenuId(null);
+      }
+    };
+
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    setPostsLimit(10);
+  }, [statusFilter, platformFilter, searchQuery]);
 
   const handleView = (post: any) => {
     if (post.image_url) {
@@ -139,7 +154,7 @@ export default function PostsPage() {
     if (showSavedOnly && !post.is_saved && post.extra_instructions !== 'saved') return false;
     if (statusFilter !== 'all' && post.status !== statusFilter) return false;
     if (platformFilter !== 'all' && post.platform !== platformFilter) return false;
-    if (searchQuery && !post.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery && !(post.title || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
@@ -313,13 +328,13 @@ export default function PostsPage() {
                     </div>
                   </div>
 
-                  <p style={{ fontSize: '13px', color: '#64748b', margin: 0, display: '-webkit-box', WebKitLineClamp: 2, WebKitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.5', minHeight: '38px' }}>
+                  <p style={{ fontSize: '13px', color: '#64748b', margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.5', minHeight: '38px' }}>
                     {post.caption}
                   </p>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
                     <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>
-                      {formatDate(post.published_at || post.publishedAt || post.created_at || post.createdAt)}
+                      {mounted ? formatDate(post.published_at || post.publishedAt || post.created_at || post.createdAt) : '—'}
                     </span>
                   </div>
                 </div>
@@ -336,6 +351,7 @@ export default function PostsPage() {
             <span className={styles.colType}>Type</span>
             <span className={styles.colStatus}>Status</span>
             <span className={styles.colDate}>Date</span>
+            <span className={styles.colTime}>Time</span>
             <span className={styles.colActions}></span>
           </div>
 
@@ -346,60 +362,87 @@ export default function PostsPage() {
               <p>Try adjusting your filters or create a new post.</p>
             </div>
           ) : (
-            filteredPosts.map((post) => (
-              <div key={post.id} className={styles.tableDataRow}>
-                <div className={styles.colPost}>
-                  <div className={styles.postThumb}>
-                    {post.image_url ? (
-                      <img src={post.image_url} alt="" className={styles.thumbImg} />
+            <>
+              {filteredPosts.slice(0, postsLimit).map((post) => (
+                <div key={post.id} className={styles.tableDataRow}>
+                  <div className={styles.colPost}>
+                    <div className={styles.postThumb}>
+                      {post.image_url ? (
+                        <img src={post.image_url} alt="" className={styles.thumbImg} />
+                      ) : (
+                        <ImageIcon size={18} />
+                      )}
+                    </div>
+                    <div className={styles.postInfo}>
+                      <h4>{post.title || 'Untitled Draft'}</h4>
+                      <p>{post.caption ? `${post.caption.substring(0, 50)}${post.caption.length > 50 ? '...' : ''}` : 'No caption yet'}</p>
+                    </div>
+                  </div>
+                  <div className={styles.colPlatform}>
+                    {post.status === 'draft' ? (
+                      <span style={{ color: 'var(--text-muted)' }}>—</span>
                     ) : (
-                      <ImageIcon size={18} />
+                      <>
+                        {(post.platform === 'facebook' || post.platform === 'both') && <Facebook size={18} className={styles.fbIcon} />}
+                        {(post.platform === 'instagram' || post.platform === 'both') && <Instagram size={18} className={styles.igIcon} />}
+                      </>
                     )}
                   </div>
-                  <div className={styles.postInfo}>
-                    <h4>{post.title}</h4>
-                    <p>{post.caption?.substring(0, 50)}...</p>
+                  <div className={styles.colType}>
+                    <span className={styles.typeBadge}>{post.content_type || post.contentType}</span>
                   </div>
-                </div>
-                <div className={styles.colPlatform}>
-                  {(post.platform === 'facebook' || post.platform === 'both') && <Facebook size={18} className={styles.fbIcon} />}
-                  {(post.platform === 'instagram' || post.platform === 'both') && <Instagram size={18} className={styles.igIcon} />}
-                </div>
-                <div className={styles.colType}>
-                  <span className={styles.typeBadge}>{post.content_type || post.contentType}</span>
-                </div>
-                <div className={styles.colStatus}>
-                  <span className={`${styles.statusBadge} ${styles[`status${post.status.charAt(0).toUpperCase() + post.status.slice(1)}`]}`}>
-                    {post.status}
-                  </span>
-                </div>
-                <div className={styles.colDate}>
-                  {post.status === 'scheduled' ? (
-                    <span className={styles.scheduledDate}><CalendarClock size={13} /> {formatDate(post.scheduled_at || post.scheduledAt)}</span>
-                  ) : (
-                    <span>{formatDate(post.published_at || post.publishedAt || post.created_at || post.createdAt)}</span>
-                  )}
-                </div>
-                <div className={styles.colActions}>
-                  <div className={styles.actionMenu}>
-                    <button
-                      className={styles.moreBtn}
-                      onClick={() => setOpenMenuId(openMenuId === post.id ? null : post.id)}
-                    >
-                      <MoreHorizontal size={18} />
-                    </button>
-                    {openMenuId === post.id && (
-                      <div className={styles.dropdown}>
-                        <button onClick={() => handleView(post)}><Eye size={14} /> View</button>
-                        <button onClick={() => handleEdit(post.id)}><Edit3 size={14} /> Edit</button>
-                        <button onClick={() => handleDuplicate(post.id)}><Copy size={14} /> Duplicate</button>
-                        <button className={styles.deleteAction} onClick={() => handleDelete(post.id)}><Trash2 size={14} /> Delete</button>
-                      </div>
+                  <div className={styles.colStatus}>
+                    <span className={`${styles.statusBadge} ${styles[`status${post.status.charAt(0).toUpperCase() + post.status.slice(1)}`]}`}>
+                      {post.status === 'draft' ? (post.image_url ? 'Generated Draft' : 'Draft') : post.status}
+                    </span>
+                  </div>
+                  <div className={styles.colDate}>
+                    {post.status === 'scheduled' ? (
+                      <span className={styles.scheduledDate}><CalendarClock size={13} /> {mounted ? formatDate(post.scheduled_at || post.scheduledAt) : '—'}</span>
+                    ) : (
+                      <span>{mounted ? formatDate(post.published_at || post.publishedAt || post.created_at || post.createdAt) : '—'}</span>
                     )}
                   </div>
+                  <div className={styles.colTime}>
+                    {post.status === 'scheduled' ? (
+                      <span>{mounted ? formatTime(post.scheduled_at || post.scheduledAt) : '—'}</span>
+                    ) : post.status === 'published' ? (
+                      <span>{mounted ? formatTime(post.published_at || post.publishedAt || post.created_at || post.createdAt) : '—'}</span>
+                    ) : (
+                      <span>—</span>
+                    )}
+                  </div>
+                  <div className={styles.colActions}>
+                    <div className={styles.actionMenu}>
+                      <button
+                        className={styles.moreBtn}
+                        onClick={() => setOpenMenuId(openMenuId === post.id ? null : post.id)}
+                      >
+                        <MoreHorizontal size={18} />
+                      </button>
+                      {openMenuId === post.id && (
+                        <div className={styles.dropdown}>
+                          {post.image_url && (
+                            <button onClick={() => handleView(post)}><Eye size={14} /> View</button>
+                          )}
+                          <button onClick={() => handleEdit(post.id)}><Edit3 size={14} /> Edit</button>
+                          <button onClick={() => handleDuplicate(post.id)}><Copy size={14} /> Duplicate</button>
+                          <button className={styles.deleteAction} onClick={() => handleDelete(post.id)}><Trash2 size={14} /> Delete</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))
+              ))}
+              {filteredPosts.length > postsLimit && (
+                <button 
+                  className={styles.loadMoreBtn} 
+                  onClick={() => setPostsLimit((prev) => prev + 10)}
+                >
+                  Load More
+                </button>
+              )}
+            </>
           )}
         </div>
       )}

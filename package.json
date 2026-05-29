@@ -9,12 +9,13 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@google/genai": "^2.3.0",
     "@google/generative-ai": "^0.24.1",
-    "@sentry/nextjs": "^10.53.1",
+    "@sentry/nextjs": "^10.54.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.104.0",
     "color-thief-react": "^2.1.0",
-    "fabric": "^6.9.1",
+    "fabric": "^7.4.0",
     "googleapis": "^171.4.0",
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",

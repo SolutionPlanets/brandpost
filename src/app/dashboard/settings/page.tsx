@@ -424,7 +424,7 @@ export default function SettingsPage() {
 
         {/* Facebook Pages */}
         <div className={styles.dangerZone} style={{ marginTop: '0.5rem' }}>
-          <h3><Facebook size={16} /> Facebook Pages</h3>
+          <h3><Facebook size={16} /> Facebook Page</h3>
           {facebookPages.length > 0 ? (
             facebookPages.map(page => (
               <div key={page.id} className={styles.socialConnectionCard}>
@@ -458,7 +458,7 @@ export default function SettingsPage() {
 
         {/* Instagram Accounts */}
         <div className={styles.dangerZone} style={{ marginTop: '1.5rem' }}>
-          <h3><Instagram size={16} /> Instagram Accounts</h3>
+          <h3><Instagram size={16} /> Instagram Account</h3>
           {instagramAccounts.length > 0 ? (
             instagramAccounts.map(account => (
               <div key={account.id} className={styles.socialConnectionCard}>

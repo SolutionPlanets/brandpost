@@ -62,7 +62,6 @@ const HOURS = [
   '12 AM', '1 AM', '2 AM', '3 AM', '4 AM', '5 AM', '6 AM', '7 AM', '8 AM', '9 AM', '10 AM', '11 AM',
   '12 PM', '1 PM', '2 PM', '3 PM', '4 PM', '5 PM', '6 PM', '7 PM', '8 PM', '9 PM', '10 PM', '11 PM'
 ];
-
 interface OnboardingWizardProps {
   brandKitId?: string;
   onComplete?: () => void;
@@ -99,7 +98,8 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
     businessName: '',
     address: '',
     pincode: '',
-    timing: '',
+    timing: '9 AM - 6 PM',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     logo: null as string | null,
     logoUrl: null as string | null,
     logoFile: null as File | null,
@@ -112,12 +112,16 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
     brandKitName: '',
     headingFont: 'Inter',
     bodyFont: 'Inter',
+    industry: '',
+    brandAudience: '',
+    websiteUrl: '',
+    phrasesToInclude: '',
+    phrasesToAvoid: '',
     selectedPost: 1,
     selectedPlatforms: [] as string[],
     platforms: [],
     instagram: '',
-    facebook: '',
-    timezone: 'Asia/Kolkata'
+    facebook: ''
   });
 
   useEffect(() => {
@@ -143,11 +147,9 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
             instagram: workspace.social_connections.some((c: any) => c.platform === 'instagram'),
           });
         }
-        
         // Determine if we are creating a new kit (supplementary) or doing initial onboarding
         const isInitialOnboarding = (workspace.brand_kits || []).length === 0;
         const isAddingNewKit = !brandKitId && !isInitialOnboarding;
-        
         // Find the specific brand kit
         const brandKit = brandKitId 
           ? workspace.brand_kits?.find((k: any) => k.id === brandKitId)
@@ -158,13 +160,14 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
         const fbConn = Array.isArray(socialConns) ? socialConns.find((c: any) => c.platform === 'facebook') : null;
         
         if (isAddingNewKit) {
-          // If adding a NEW kit, start with BLANK data
+          // If adding a NEW kit, start with BLANK brand kit data, but keep workspace data if helpful
           dbData = {
-            ownerName: '',
-            businessName: '',
-            address: '',
-            pincode: '',
-            timing: '',
+            ownerName: workspace.owner_name || '',
+            businessName: (workspace.business_name || '').toLowerCase().includes('my workspace') ? '' : (workspace.business_name || ''),
+            address: workspace.address || '',
+            pincode: workspace.pincode || '',
+            timing: workspace.business_timing || '',
+            timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
             logo: null,
             logoUrl: null,
             logoDark: null,
@@ -177,7 +180,11 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
             bodyFont: 'Inter',
             instagram: '',
             facebook: '',
-            timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+            industry: '',
+            brandAudience: '',
+            websiteUrl: '',
+            phrasesToInclude: '',
+            phrasesToAvoid: '',
           };
         } else {
           // Editing existing or initial onboarding
@@ -188,6 +195,7 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
             address: workspace.address || '',
             pincode: workspace.pincode || '',
             timing: workspace.business_timing || '',
+            timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
             logo: brandKit?.logo_url || null,
             logoUrl: brandKit?.logo_url || null,
             logoDark: brandKit?.logo_dark_url || null,
@@ -199,9 +207,15 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
             } : { primary: '#4f46e5', secondary: '#64748b', accent: '#fbbf24' },
             tone: brandKit?.tone ? brandKit.tone.toLowerCase() : 'professional',
             description: brandKit?.brand_description || '',
+            headingFont: brandKit?.heading_font || 'Inter',
+            bodyFont: brandKit?.body_font || 'Inter',
             instagram: brandKit?.instagram_handle || '',
             facebook: brandKit?.facebook_handle || '',
-            timezone: workspace.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+            industry: brandKit?.industry || '',
+            brandAudience: brandKit?.brand_audience || '',
+            websiteUrl: brandKit?.website_url || '',
+            phrasesToInclude: brandKit?.phrases_to_include || '',
+            phrasesToAvoid: brandKit?.phrases_to_avoid || '',
           };
         }
 
@@ -249,6 +263,9 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
   useEffect(() => {
     if (isRefreshing) return;
     
+    // Only save to localStorage during initial onboarding (when there are no brand kit IDs yet)
+    if (brandKitId) return;
+
     const stateToSave = { ...formData };
     // Don't save File objects or large base64 strings in localStorage
     delete (stateToSave as any).logoFile;
@@ -262,7 +279,7 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
     } catch (e) {
       console.warn('Failed to save to localStorage:', e);
     }
-  }, [formData, currentStep, isRefreshing]);
+  }, [formData, currentStep, isRefreshing, brandKitId]);
 
   const { data: palette } = usePalette(formData.logo || '', 5, 'hex', {
     quality: 10,
@@ -355,9 +372,30 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
 
       if (wsError || !workspace) return;
 
-      // If brandKitId was provided, we use it for update.
-      // If NOT provided, we let Supabase insert a new row.
-      const targetId = brandKitId;
+      if (!workspace) {
+        console.warn('saveBrandKit: No workspace found for user', user.id);
+        return;
+      }
+
+      console.log('saveBrandKit: Saving for workspace', workspace.id);
+
+      // Determine the target brand kit ID
+      let targetId = brandKitId;
+      if (!targetId) {
+        // If brandKitId prop is not provided, fetch existing brand kits for the workspace to see if we already have some.
+        const { data: existingKits } = await supabase
+          .from('brand_kits')
+          .select('id')
+          .eq('workspace_id', workspace.id);
+
+        const kits = existingKits || [];
+        const isInitialOnboarding = kits.length === 0;
+
+        if (isInitialOnboarding) {
+          // No kits exist at all, so we let it insert or fetch any temporarily created row
+          targetId = kits[0]?.id;
+        }
+      }
 
       const payload: Record<string, any> = {
         workspace_id: workspace.id,
@@ -373,6 +411,11 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
         tone: formData.tone,
         instagram_handle: formData.instagram,
         facebook_handle: formData.facebook,
+        industry: formData.industry,
+        brand_audience: formData.brandAudience,
+        website_url: formData.websiteUrl,
+        phrases_to_include: formData.phrasesToInclude,
+        phrases_to_avoid: formData.phrasesToAvoid,
       };
 
       if (targetId) {
@@ -452,6 +495,8 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
       
       await refreshBrandData();
       
+      await refreshBrandData();
+      
       // Success! Clear state
       localStorage.removeItem('onboarding_formData');
       localStorage.removeItem('onboarding_currentStep');
@@ -510,6 +555,10 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
     if (currentStep === 4) {
       if (!formData.brandKitName.trim()) {
         setErrors({ brandKitName: 'Brand Kit Name is required' });
+        return;
+      }
+      if (formData.websiteUrl && !/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/.test(formData.websiteUrl.trim())) {
+        setErrors({ websiteUrl: 'Please enter a valid URL' });
         return;
       }
     }
@@ -614,6 +663,28 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
                 }}
               />
             </div>
+            
+            <div className={styles.inputGrid}>
+              <div className={styles.inputGroup}>
+                <label>Industry (Optional)</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Bakery, Tech, Real Estate" 
+                  value={formData.industry}
+                  onChange={(e) => setFormData({...formData, industry: e.target.value})}
+                />
+              </div>
+              <div className={styles.inputGroup}>
+                <label>Brand Audience (Optional)</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Gen-Z, Parents, Local Residents" 
+                  value={formData.brandAudience}
+                  onChange={(e) => setFormData({...formData, brandAudience: e.target.value})}
+                />
+              </div>
+            </div>
+
             <div className={styles.inputGrid}>
               <div className={styles.inputGroup}>
                 <label>Pincode</label>
@@ -743,27 +814,19 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
                   </div>
                 </div>
               </div>
-              <div className={styles.inputGroup}>
-                <label>Timezone</label>
-                <select
-                  value={formData.timezone || 'Asia/Kolkata'}
-                  disabled
-                  className={styles.timezoneSelect}
-                >
-                  <option value="Asia/Kolkata">(GMT+05:30) India Standard Time</option>
-                  <option value="UTC">(GMT+00:00) UTC</option>
-                  <option value="America/New_York">(GMT-05:00) Eastern Time</option>
-                  <option value="America/Chicago">(GMT-06:00) Central Time</option>
-                  <option value="America/Denver">(GMT-07:00) Mountain Time</option>
-                  <option value="America/Los_Angeles">(GMT-08:00) Pacific Time</option>
-                  <option value="Europe/London">(GMT+00:00) London</option>
-                  <option value="Europe/Paris">(GMT+01:00) Paris</option>
-                  <option value="Asia/Dubai">(GMT+04:00) Dubai</option>
-                  <option value="Asia/Singapore">(GMT+08:00) Singapore</option>
-                  <option value="Australia/Sydney">(GMT+11:00) Sydney</option>
-                </select>
-                <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>Location detected automatically</p>
-              </div>
+            </div>
+
+            {/* Timezone Dropdown */}
+            <div className={styles.inputGroup}>
+              <label>Timezone</label>
+              <select
+                value={formData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata'}
+                onChange={(e) => setFormData({...formData, timezone: e.target.value})}
+              >
+                {Intl.supportedValuesOf('timeZone').map(tz => (
+                  <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
             </div>
           </div>
         );
@@ -937,6 +1000,27 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
               {errors.brandKitName && <span style={{ color: 'red', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.brandKitName}</span>}
             </div>
             <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
+              <label>Brand / Product Website (Optional)</label>
+              <input 
+                type="url" 
+                placeholder="https://www.example.com" 
+                value={formData.websiteUrl}
+                onChange={(e) => {
+                  setFormData({...formData, websiteUrl: e.target.value});
+                  if (errors.websiteUrl) setErrors({...errors, websiteUrl: ''});
+                }}
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  if (val && !/^https?:\/\//i.test(val)) {
+                    setFormData({...formData, websiteUrl: `https://${val}`});
+                  }
+                }}
+                style={errors.websiteUrl ? { borderColor: 'red' } : {}}
+              />
+              {errors.websiteUrl && <span style={{color: 'red', fontSize: '12px', marginTop: '4px', display: 'block'}}>{errors.websiteUrl}</span>}
+            </div>
+
+            <div className={styles.inputGroup} style={{ marginBottom: '15px' }}>
               <label>Tone</label>
               <select value={formData.tone || 'professional'} onChange={(e) => setFormData({ ...formData, tone: e.target.value })}>
                 <option value="professional">Professional</option>
@@ -963,6 +1047,28 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
                   value={fontOptions.find(opt => opt.value === formData.bodyFont) || fontOptions[1]}
                   onChange={(selected: any) => setFormData({ ...formData, bodyFont: selected.value })}
                 />
+              </div>
+            </div>
+            <div className={styles.inputGrid} style={{ marginBottom: '15px' }}>
+              <div className={styles.inputGroup}>
+                <label>Phrases to Include (Optional)</label>
+                <textarea 
+                  className={styles.descriptionTextarea}
+                  placeholder="e.g. Call now, Limited Time"
+                  value={formData.phrasesToInclude}
+                  onChange={(e) => setFormData({...formData, phrasesToInclude: e.target.value})}
+                  rows={2}
+                ></textarea>
+              </div>
+              <div className={styles.inputGroup}>
+                <label>Phrases to Avoid (Optional)</label>
+                <textarea 
+                  className={styles.descriptionTextarea}
+                  placeholder="e.g. Cheap, Fake"
+                  value={formData.phrasesToAvoid}
+                  onChange={(e) => setFormData({...formData, phrasesToAvoid: e.target.value})}
+                  rows={2}
+                ></textarea>
               </div>
             </div>
             <div className={styles.inputGroup}>

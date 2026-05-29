@@ -1,5 +1,70 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
+import { createAdminClient } from '@/utils/supabase/admin';
+import { getCaptionPrompt } from './prompts';
+
+const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY || '' });
+
+// ── Daily Regen Limit ────────────────────────────────────────────────
+const DAILY_CAPTION_REGEN_LIMIT = 3;
+
+async function checkAndIncrementCaptionRegenLimit(
+  adminSupabase: any,
+  postId: string
+): Promise<{ allowed: boolean; remaining: number }> {
+  // Fetch or create regen_limits row
+  let { data: row, error } = await adminSupabase
+    .from('regen_limits')
+    .select('*')
+    .eq('post_id', postId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('regen_limits query error:', error.message);
+    return { allowed: true, remaining: DAILY_CAPTION_REGEN_LIMIT };
+  }
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (!row) {
+    // First regeneration – create the row with caption_count = 1
+    await adminSupabase.from('regen_limits').insert({
+      post_id: postId,
+      caption_count: 1,
+      reset_at: now.toISOString(),
+    });
+    return { allowed: true, remaining: DAILY_CAPTION_REGEN_LIMIT - 1 };
+  }
+
+  // Check if reset is needed (reset_at is from a previous day)
+  const resetDate = new Date(row.reset_at);
+  if (resetDate < todayStart) {
+    await adminSupabase
+      .from('regen_limits')
+      .update({
+        image_count: 0,
+        caption_count: 1,
+        reset_at: now.toISOString(),
+      })
+      .eq('post_id', postId);
+    return { allowed: true, remaining: DAILY_CAPTION_REGEN_LIMIT - 1 };
+  }
+
+  // Same day – check limit
+  const currentCount = row.caption_count || 0;
+  if (currentCount >= DAILY_CAPTION_REGEN_LIMIT) {
+    return { allowed: false, remaining: 0 };
+  }
+
+  // Increment
+  await adminSupabase
+    .from('regen_limits')
+    .update({ caption_count: currentCount + 1 })
+    .eq('post_id', postId);
+
+  return { allowed: true, remaining: DAILY_CAPTION_REGEN_LIMIT - (currentCount + 1) };
+}
 
 export async function POST(req: Request) {
   try {
@@ -8,52 +73,98 @@ export async function POST(req: Request) {
       contentType, 
       platform, 
       extraInstructions,
-      brandDetails 
+      brandDetails,
+      postId: regenPostId, // Optional: set when regenerating an existing post's caption
+      wordCount,
+      hashtagCount,
+      campaignExpiry,
+      mentionWebsiteInCaption,
     } = await req.json();
 
-    // DEMO MODE: If no API key, return static captions
-    if (!process.env.OPENAI_API_KEY) {
-      console.log('OPENAI_API_KEY is not set. Running in Demo Mode for captions.');
-      
-      const demoCaptions = [
-        `✨ Elevate your brand with our latest ${topic}! 🚀 #BrandPost #Marketing`,
-        `Don't miss out on the best ${topic} in town! Check it out now. 👇`,
-        `Why choose anyone else? Our ${topic} is designed for YOU. 💎`
-      ];
-
-      return NextResponse.json({ captions: demoCaptions });
+    // ── REGEN LIMIT CHECK (only for regeneration, not first generation) ──
+    let remainingCaptionRegens = DAILY_CAPTION_REGEN_LIMIT;
+    if (regenPostId) {
+      const adminSupabase = createAdminClient();
+      const { allowed, remaining } = await checkAndIncrementCaptionRegenLimit(adminSupabase, regenPostId);
+      if (!allowed) {
+        return NextResponse.json({
+          error: 'Daily caption regeneration limit reached (3/3). Try again tomorrow.',
+          code: 'REGEN_LIMIT_REACHED',
+          remainingCaptionRegens: 0,
+        }, { status: 429 });
+      }
+      remainingCaptionRegens = remaining;
+      console.log(`🔄 Caption regen allowed. ${remaining} caption regens remaining today.`);
     }
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+    // 1. Developer Test Mode (Skip AI if dev mode is active)
+    if (process.env.NEXT_PUBLIC_DEV_MODE === 'true') {
+      console.log('🚧 DEVELOPER MODE ACTIVE: Skipping Gemini caption generation.');
+      return NextResponse.json({ 
+        captions: [
+          `Dummy Caption for ${topic}: Enhance your brand with our premium ${contentType} services! #BrandBoost #AI #Marketing`
+        ],
+        remainingCaptionRegens,
+      });
+    }
+
+    if (!process.env.GOOGLE_GEMINI_API_KEY) {
+      throw new Error('GOOGLE_GEMINI_API_KEY is not set');
+    }
+
+    const captionPrompt = getCaptionPrompt(brandDetails, topic, contentType, platform, extraInstructions, wordCount, hashtagCount, campaignExpiry, mentionWebsiteInCaption);
+
+    // Use Gemini 2.5 Flash for caption generation
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: captionPrompt,
     });
 
-    const captionPrompt = `
-      Create 3 engaging social media captions for a ${contentType} post about "${topic}".
-      Platform: ${platform}
-      Brand Name: ${brandDetails.businessName}
-      Brand Description: ${brandDetails.brandDescription}
-      Tone: ${brandDetails.brandTone}
-      Extra Instructions: ${extraInstructions}
-      
-      Format the response as a JSON object with a "captions" array of strings.
-    `;
-
-    const captionResponse = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: "You are a creative social media manager. Respond only in JSON." },
-        { role: "user", content: captionPrompt }
-      ],
-      response_format: { type: "json_object" },
+    // LOG TOKEN USAGE: Captions
+    const usage = result.usageMetadata;
+    console.log('📊 TOKEN USAGE [Caption Generation]:', {
+      cause: `Creating highly engaging ${contentType} caption for ${platform}`,
+      inputTokens: usage?.promptTokenCount,
+      outputTokens: usage?.candidatesTokenCount,
+      totalTokens: usage?.totalTokenCount
     });
 
-    const captionContent = captionResponse.choices[0].message.content;
-    const captions = JSON.parse(captionContent || '{"captions":[]}').captions;
+    let text = result.text || '';
+    
+    // Clean markdown blocks if present (e.g., ```json ... ```)
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    let captions = [];
+    try {
+      const parsed = JSON.parse(text);
+      captions = parsed.captions || [];
+    } catch (parseErr) {
+      console.error('Gemini JSON Parse Error. Raw text:', text);
+      // Fallback: If JSON parsing fails, try to extract lines as captions
+      captions = text.split('\n').filter(line => line.length > 5).slice(0, 1);
+    }
 
-    return NextResponse.json({ captions });
+    // Calculate remaining regens for response
+    remainingCaptionRegens = DAILY_CAPTION_REGEN_LIMIT;
+    if (regenPostId) {
+      const adminSupabase = createAdminClient();
+      const { data: regenRow } = await adminSupabase
+        .from('regen_limits')
+        .select('caption_count')
+        .eq('post_id', regenPostId)
+        .maybeSingle();
+      if (regenRow) {
+        remainingCaptionRegens = Math.max(0, DAILY_CAPTION_REGEN_LIMIT - (regenRow.caption_count || 0));
+      }
+    }
+
+    return NextResponse.json({ captions, remainingCaptionRegens });
   } catch (error: any) {
-    console.error('Caption generation error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('❌ Gemini Caption generation error:', error);
+    return NextResponse.json({ 
+      error: error.message,
+      details: error.stack,
+      code: error.status || 500
+    }, { status: 500 });
   }
 }

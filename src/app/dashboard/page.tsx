@@ -65,7 +65,6 @@ export default function DashboardHome() {
       router.push(url);
     }
   };
-
   useEffect(() => {
     const supabase = createClient();
     async function fetchDashboardData() {
@@ -112,7 +111,7 @@ export default function DashboardHome() {
   const trialStartDate = createdAt ? new Date(createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   const trialEndDate = trialEndsAt ? new Date(trialEndsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
-  const currentUsagePercent = Math.min(Math.round((postsUsed / currentLimit) * 100), 100);
+  const currentUsagePercent = currentLimit > 0 ? Math.min(Math.round((postsUsed / currentLimit) * 100), 100) : 0;
 
   const getStatusStyle = (status: string): string => {
     switch (status) {
