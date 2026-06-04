@@ -45,7 +45,7 @@ export const getCaptionPrompt = (
   - The caption must be creative and attention-grabbing. Use a strong hook at the beginning.
   - If the platform is "both" or includes Instagram, use formatting suitable for both (e.g., clean spacing, emojis used tastefully).
   - Strongly adhere to any offers, details, tone, or specific hashtags mentioned in the "Post Description".
-  - If "MUST INCLUDE" phrases are listed above, weave them naturally into the caption body.
+  - If "MUST INCLUDE" phrases are listed above, weave them naturally into the caption body. DO NOT use markdown formatting (such as **bold**) around these phrases.
   - If "MUST AVOID" phrases are listed above, never use those words or synonyms.
   ${mentionWebsiteInCaption && brandDetails?.websiteUrl ? `- CRITICAL LINK RULE: You MUST append the website link "${brandDetails.websiteUrl}" to the end of the caption text (before the hashtags) as a clear call to action.` : ''}
   - Avoid overly robotic or generic AI language. Sound human, authentic, and on-brand.

@@ -228,7 +228,7 @@ async function generateImageWithRetry(
 // buffer so users never lose their poster over an overlay glitch.
 
 type LogoTreatment = 'primary' | 'transparent' | 'primary_with_plate';
-type OverlayKind = 'logo' | 'url_chip' | 'cta';
+type OverlayKind = 'logo' | 'url_chip' | 'cta' | 'product';
 
 interface OverlayDesc {
   kind: OverlayKind;
@@ -238,6 +238,7 @@ interface OverlayDesc {
   height: number;
   left: number;
   top: number;
+  blend?: string;
   // Optional plate composited underneath this overlay at (left - pad, top - pad).
   // Used by the logo when contrast is low.
   plate?: { input: Buffer; pad: number };
@@ -545,6 +546,54 @@ async function buildLogoOverlay(
   }
 }
 
+// ── Build the product overlay ──
+
+async function buildProductOverlay(
+  baseBuffer: Buffer,
+  baseW: number,
+  baseH: number,
+  productUrl: string
+): Promise<OverlayDesc | null> {
+  try {
+    const productBuf = await fetchAsBuffer(productUrl);
+    
+    // We want the product to occupy about 60% of the image size
+    // but maintain its aspect ratio.
+    const targetSize = Math.round(Math.min(baseW, baseH) * 0.6);
+    
+    const resized = await sharp(productBuf)
+      .resize({ width: targetSize, height: targetSize, fit: 'inside' })
+      .toBuffer();
+      
+    const meta = await sharp(resized).metadata();
+    const w = meta.width || targetSize;
+    const h = meta.height || targetSize;
+    
+    const left = Math.round((baseW - w) / 2);
+    const top = Math.round((baseH - h) / 2);
+
+    // If the image is a PNG with alpha, blend 'over'. If it's a JPEG or solid white bg, blend 'multiply'.
+    const info = await analyseLogo(productBuf);
+    const blend = info.hasAlpha ? 'over' : 'multiply';
+    
+    console.log(`📸 Product overlay: size=${w}×${h} blend=${blend}`);
+
+    return {
+      kind: 'product',
+      position: 'center', // Doesn't push UI elements, it sits in the middle
+      input: resized,
+      width: w,
+      height: h,
+      left,
+      top,
+      blend,
+    };
+  } catch (e: any) {
+    console.warn('Product overlay failed:', e.message);
+    return null;
+  }
+}
+
 // ── Unified compositor ──
 // Layouts logo + URL chip + CTA at their requested positions, resolves same-
 // corner collisions by stacking inward (logo stays anchored to the edge),
@@ -554,13 +603,14 @@ interface OverlayOptions {
   logo?: { primary: string; transparent: string | null; position: string };
   urlChip?: { url: string; position: string };
   cta?: { text: string; position: string; fillColor: string };
+  product?: { url: string };
 }
 
 async function compositeAllOverlays(
   baseBuffer: Buffer,
   opts: OverlayOptions
 ): Promise<Buffer> {
-  if (!opts.logo && !opts.urlChip && !opts.cta) return baseBuffer;
+  if (!opts.logo && !opts.urlChip && !opts.cta && !opts.product) return baseBuffer;
 
   try {
     const baseMeta = await sharp(baseBuffer).metadata();
@@ -605,6 +655,11 @@ async function compositeAllOverlays(
       console.log(`🟢 CTA: "${opts.cta.text}" pos=${opts.cta.position} size=${width}×${height}`);
     }
 
+    if (opts.product) {
+      const desc = await buildProductOverlay(baseBuffer, baseW, baseH, opts.product.url);
+      if (desc) overlays.push(desc);
+    }
+
     if (overlays.length === 0) return baseBuffer;
 
     // ── Pixel-rect overlap resolution ──
@@ -615,7 +670,7 @@ async function compositeAllOverlays(
     // remains with any previously-placed overlay. Logo stays anchored to its
     // corner; URL chip yields if it collides; CTA yields last.
     const priorityOf = (k: OverlayKind): number =>
-      ({ logo: 0, url_chip: 1, cta: 2 } as Record<OverlayKind, number>)[k];
+      ({ product: -1, logo: 0, url_chip: 1, cta: 2 } as Record<OverlayKind, number>)[k];
 
     const rectsOverlap = (a: OverlayDesc, b: OverlayDesc): boolean =>
       !(a.left + a.width <= b.left ||
@@ -667,6 +722,7 @@ async function compositeAllOverlays(
         input: o.input,
         left: Math.max(0, Math.round(o.left)),
         top: Math.max(0, Math.round(o.top)),
+        blend: (o.blend as sharp.Blend) || 'over',
       });
     }
 
@@ -701,6 +757,9 @@ export async function POST(req: Request) {
       ctaPosition,
       brandTitle,
       heroMessage,
+      productImage,
+      placementCategory,
+      layoutStyle,
     } = await req.json();
 
     if (!process.env.GOOGLE_GEMINI_API_KEY) {
@@ -790,8 +849,11 @@ export async function POST(req: Request) {
           campaign_expiry: campaignExpiry || null,
           brand_title: brandTitle || null,
           hero_message: heroMessage || null,
+          product_image_url: productImage || null,
           word_count: wordCount,
           hashtag_count: hashtagCount,
+          placement_category: placementCategory || 'physical',
+          layout_style: layoutStyle || null,
         }])
         .select('id')
         .single();
@@ -824,7 +886,8 @@ export async function POST(req: Request) {
       const promptExpansionMsg = getImageExpansionPrompt(
         brandDetails, topic, contentType, platform, extraInstructions, graphicHeadline, heroObjects,
         mentionBrandLogo, brandLogoPosition, mentionWebsiteInPost, brandLinkPosition,
-        ctaText, ctaPosition, brandTitle, heroMessage
+        ctaText, ctaPosition, brandTitle, heroMessage, productImage,
+        placementCategory, layoutStyle
       );
 
       const expansionResult = await ai.models.generateContent({
@@ -911,6 +974,9 @@ export async function POST(req: Request) {
           fillColor: accent,
         };
       }
+      if (productImage) {
+        overlayOpts.product = { url: productImage };
+      }
       const finalBuffer = await compositeAllOverlays(imageBuffer, overlayOpts);
 
       // 8. Upload generated image buffer to Supabase Storage and save metadata
@@ -922,7 +988,7 @@ export async function POST(req: Request) {
         regenPostId, currentCaption,
         mentionBrandLogo, brandLogoPosition, mentionWebsiteInPost, brandLinkPosition,
         ctaText, ctaPosition, graphicHeadline, heroObjects, campaignExpiry, wordCount, hashtagCount,
-        brandTitle, heroMessage
+        brandTitle, heroMessage, productImage
       );
 
     } catch (imgErr: any) {
@@ -977,7 +1043,8 @@ async function processAndStoreBuffer(
   wordCount?: number,
   hashtagCount?: number,
   brandTitle?: string,
-  heroMessage?: string
+  heroMessage?: string,
+  productImage?: string
 ) {
   const adminSupabase = createAdminClient();
 
@@ -1028,6 +1095,7 @@ async function processAndStoreBuffer(
     if (hashtagCount !== undefined) metadataFields.hashtag_count = hashtagCount;
     if (brandTitle !== undefined) metadataFields.brand_title = brandTitle || null;
     if (heroMessage !== undefined) metadataFields.hero_message = heroMessage || null;
+    if (productImage !== undefined) metadataFields.product_image_url = productImage || null;
 
     if (draftId && !isRegen) {
       const updatePayload: any = {

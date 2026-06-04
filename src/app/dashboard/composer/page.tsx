@@ -30,6 +30,11 @@ import {
   Heart,
   MessageCircle,
   Share2,
+  Upload,
+  X,
+  AlertTriangle,
+  Minimize2,
+  Columns,
 } from 'lucide-react';
 import { useBrand } from '@/contexts/BrandContext';
 import { ImageEditor } from '@/components/ImageEditor';
@@ -72,6 +77,9 @@ interface ComposerForm {
   ctaPosition: string;
   brandTitle: string;
   heroMessage: string;
+  productImage: string | null;
+  placementCategory: 'physical' | 'digital' | 'institutional' | null;
+  layoutStyle: 'commercial' | 'minimalist' | 'editorial' | null;
 }
 
 interface GeneratedContent {
@@ -175,7 +183,135 @@ function ComposerPageContent() {
     ctaPosition: 'Bottom Center',
     brandTitle: '',
     heroMessage: '',
+    productImage: null,
+    placementCategory: 'physical',
+    layoutStyle: null,
   });
+
+  // ── Product Image Upload State ─────────────────────────────────────
+  const [isUploadingProduct, setIsUploadingProduct] = useState(false);
+  const [productBgWarning, setProductBgWarning] = useState<string | null>(null);
+  const [useProductAsHero, setUseProductAsHero] = useState(true);
+  const productInputRef = useRef<HTMLInputElement>(null);
+
+  // ── White Background Check (edge-pixel sampling) ───────────────────
+  const checkWhiteBackground = useCallback((file: File): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve(true); return; }
+        ctx.drawImage(img, 0, 0);
+
+        // Sample edge pixels: top row, bottom row, left col, right col
+        const samplePoints: [number, number][] = [];
+        const step = Math.max(1, Math.floor(img.width / 20));
+        // Top & bottom edges
+        for (let x = 0; x < img.width; x += step) {
+          samplePoints.push([x, 0]);
+          samplePoints.push([x, img.height - 1]);
+        }
+        // Left & right edges
+        for (let y = 0; y < img.height; y += step) {
+          samplePoints.push([0, y]);
+          samplePoints.push([img.width - 1, y]);
+        }
+
+        let whiteCount = 0;
+        for (const [x, y] of samplePoints) {
+          const pixel = ctx.getImageData(x, y, 1, 1).data;
+          // Consider "white" as R,G,B all > 230 (or alpha < 30 = transparent)
+          if (pixel[3] < 30 || (pixel[0] > 230 && pixel[1] > 230 && pixel[2] > 230)) {
+            whiteCount++;
+          }
+        }
+
+        const whiteRatio = whiteCount / samplePoints.length;
+        resolve(whiteRatio > 0.7); // At least 70% of edge pixels should be white/transparent
+      };
+      img.onerror = () => resolve(true); // Don't block on error
+      img.src = URL.createObjectURL(file);
+    });
+  }, []);
+
+  // ── Product Image Upload Handler ───────────────────────────────────
+  const handleProductImageUpload = useCallback(async (file: File) => {
+    // Validate file type
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      alert('Please upload a JPG, PNG, or WebP image.');
+      return;
+    }
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image size must be under 5MB.');
+      return;
+    }
+
+    setIsUploadingProduct(true);
+    setProductBgWarning(null);
+
+    try {
+      // Check white background
+      const isWhiteBg = await checkWhiteBackground(file);
+      if (!isWhiteBg) {
+        setProductBgWarning(
+          'The uploaded image may not have a white/transparent background. For best results, use a product photo with a clean white background.'
+        );
+      }
+
+      // Upload to Supabase Storage
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData?.user?.id || 'anonymous';
+      const ext = file.name.split('.').pop() || 'png';
+      const filePath = `${uid}/${Date.now()}_product.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('product-ingest')
+        .upload(filePath, file, {
+          contentType: file.type,
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('product-ingest')
+        .getPublicUrl(filePath);
+
+      setForm(prev => ({ ...prev, productImage: publicUrl }));
+    } catch (err: any) {
+      console.error('Product image upload error:', err);
+      alert(err.message || 'Failed to upload product image.');
+    } finally {
+      setIsUploadingProduct(false);
+    }
+  }, [checkWhiteBackground]);
+
+  const handleProductDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files[0];
+    if (file) handleProductImageUpload(file);
+  }, [handleProductImageUpload]);
+
+  const handleProductFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleProductImageUpload(file);
+    // Reset input so the same file can be re-selected
+    if (e.target) e.target.value = '';
+  }, [handleProductImageUpload]);
+
+  const removeProductImage = useCallback(() => {
+    setForm(prev => ({ ...prev, productImage: null }));
+    setProductBgWarning(null);
+  }, []);
 
   // Update form if brandKits load later
   useEffect(() => {
@@ -293,6 +429,9 @@ function ComposerPageContent() {
         hashtag_count: currentForm.hashtagCount,
         brand_title: currentForm.brandTitle || null,
         hero_message: currentForm.heroMessage || null,
+        product_image_url: currentForm.productImage || null,
+        placement_category: currentForm.placementCategory || 'physical',
+        layout_style: currentForm.layoutStyle || null,
       };
 
       if (currentDraftId) {
@@ -396,6 +535,9 @@ function ComposerPageContent() {
             ctaPosition: data.cta_position || 'Bottom Center',
             brandTitle: data.brand_title || '',
             heroMessage: data.hero_message || '',
+            productImage: data.product_image_url || null,
+            placementCategory: data.placement_category || 'physical',
+            layoutStyle: data.layout_style || null,
           });
 
           if (isEdit) {
@@ -471,7 +613,7 @@ function ComposerPageContent() {
   }, [workspaceId]);
 
   const canProceedStep2 = form.contentType !== null;
-  const canProceedStep3 = form.templateId !== null || form.templateId === 'none';
+  const canProceedStep3 = form.layoutStyle !== null;
   const canProceedStep4 = form.topic.trim().length > 0;
 
   // ── Get the current post ID (for regen calls) ─────────────────────
@@ -639,6 +781,9 @@ function ComposerPageContent() {
           ctaPosition: form.ctaPosition,
           brandTitle: form.brandTitle,
           heroMessage: form.heroMessage,
+          productImage: form.productImage || null,
+          placementCategory: form.placementCategory || 'physical',
+          layoutStyle: form.layoutStyle || null,
           ...(postId ? { postId, currentCaption: editedCaption || generated?.captions[selectedCaption] } : {}),
         }),
       });
@@ -703,6 +848,7 @@ function ComposerPageContent() {
           hashtag_count: form.hashtagCount,
           brand_title: form.brandTitle || null,
           hero_message: form.heroMessage || null,
+          product_image_url: form.productImage || null,
         }));
         await supabase.from('posts').insert(draftsToInsert);
         refreshBrandData(true); // Reflect credits immediately on dashboard
@@ -907,6 +1053,8 @@ function ComposerPageContent() {
           hashtag_count: form.hashtagCount,
           brand_title: form.brandTitle || null,
           hero_message: form.heroMessage || null,
+          placement_category: form.placementCategory || 'physical',
+          layout_style: form.layoutStyle || null,
         };
 
         if (i === 0) {
@@ -1050,38 +1198,73 @@ function ComposerPageContent() {
   // ── Step 2: Template Selector ──────────────────────────────────────
   const renderStep2 = () => {
     if (!form.contentType) return null;
-    const templates = TEMPLATES[form.contentType];
     
+    const layoutStyles = [
+      {
+        id: 'commercial' as const,
+        name: 'Commercial Showcase',
+        desc: 'High-impact central focus, dramatic lighting spotlighting the product photo (Perfect for consumer retail items like a soda bottle).',
+        icon: Sparkles,
+        gradient: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+      },
+      {
+        id: 'minimalist' as const,
+        name: 'Minimalist Modern / Corporate',
+        desc: 'Heavy use of negative brand color space, elegant crisp text alignment, crisp clean geometric shapes (Perfect for corporate branding or software tools).',
+        icon: Minimize2,
+        gradient: 'linear-gradient(135deg, #1e293b 0%, #475569 100%)',
+      },
+      {
+        id: 'editorial' as const,
+        name: 'Editorial / Magazine Style',
+        desc: 'Split presentation with large typography blocks framing a subject illustration or a clean educational background asset.',
+        icon: Columns,
+        gradient: 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)',
+      },
+    ];
+
     return (
       <div className={styles.stepContent}>
-        <h2 className={styles.stepTitle}>Choose a template</h2>
-        <p className={styles.stepDesc}>Select a visual style that matches your vision.</p>
-        <div className={styles.templateGrid}>
-          {templates.map((tpl) => {
-            const isSelected = form.templateId === tpl.id;
+        <h2 className={styles.stepTitle}>Choose a Layout Style</h2>
+        <p className={styles.stepDesc}>Select a visual style baseline that fits your industry and ad convention.</p>
+        <div className={styles.templateGrid} style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+          {layoutStyles.map((styleItem) => {
+            const isSelected = form.layoutStyle === styleItem.id;
+            const Icon = styleItem.icon;
             return (
               <button
-                key={tpl.id}
+                key={styleItem.id}
                 className={`${styles.templateCard} ${isSelected ? styles.templateCardActive : ''}`}
-                onClick={() => setForm({ ...form, templateId: tpl.id })}
+                onClick={() => setForm({ ...form, layoutStyle: styleItem.id })}
               >
-                <div className={styles.templateImage}>
-                  <img src={tpl.image} alt={tpl.name} />
+                <div 
+                  className={styles.layoutStyleVisual}
+                  style={{
+                    background: styleItem.gradient,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '180px',
+                    width: '100%',
+                    borderRadius: '8px',
+                    position: 'relative',
+                    color: 'white',
+                    boxShadow: isSelected ? '0 0 0 4px rgba(79, 70, 229, 0.2)' : 'none',
+                    border: isSelected ? '2px solid var(--primary)' : '2px solid var(--border)'
+                  }}
+                >
+                  <Icon size={44} strokeWidth={1.5} />
                   {isSelected && <div className={styles.templateCheck}><Check size={18} /></div>}
                 </div>
-                <span className={styles.templateName}>{tpl.name}</span>
+                <span className={styles.templateName} style={{ marginTop: '0.5rem', display: 'block', fontSize: '1rem', fontWeight: 700 }}>
+                  {styleItem.name}
+                </span>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0', lineHeight: 1.4 }}>
+                  {styleItem.desc}
+                </p>
               </button>
             );
           })}
-        </div>
-        <div className={styles.templateNoneWrap}>
-          <button 
-            className={`${styles.noneBtn} ${form.templateId === 'none' ? styles.noneBtnActive : ''}`}
-            onClick={() => setForm({ ...form, templateId: 'none' })}
-          >
-            None of the above
-            <p>AI will generate a custom layout for you</p>
-          </button>
         </div>
       </div>
     );
@@ -1120,6 +1303,65 @@ function ComposerPageContent() {
             />
           </div>
 
+          {/* Product Image Upload Zone */}
+          <div className={styles.formGroup}>
+            <label>Product Photo <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.8rem' }}>(Optional)</span></label>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0 0 0.5rem 0', lineHeight: 1.4 }}>
+              Upload your actual product photo with a <strong>white or transparent background</strong>. The AI will feature this exact product in the generated poster.
+            </p>
+
+            {!form.productImage ? (
+              <div
+                className={styles.productUploadZone}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={handleProductDrop}
+                onClick={() => productInputRef.current?.click()}
+              >
+                <input
+                  ref={productInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={handleProductFileChange}
+                />
+                {isUploadingProduct ? (
+                  <div className={styles.uploadSpinner}>
+                    <Loader2 size={28} className={styles.spinning} />
+                    <span>Uploading...</span>
+                  </div>
+                ) : (
+                  <>
+                    <Upload size={28} strokeWidth={1.5} />
+                    <span className={styles.uploadText}>Drag & drop or click to upload</span>
+                    <span className={styles.uploadHint}>JPG, PNG, WebP • Max 5MB</span>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className={styles.productPreview}>
+                <div className={styles.productThumb}>
+                  <img src={form.productImage} alt="Product" />
+                </div>
+                <div className={styles.productPreviewInfo}>
+                  <span className={styles.productPreviewLabel}>Product photo uploaded</span>
+                  <button
+                    type="button"
+                    className={styles.productRemoveBtn}
+                    onClick={removeProductImage}
+                  >
+                    <X size={14} /> Remove
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {productBgWarning && (
+              <div className={styles.bgWarning}>
+                <AlertTriangle size={14} />
+                <span>{productBgWarning}</span>
+              </div>
+            )}
+          </div>
           <div className={styles.formRowTwo}>
             <div className={styles.formGroup}>
               <label htmlFor="brandKit">Brand Kit</label>
@@ -1140,6 +1382,21 @@ function ComposerPageContent() {
             </div>
 
             <div className={styles.formGroup}>
+              <label htmlFor="placementCategory">Placement Category</label>
+              <select
+                id="placementCategory"
+                value={form.placementCategory || 'physical'}
+                onChange={(e) => setForm({ ...form, placementCategory: e.target.value as any })}
+              >
+                <option value="physical">Physical Product (Packaged Goods, Food, Bottles)</option>
+                <option value="digital">Digital Service / Software Solution</option>
+                <option value="institutional">Institutional / Informational Awareness</option>
+              </select>
+            </div>
+          </div>
+
+          <div className={styles.formRowTwo}>
+            <div className={styles.formGroup}>
               <label htmlFor="campaignExpiry">Campaign Expiry (Optional)</label>
               <input
                 id="campaignExpiry"
@@ -1148,6 +1405,7 @@ function ComposerPageContent() {
                 onChange={(e) => setForm({ ...form, campaignExpiry: e.target.value })}
               />
             </div>
+            <div className={styles.formGroup} />
           </div>
 
           <div className={styles.formRowTwo}>
@@ -1163,13 +1421,27 @@ function ComposerPageContent() {
               />
             </div>
             <div className={styles.formGroup}>
-              <label htmlFor="heroObjects">Hero Objects</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <label htmlFor="heroObjects" style={{ marginBottom: 0 }}>Hero Objects</label>
+                {form.productImage && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 400, fontSize: '0.85rem', cursor: 'pointer', marginBottom: 0, color: 'var(--text-muted)' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={useProductAsHero} 
+                      onChange={(e) => setUseProductAsHero(e.target.checked)}
+                      style={{ width: 'auto', margin: 0, accentColor: 'var(--primary)' }}
+                    />
+                    as Product Image
+                  </label>
+                )}
+              </div>
               <input
                 id="heroObjects"
                 type="text"
                 placeholder="e.g. Fresh Bread Loaf, Phones"
                 maxLength={200}
-                value={form.heroObjects}
+                value={form.productImage && useProductAsHero ? 'Using Product Image' : form.heroObjects}
+                disabled={!!form.productImage && useProductAsHero}
                 onChange={(e) => setForm({ ...form, heroObjects: e.target.value })}
               />
             </div>
@@ -1377,7 +1649,6 @@ function ComposerPageContent() {
               </div>
             </div>
           </div>
-          </div>
         </div>
       </div>
     </div>
@@ -1421,7 +1692,7 @@ function ComposerPageContent() {
         </h2>
         <p className={styles.generatingDesc}>
           {generationState === 'stopped' ? 'You stopped the AI generation process.' : 
-           'AI is crafting 3 caption variants and 2 image options based on your brand kit.'}
+           'AI is crafting a caption and a image based on your inputs.'}
         </p>
         <div className={styles.generatingSteps}>
           <div className={`${styles.genStep} ${generationState !== 'stopped' ? styles.genStepActive : ''}`}>
