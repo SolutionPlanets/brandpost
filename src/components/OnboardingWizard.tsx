@@ -121,7 +121,8 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
     selectedPlatforms: [] as string[],
     platforms: [],
     instagram: '',
-    facebook: ''
+    facebook: '',
+    productImages: [] as { id?: string; imageUrl: string; productName: string; file?: File; displayOrder: number }[]
   });
 
   useEffect(() => {
@@ -185,6 +186,7 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
             websiteUrl: '',
             phrasesToInclude: '',
             phrasesToAvoid: '',
+            productImages: [],
           };
         } else {
           // Editing existing or initial onboarding
@@ -216,6 +218,12 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
             websiteUrl: brandKit?.website_url || '',
             phrasesToInclude: brandKit?.phrases_to_include || '',
             phrasesToAvoid: brandKit?.phrases_to_avoid || '',
+            productImages: (brandKit?.brand_kit_products || []).map((p: any) => ({
+              id: p.id,
+              imageUrl: p.image_url,
+              productName: p.product_name || '',
+              displayOrder: p.display_order || 0
+            })).sort((a: any, b: any) => a.displayOrder - b.displayOrder),
           };
         }
 
@@ -422,7 +430,45 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
         payload.id = targetId;
       }
 
-      await supabase.from('brand_kits').upsert(payload);
+      const { data: upsertedKit, error: upsertError } = await supabase.from('brand_kits').upsert(payload).select().single();
+      
+      if (upsertError) {
+        console.error('Error upserting brand kit:', upsertError);
+        return;
+      }
+
+      const finalBrandKitId = upsertedKit?.id || targetId;
+
+      // Sync products
+      if (finalBrandKitId && formData.productImages) {
+        // 1. Fetch existing products for this kit to know what to delete
+        const { data: existingProducts } = await supabase
+          .from('brand_kit_products')
+          .select('id')
+          .eq('brand_kit_id', finalBrandKitId);
+        
+        const existingIds = (existingProducts || []).map(p => p.id);
+        const currentIds = formData.productImages.filter(p => p.id).map(p => p.id);
+        const idsToDelete = existingIds.filter(id => !currentIds.includes(id));
+
+        // 2. Delete removed products
+        if (idsToDelete.length > 0) {
+          await supabase.from('brand_kit_products').delete().in('id', idsToDelete);
+        }
+
+        // 3. Upsert current products
+        if (formData.productImages.length > 0) {
+          const productsPayload = formData.productImages.map((p, index) => ({
+            ...(p.id ? { id: p.id } : {}),
+            brand_kit_id: finalBrandKitId,
+            product_name: p.productName || null,
+            image_url: p.imageUrl,
+            display_order: index
+          }));
+          await supabase.from('brand_kit_products').upsert(productsPayload);
+        }
+      }
+      
     } catch (err) {
       console.error('Fatal error in saveBrandKit:', err);
     }
@@ -594,6 +640,52 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleProductUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length) return;
+    
+    setUploading(true);
+    const files = Array.from(e.target.files);
+    
+    const newProducts = [...formData.productImages];
+    
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      
+      const fileExt = file.name.split('.').pop() || 'png';
+      const fileName = `${Date.now()}_product_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('product-ingest')
+        .upload(fileName, file);
+        
+      if (!uploadError) {
+        const { data } = supabase.storage.from('product-ingest').getPublicUrl(fileName);
+        newProducts.push({
+          imageUrl: data.publicUrl,
+          productName: '',
+          displayOrder: newProducts.length
+        });
+      } else {
+        console.error('Error uploading product image:', uploadError);
+      }
+    }
+    
+    setFormData(prev => ({ ...prev, productImages: newProducts }));
+    setUploading(false);
+  };
+
+  const handleProductDelete = (index: number) => {
+    const newProducts = [...formData.productImages];
+    newProducts.splice(index, 1);
+    setFormData(prev => ({ ...prev, productImages: newProducts }));
+  };
+
+  const handleProductNameChange = (index: number, newName: string) => {
+    const newProducts = [...formData.productImages];
+    newProducts[index].productName = newName;
+    setFormData(prev => ({ ...prev, productImages: newProducts }));
   };
 
   const onDragOver = (e: React.DragEvent) => {
@@ -1079,6 +1171,75 @@ export default function OnboardingWizard({ brandKitId, onComplete }: OnboardingW
                 value={formData.description || ''}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               ></textarea>
+            </div>
+            
+            {/* Product Images Upload Section */}
+            <div className={styles.inputGroup} style={{ marginTop: '20px' }}>
+              <label>Product Images (Optional)</label>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
+                Upload your product images with transparent or white backgrounds to feature them in generated posts.
+              </p>
+              
+              <div 
+                className={`${styles.uploadBox} ${isDragging ? styles.dragging : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+                  if (files.length > 0) {
+                    const fakeEvent = { target: { files } } as any;
+                    handleProductUpload(fakeEvent);
+                  }
+                }}
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.multiple = true;
+                  input.accept = 'image/png, image/jpeg, image/webp';
+                  input.onchange = handleProductUpload as any;
+                  input.click();
+                }}
+                style={{ minHeight: '100px', padding: '1.5rem', marginBottom: '15px' }}
+              >
+                {uploading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
+                    <Loader2 size={20} className="animate-spin" /> Uploading...
+                  </div>
+                ) : (
+                  <>
+                    <Upload size={24} className={styles.uploadIcon} />
+                    <span>Click or drag products here</span>
+                  </>
+                )}
+              </div>
+              
+              {formData.productImages.length > 0 && (
+                <div className={styles.productGallery}>
+                  {formData.productImages.map((product, index) => (
+                    <div key={index} className={styles.productCard}>
+                      <button 
+                        className={styles.productDeleteBtn} 
+                        onClick={() => handleProductDelete(index)}
+                        title="Remove product"
+                      >
+                        <X size={14} />
+                      </button>
+                      <div className={styles.productThumb}>
+                        <img src={product.imageUrl} alt={product.productName || 'Product'} />
+                      </div>
+                      <input 
+                        type="text" 
+                        className={styles.productNameInput}
+                        placeholder="Product Name (e.g. Zeera Soda)" 
+                        value={product.productName || ''}
+                        onChange={(e) => handleProductNameChange(index, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         );

@@ -77,7 +77,7 @@ interface ComposerForm {
   ctaPosition: string;
   brandTitle: string;
   heroMessage: string;
-  productImage: string | null;
+  selectedProductIds: string[];
   placementCategory: 'physical' | 'digital' | 'institutional' | null;
   layoutStyle: 'commercial' | 'minimalist' | 'editorial' | null;
 }
@@ -158,10 +158,6 @@ function ComposerPageContent() {
   const [connectionMappings, setConnectionMappings] = useState<Record<string, { imageIndex: number; captionIndex: number }>>({});
   const [activePreviewPlatform, setActivePreviewPlatform] = useState<'facebook' | 'instagram'>('facebook');
 
-  // ── Regen limit tracking ───────────────────────────────────────────
-  const [remainingImageRegens, setRemainingImageRegens] = useState(3);
-  const [remainingCaptionRegens, setRemainingCaptionRegens] = useState(3);
-
   const [form, setForm] = useState<ComposerForm>({
     contentType: null,
     templateId: null,
@@ -183,135 +179,44 @@ function ComposerPageContent() {
     ctaPosition: 'Bottom Center',
     brandTitle: '',
     heroMessage: '',
-    productImage: null,
+    selectedProductIds: [],
     placementCategory: 'physical',
     layoutStyle: null,
   });
 
-  // ── Product Image Upload State ─────────────────────────────────────
-  const [isUploadingProduct, setIsUploadingProduct] = useState(false);
-  const [productBgWarning, setProductBgWarning] = useState<string | null>(null);
+  // ── Product Image Selection State ─────────────────────────────────────
   const [useProductAsHero, setUseProductAsHero] = useState(true);
-  const productInputRef = useRef<HTMLInputElement>(null);
 
-  // ── White Background Check (edge-pixel sampling) ───────────────────
-  const checkWhiteBackground = useCallback((file: File): Promise<boolean> => {
-    return new Promise((resolve) => {
-      const img = new window.Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { resolve(true); return; }
-        ctx.drawImage(img, 0, 0);
+  // Update form if brandKits load later
+  useEffect(() => {
+    if (brandKits.length > 0 && form.brandKit === 'main-brand') {
+      setForm(prev => ({ ...prev, brandKit: brandKits[0].id }));
+    }
+  }, [brandKits]);
 
-        // Sample edge pixels: top row, bottom row, left col, right col
-        const samplePoints: [number, number][] = [];
-        const step = Math.max(1, Math.floor(img.width / 20));
-        // Top & bottom edges
-        for (let x = 0; x < img.width; x += step) {
-          samplePoints.push([x, 0]);
-          samplePoints.push([x, img.height - 1]);
-        }
-        // Left & right edges
-        for (let y = 0; y < img.height; y += step) {
-          samplePoints.push([0, y]);
-          samplePoints.push([img.width - 1, y]);
-        }
+  // Handle brand kit change - reset product selection
+  const handleBrandKitChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setForm(prev => ({ 
+      ...prev, 
+      brandKit: e.target.value,
+      selectedProductIds: [] // Reset selection on kit change
+    }));
+  };
 
-        let whiteCount = 0;
-        for (const [x, y] of samplePoints) {
-          const pixel = ctx.getImageData(x, y, 1, 1).data;
-          // Consider "white" as R,G,B all > 230 (or alpha < 30 = transparent)
-          if (pixel[3] < 30 || (pixel[0] > 230 && pixel[1] > 230 && pixel[2] > 230)) {
-            whiteCount++;
-          }
-        }
+  // Get products for currently selected brand kit
+  const selectedKitObj = brandKits.find(k => k.id === form.brandKit);
+  const availableProducts = selectedKitObj?.products || [];
 
-        const whiteRatio = whiteCount / samplePoints.length;
-        resolve(whiteRatio > 0.7); // At least 70% of edge pixels should be white/transparent
-      };
-      img.onerror = () => resolve(true); // Don't block on error
-      img.src = URL.createObjectURL(file);
+  const handleProductToggle = (productId: string) => {
+    setForm(prev => {
+      const current = prev.selectedProductIds;
+      if (current.includes(productId)) {
+        return { ...prev, selectedProductIds: current.filter(id => id !== productId) };
+      } else {
+        return { ...prev, selectedProductIds: [...current, productId] };
+      }
     });
-  }, []);
-
-  // ── Product Image Upload Handler ───────────────────────────────────
-  const handleProductImageUpload = useCallback(async (file: File) => {
-    // Validate file type
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      alert('Please upload a JPG, PNG, or WebP image.');
-      return;
-    }
-    // Validate file size (5MB max)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image size must be under 5MB.');
-      return;
-    }
-
-    setIsUploadingProduct(true);
-    setProductBgWarning(null);
-
-    try {
-      // Check white background
-      const isWhiteBg = await checkWhiteBackground(file);
-      if (!isWhiteBg) {
-        setProductBgWarning(
-          'The uploaded image may not have a white/transparent background. For best results, use a product photo with a clean white background.'
-        );
-      }
-
-      // Upload to Supabase Storage
-      const supabase = createClient();
-      const { data: userData } = await supabase.auth.getUser();
-      const uid = userData?.user?.id || 'anonymous';
-      const ext = file.name.split('.').pop() || 'png';
-      const filePath = `${uid}/${Date.now()}_product.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('product-ingest')
-        .upload(filePath, file, {
-          contentType: file.type,
-          cacheControl: '3600',
-          upsert: true,
-        });
-
-      if (uploadError) {
-        throw new Error(`Upload failed: ${uploadError.message}`);
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('product-ingest')
-        .getPublicUrl(filePath);
-
-      setForm(prev => ({ ...prev, productImage: publicUrl }));
-    } catch (err: any) {
-      console.error('Product image upload error:', err);
-      alert(err.message || 'Failed to upload product image.');
-    } finally {
-      setIsUploadingProduct(false);
-    }
-  }, [checkWhiteBackground]);
-
-  const handleProductDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const file = e.dataTransfer.files[0];
-    if (file) handleProductImageUpload(file);
-  }, [handleProductImageUpload]);
-
-  const handleProductFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleProductImageUpload(file);
-    // Reset input so the same file can be re-selected
-    if (e.target) e.target.value = '';
-  }, [handleProductImageUpload]);
-
-  const removeProductImage = useCallback(() => {
-    setForm(prev => ({ ...prev, productImage: null }));
-    setProductBgWarning(null);
-  }, []);
+  };
 
   // Update form if brandKits load later
   useEffect(() => {
@@ -429,7 +334,7 @@ function ComposerPageContent() {
         hashtag_count: currentForm.hashtagCount,
         brand_title: currentForm.brandTitle || null,
         hero_message: currentForm.heroMessage || null,
-        product_image_url: currentForm.productImage || null,
+        product_image_url: currentForm.selectedProductIds.length > 0 ? currentForm.selectedProductIds[0] : null,
         placement_category: currentForm.placementCategory || 'physical',
         layout_style: currentForm.layoutStyle || null,
       };
@@ -535,7 +440,7 @@ function ComposerPageContent() {
             ctaPosition: data.cta_position || 'Bottom Center',
             brandTitle: data.brand_title || '',
             heroMessage: data.hero_message || '',
-            productImage: data.product_image_url || null,
+            selectedProductIds: data.product_image_url ? [data.product_image_url] : [],
             placementCategory: data.placement_category || 'physical',
             layoutStyle: data.layout_style || null,
           });
@@ -665,13 +570,8 @@ function ComposerPageContent() {
         }
       }
 
-      // Update remaining regen counts from API response
-      if (typeof imagesData.remainingImageRegens === 'number') {
-        setRemainingImageRegens(imagesData.remainingImageRegens);
-      }
-      if (typeof captionsData.remainingCaptionRegens === 'number') {
-        setRemainingCaptionRegens(captionsData.remainingCaptionRegens);
-      }
+      // Sync local storage limit (don't override with backend per-post limit)
+      // The backend returns per-post limits, but we want a global daily limit for the user
 
       setStep(5);
       refreshBrandData(true); // Silently update credits and history
@@ -717,6 +617,12 @@ function ComposerPageContent() {
             phrasesToAvoid: selectedKit?.phrases_to_avoid || phrasesToAvoid,
           },
           mentionWebsiteInCaption: form.brandKit !== 'none' ? form.mentionWebsiteInCaption : false,
+          productImages: form.selectedProductIds.length > 0 
+            ? availableProducts.filter(p => form.selectedProductIds.includes(p.id)).map(p => p.image_url) 
+            : [],
+          productNames: form.selectedProductIds.length > 0
+            ? availableProducts.filter(p => form.selectedProductIds.includes(p.id)).map(p => p.product_name)
+            : [],
           ...(postId ? { postId } : {}),
         }),
       });
@@ -777,11 +683,15 @@ function ComposerPageContent() {
           brandLogoPosition: form.brandLogoPosition,
           mentionWebsiteInPost: form.brandKit !== 'none' ? form.mentionWebsiteInPost : false,
           brandLinkPosition: form.brandLinkPosition,
-          ctaText: form.ctaText,
           ctaPosition: form.ctaPosition,
           brandTitle: form.brandTitle,
           heroMessage: form.heroMessage,
-          productImage: form.productImage || null,
+          productImages: form.selectedProductIds.length > 0 
+            ? availableProducts.filter(p => form.selectedProductIds.includes(p.id)).map(p => p.image_url) 
+            : [],
+          productNames: form.selectedProductIds.length > 0
+            ? availableProducts.filter(p => form.selectedProductIds.includes(p.id)).map(p => p.product_name)
+            : [],
           placementCategory: form.placementCategory || 'physical',
           layoutStyle: form.layoutStyle || null,
           ...(postId ? { postId, currentCaption: editedCaption || generated?.captions[selectedCaption] } : {}),
@@ -848,15 +758,13 @@ function ComposerPageContent() {
           hashtag_count: form.hashtagCount,
           brand_title: form.brandTitle || null,
           hero_message: form.heroMessage || null,
-          product_image_url: form.productImage || null,
+          product_image_url: form.selectedProductIds.length > 0 ? form.selectedProductIds[0] : null,
         }));
         await supabase.from('posts').insert(draftsToInsert);
         refreshBrandData(true); // Reflect credits immediately on dashboard
       }
-      // Update remaining regen count
-      if (typeof data.remainingCaptionRegens === 'number') {
-        setRemainingCaptionRegens(data.remainingCaptionRegens);
-      }
+      // Deduct from local daily limit
+      decrementCaptionRegen();
     } catch (error: any) {
       alert(error.message);
     }
@@ -884,10 +792,8 @@ function ComposerPageContent() {
         });
         refreshBrandData(true); // Reflect credits immediately on dashboard
       }
-      // Update remaining regen count
-      if (typeof data.remainingImageRegens === 'number') {
-        setRemainingImageRegens(data.remainingImageRegens);
-      }
+      // Deduct from local daily limit
+      decrementImageRegen();
     } catch (error: any) {
       alert(error.message);
     }
@@ -1303,72 +1209,13 @@ function ComposerPageContent() {
             />
           </div>
 
-          {/* Product Image Upload Zone */}
-          <div className={styles.formGroup}>
-            <label>Product Photo <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.8rem' }}>(Optional)</span></label>
-            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0 0 0.5rem 0', lineHeight: 1.4 }}>
-              Upload your actual product photo with a <strong>white or transparent background</strong>. The AI will feature this exact product in the generated poster.
-            </p>
-
-            {!form.productImage ? (
-              <div
-                className={styles.productUploadZone}
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onDrop={handleProductDrop}
-                onClick={() => productInputRef.current?.click()}
-              >
-                <input
-                  ref={productInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  style={{ display: 'none' }}
-                  onChange={handleProductFileChange}
-                />
-                {isUploadingProduct ? (
-                  <div className={styles.uploadSpinner}>
-                    <Loader2 size={28} className={styles.spinning} />
-                    <span>Uploading...</span>
-                  </div>
-                ) : (
-                  <>
-                    <Upload size={28} strokeWidth={1.5} />
-                    <span className={styles.uploadText}>Drag & drop or click to upload</span>
-                    <span className={styles.uploadHint}>JPG, PNG, WebP • Max 5MB</span>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className={styles.productPreview}>
-                <div className={styles.productThumb}>
-                  <img src={form.productImage} alt="Product" />
-                </div>
-                <div className={styles.productPreviewInfo}>
-                  <span className={styles.productPreviewLabel}>Product photo uploaded</span>
-                  <button
-                    type="button"
-                    className={styles.productRemoveBtn}
-                    onClick={removeProductImage}
-                  >
-                    <X size={14} /> Remove
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {productBgWarning && (
-              <div className={styles.bgWarning}>
-                <AlertTriangle size={14} />
-                <span>{productBgWarning}</span>
-              </div>
-            )}
-          </div>
           <div className={styles.formRowTwo}>
             <div className={styles.formGroup}>
               <label htmlFor="brandKit">Brand Kit</label>
               <select
                 id="brandKit"
                 value={form.brandKit}
-                onChange={(e) => setForm({ ...form, brandKit: e.target.value })}
+                onChange={handleBrandKitChange}
               >
                 {brandKits.length > 0 ? (
                   brandKits.map(kit => (
@@ -1394,6 +1241,42 @@ function ComposerPageContent() {
               </select>
             </div>
           </div>
+
+          {/* Product Selection Zone */}
+          {form.brandKit !== 'none' && (
+            <div className={styles.formGroup}>
+              <label>Select Products <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.8rem' }}>(Optional)</span></label>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0 0 0.5rem 0', lineHeight: 1.4 }}>
+                Select products from your brand kit to feature them in the generated poster. AI will use these to create the scene.
+              </p>
+
+              {availableProducts.length > 0 ? (
+                <div className={styles.productSelectorGrid}>
+                  {availableProducts.map(product => {
+                    const isSelected = form.selectedProductIds.includes(product.id);
+                    return (
+                      <div 
+                        key={product.id} 
+                        className={`${styles.productSelectorCard} ${isSelected ? styles.productSelected : ''}`}
+                        onClick={() => handleProductToggle(product.id)}
+                      >
+                        <div className={styles.productSelectorCheck}>
+                          {isSelected && <Check size={14} strokeWidth={3} />}
+                        </div>
+                        <img src={product.image_url} alt={product.product_name || 'Product'} />
+                        {product.product_name && <span className={styles.productSelectorName}>{product.product_name}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className={styles.noProductsHint}>
+                  <AlertTriangle size={18} />
+                  <span>No products found in this brand kit. You can upload products in your Brand Kit settings.</span>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className={styles.formRowTwo}>
             <div className={styles.formGroup}>
@@ -1423,7 +1306,7 @@ function ComposerPageContent() {
             <div className={styles.formGroup}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <label htmlFor="heroObjects" style={{ marginBottom: 0 }}>Hero Objects</label>
-                {form.productImage && (
+                {form.selectedProductIds.length > 0 && (
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 400, fontSize: '0.85rem', cursor: 'pointer', marginBottom: 0, color: 'var(--text-muted)' }}>
                     <input 
                       type="checkbox" 
@@ -1440,8 +1323,8 @@ function ComposerPageContent() {
                 type="text"
                 placeholder="e.g. Fresh Bread Loaf, Phones"
                 maxLength={200}
-                value={form.productImage && useProductAsHero ? 'Using Product Image' : form.heroObjects}
-                disabled={!!form.productImage && useProductAsHero}
+                value={form.selectedProductIds.length > 0 && useProductAsHero ? 'Using Selected Products' : form.heroObjects}
+                disabled={form.selectedProductIds.length > 0 && useProductAsHero}
                 onChange={(e) => setForm({ ...form, heroObjects: e.target.value })}
               />
             </div>
@@ -1782,15 +1665,15 @@ function ComposerPageContent() {
 
             <div className={styles.imageOptions} style={{ justifyContent: 'space-between' }}>
               <span className={styles.regenBadge}>
-                {remainingImageRegens > 0 
-                  ? `${remainingImageRegens} regen${remainingImageRegens !== 1 ? 's' : ''} left today`
+                {imageRegenAttempts > 0 
+                  ? `${imageRegenAttempts} regen${imageRegenAttempts !== 1 ? 's' : ''} left today`
                   : 'Limit reached today'}
               </span>
               <button 
-                className={`${styles.regenerateBtn} ${remainingImageRegens <= 0 ? styles.regenDisabled : ''}`}
+                className={`${styles.regenerateBtn} ${imageRegenAttempts <= 0 ? styles.regenDisabled : ''}`}
                 onClick={handleRegenerateImages}
-                disabled={isGeneratingImages || remainingImageRegens <= 0}
-                title={remainingImageRegens <= 0 ? 'Daily regeneration limit reached (3/3)' : `Regenerate image (${remainingImageRegens} left)`}
+                disabled={isGeneratingImages || imageRegenAttempts <= 0}
+                title={imageRegenAttempts <= 0 ? 'Daily regeneration limit reached (3/3)' : `Regenerate image (${imageRegenAttempts} left)`}
               >
                 {isGeneratingImages ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
                 Regenerate Image
@@ -1829,8 +1712,8 @@ function ComposerPageContent() {
             <div className={styles.captionVariants}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span className={styles.regenBadge}>
-                  {remainingCaptionRegens > 0
-                    ? `${remainingCaptionRegens} regen${remainingCaptionRegens !== 1 ? 's' : ''} left today`
+                  {captionRegenAttempts > 0 
+                    ? `${captionRegenAttempts} regen${captionRegenAttempts !== 1 ? 's' : ''} left today`
                     : 'Limit reached today'}
                 </span>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -1855,10 +1738,10 @@ function ComposerPageContent() {
                     Save Image
                   </button>
                   <button 
-                    className={`${styles.regenerateBtn} ${remainingCaptionRegens <= 0 ? styles.regenDisabled : ''}`}
+                    className={`${styles.regenerateBtn} ${captionRegenAttempts <= 0 ? styles.regenDisabled : ''}`}
                     onClick={handleRegenerateCaptions}
-                    disabled={isGeneratingCaptions || remainingCaptionRegens <= 0}
-                    title={remainingCaptionRegens <= 0 ? 'Daily regeneration limit reached (3/3)' : `Regenerate caption (${remainingCaptionRegens} left)`}
+                    disabled={isGeneratingCaptions || captionRegenAttempts <= 0}
+                    title={captionRegenAttempts <= 0 ? 'Daily regeneration limit reached (3/3)' : `Regenerate caption (${captionRegenAttempts} left)`}
                   >
                     {isGeneratingCaptions ? <Loader2 size={14} className={styles.spinner} /> : <RefreshCw size={14} />}
                     Regenerate Caption

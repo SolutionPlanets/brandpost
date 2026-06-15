@@ -19,6 +19,11 @@ interface BrandKitCardProps {
     website_url?: string;
     phrases_to_include?: string;
     phrases_to_avoid?: string;
+    products?: {
+      id: string;
+      product_name: string | null;
+      image_url: string;
+    }[];
   };
   onEdit?: () => void;
 }
@@ -167,6 +172,28 @@ const BrandKitCard: React.FC<BrandKitCardProps> = ({ brandKit, onEdit }) => {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* ── Products Section ── */}
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <Palette size={16} />
+            <span>Products</span>
+          </div>
+          {brandKit.products && brandKit.products.length > 0 ? (
+            <div className={styles.colorGrid} style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              {brandKit.products.map((product) => (
+                <div key={product.id} className={styles.colorItem} style={{ flexDirection: 'column', alignItems: 'center', width: '100px' }}>
+                  <img src={product.image_url} alt={product.product_name || 'Product'} style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
+                  <span className={styles.colorLabel} style={{ textAlign: 'center', marginTop: '0.5rem' }}>
+                    {product.product_name || 'Unnamed Product'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className={styles.description}>No products uploaded for this brand kit.</p>
+          )}
         </div>
       </div>
     </div>

@@ -548,50 +548,134 @@ async function buildLogoOverlay(
 
 // ── Build the product overlay ──
 
-async function buildProductOverlay(
+async function buildProductsOverlay(
   baseBuffer: Buffer,
   baseW: number,
   baseH: number,
-  productUrl: string
-): Promise<OverlayDesc | null> {
-  try {
-    const productBuf = await fetchAsBuffer(productUrl);
-    
-    // We want the product to occupy about 60% of the image size
-    // but maintain its aspect ratio.
-    const targetSize = Math.round(Math.min(baseW, baseH) * 0.6);
-    
-    const resized = await sharp(productBuf)
-      .resize({ width: targetSize, height: targetSize, fit: 'inside' })
-      .toBuffer();
+  productUrls: string[]
+): Promise<OverlayDesc[]> {
+  const descriptors: OverlayDesc[] = [];
+  
+  if (!productUrls || productUrls.length === 0) return descriptors;
+  
+  // ── Adaptive sizing: products should be HERO-sized, dominating the frame ──
+  // Use 95% of width so products fill edge-to-edge
+  const containerW = Math.round(baseW * 0.95);
+  // Use 80% of height — products are the star of the show
+  const containerH = Math.round(baseH * 0.80);
+  
+  // Tighter gap between products so they feel like a cohesive group
+  const gap = productUrls.length > 1 ? Math.round(baseW * 0.03) : 0;
+  
+  // Width allocated to each individual product
+  const targetW = Math.round((containerW - (gap * (productUrls.length - 1))) / productUrls.length);
+  const targetH = Math.round(containerH);
+
+  let totalActualW = 0;
+  let maxActualH = 0;
+  
+  const processedProducts = [];
+  
+  // First pass: process and resize all products
+  for (const url of productUrls) {
+    try {
+      const productBuf = await fetchAsBuffer(url);
       
-    const meta = await sharp(resized).metadata();
-    const w = meta.width || targetSize;
-    const h = meta.height || targetSize;
-    
-    const left = Math.round((baseW - w) / 2);
-    const top = Math.round((baseH - h) / 2);
-
-    // If the image is a PNG with alpha, blend 'over'. If it's a JPEG or solid white bg, blend 'multiply'.
-    const info = await analyseLogo(productBuf);
-    const blend = info.hasAlpha ? 'over' : 'multiply';
-    
-    console.log(`📸 Product overlay: size=${w}×${h} blend=${blend}`);
-
-    return {
-      kind: 'product',
-      position: 'center', // Doesn't push UI elements, it sits in the middle
-      input: resized,
-      width: w,
-      height: h,
-      left,
-      top,
-      blend,
-    };
-  } catch (e: any) {
-    console.warn('Product overlay failed:', e.message);
-    return null;
+      // Process image to ensure transparency instead of using multiply blend mode
+      const { data, info: rawInfo } = await sharp(productBuf)
+        .resize({ width: targetW, height: targetH, fit: 'inside' })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+        
+      // Iterate through RGBA pixels and make near-white background transparent
+      for (let j = 0; j < data.length; j += 4) {
+        const r = data[j];
+        const g = data[j+1];
+        const b = data[j+2];
+        // If pixel is very close to pure white, make it transparent
+        if (r > 240 && g > 240 && b > 240) {
+          data[j+3] = 0; // Set Alpha to 0
+        }
+      }
+      
+      const transparentBuf = await sharp(data, {
+        raw: {
+          width: rawInfo.width,
+          height: rawInfo.height,
+          channels: 4
+        }
+      }).png().toBuffer();
+      
+      processedProducts.push({ buffer: transparentBuf, width: rawInfo.width, height: rawInfo.height, blend: 'over' });
+      
+      totalActualW += rawInfo.width;
+      maxActualH = Math.max(maxActualH, rawInfo.height);
+    } catch (e: any) {
+      console.warn('Failed to process product image:', url, e.message);
+    }
   }
+  
+  if (processedProducts.length === 0) return descriptors;
+  
+  // Add gaps to total width
+  totalActualW += gap * (processedProducts.length - 1);
+  
+  // Start left so that the whole group is centered horizontally
+  let currentLeft = Math.round((baseW - totalActualW) / 2);
+  // Place products in the lower 60% of the frame, leaving top 25% for headlines
+  // Center of the product zone = 60% down from the top
+  const centerTop = Math.round(baseH * 0.58);
+  
+  for (let i = 0; i < processedProducts.length; i++) {
+    const p = processedProducts[i];
+    
+    // Center vertically, shift slightly up so shadow has room
+    const top = centerTop - Math.round(p.height / 2) - Math.round(p.height * 0.02);
+    
+    // Create soft contact shadow via SVG radial gradient
+    const shadowW = Math.round(p.width * 0.85);
+    const shadowH = Math.max(Math.round(p.height * 0.12), 20);
+    const shadowSvg = Buffer.from(`
+      <svg width="${shadowW}" height="${shadowH}" viewBox="0 0 ${shadowW} ${shadowH}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="shadowGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="black" stop-opacity="0.85"/>
+            <stop offset="40%" stop-color="black" stop-opacity="0.5"/>
+            <stop offset="100%" stop-color="black" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <ellipse cx="${shadowW/2}" cy="${shadowH/2}" rx="${shadowW/2}" ry="${shadowH/2}" fill="url(#shadowGrad)" />
+      </svg>
+    `);
+
+    // Add shadow behind the product
+    descriptors.push({
+      kind: 'product',
+      position: 'center',
+      input: shadowSvg,
+      width: shadowW,
+      height: shadowH,
+      left: currentLeft + Math.round((p.width - shadowW) / 2),
+      top: top + p.height - Math.round(shadowH / 2.5), // Tuck it nicely under the base
+      blend: 'over'
+    });
+
+    descriptors.push({
+      kind: 'product',
+      position: 'center',
+      input: p.buffer,
+      width: p.width,
+      height: p.height,
+      left: currentLeft,
+      top,
+      blend: p.blend as any
+    });
+    
+    currentLeft += p.width + gap;
+  }
+  
+  return descriptors;
 }
 
 // ── Unified compositor ──
@@ -603,14 +687,14 @@ interface OverlayOptions {
   logo?: { primary: string; transparent: string | null; position: string };
   urlChip?: { url: string; position: string };
   cta?: { text: string; position: string; fillColor: string };
-  product?: { url: string };
+  products?: { urls: string[] };
 }
 
 async function compositeAllOverlays(
   baseBuffer: Buffer,
   opts: OverlayOptions
 ): Promise<Buffer> {
-  if (!opts.logo && !opts.urlChip && !opts.cta && !opts.product) return baseBuffer;
+  if (!opts.logo && !opts.urlChip && !opts.cta && !opts.products) return baseBuffer;
 
   try {
     const baseMeta = await sharp(baseBuffer).metadata();
@@ -655,9 +739,9 @@ async function compositeAllOverlays(
       console.log(`🟢 CTA: "${opts.cta.text}" pos=${opts.cta.position} size=${width}×${height}`);
     }
 
-    if (opts.product) {
-      const desc = await buildProductOverlay(baseBuffer, baseW, baseH, opts.product.url);
-      if (desc) overlays.push(desc);
+    if (opts.products && opts.products.urls.length > 0) {
+      const pDescs = await buildProductsOverlay(baseBuffer, baseW, baseH, opts.products.urls);
+      overlays.push(...pDescs);
     }
 
     if (overlays.length === 0) return baseBuffer;
@@ -757,7 +841,8 @@ export async function POST(req: Request) {
       ctaPosition,
       brandTitle,
       heroMessage,
-      productImage,
+      productImages,
+      productNames,
       placementCategory,
       layoutStyle,
     } = await req.json();
@@ -849,7 +934,7 @@ export async function POST(req: Request) {
           campaign_expiry: campaignExpiry || null,
           brand_title: brandTitle || null,
           hero_message: heroMessage || null,
-          product_image_url: productImage || null,
+          product_image_url: productImages && productImages.length > 0 ? productImages[0] : null,
           word_count: wordCount,
           hashtag_count: hashtagCount,
           placement_category: placementCategory || 'physical',
@@ -881,12 +966,13 @@ export async function POST(req: Request) {
     let expandedPrompt = '';
     let dynamicNegativePrompt = '';
     let designRationale = '';
+    let productQuantities: Record<string, number> = {};
 
     try {
       const promptExpansionMsg = getImageExpansionPrompt(
         brandDetails, topic, contentType, platform, extraInstructions, graphicHeadline, heroObjects,
         mentionBrandLogo, brandLogoPosition, mentionWebsiteInPost, brandLinkPosition,
-        ctaText, ctaPosition, brandTitle, heroMessage, productImage,
+        ctaText, ctaPosition, brandTitle, heroMessage, productImages, productNames,
         placementCategory, layoutStyle
       );
 
@@ -912,9 +998,11 @@ export async function POST(req: Request) {
       expandedPrompt = prompts[0] || '';
       dynamicNegativePrompt = parsed.negativePrompt || '';
       designRationale = parsed.design_rationale || '';
+      productQuantities = parsed.productQuantities || {};
 
       console.log('Expanded Prompt length:', expandedPrompt.length);
       console.log('🎨 Design Rationale:', designRationale);
+      console.log('📦 Product Quantities:', productQuantities);
       console.log('🚫 Dynamic Negative Prompt:', dynamicNegativePrompt);
 
       if (!expandedPrompt) {
@@ -974,8 +1062,33 @@ export async function POST(req: Request) {
           fillColor: accent,
         };
       }
-      if (productImage) {
-        overlayOpts.product = { url: productImage };
+      if (productImages && productImages.length > 0) {
+        let finalProductUrls: string[] = [];
+        if (productNames && productNames.length === productImages.length) {
+          for (let i = 0; i < productNames.length; i++) {
+            const name = productNames[i];
+            const url = productImages[i];
+            
+            let count = 1;
+            // Fuzzy match the product name against the LLM's productQuantities object
+            const matchedKey = Object.keys(productQuantities).find(
+              k => name.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(name.toLowerCase())
+            );
+            if (matchedKey && typeof productQuantities[matchedKey] === 'number') {
+              // Cap at 4 duplicates max per product so we don't break the layout if LLM hallucinates 100
+              count = Math.min(Math.max(productQuantities[matchedKey], 1), 4);
+            }
+            
+            for (let c = 0; c < count; c++) {
+              finalProductUrls.push(url);
+            }
+          }
+        } else {
+          finalProductUrls = [...productImages];
+        }
+        
+        console.log(`📦 Compositing products: original=${productImages.length}, expanded=${finalProductUrls.length}`);
+        overlayOpts.products = { urls: finalProductUrls };
       }
       const finalBuffer = await compositeAllOverlays(imageBuffer, overlayOpts);
 
@@ -988,7 +1101,7 @@ export async function POST(req: Request) {
         regenPostId, currentCaption,
         mentionBrandLogo, brandLogoPosition, mentionWebsiteInPost, brandLinkPosition,
         ctaText, ctaPosition, graphicHeadline, heroObjects, campaignExpiry, wordCount, hashtagCount,
-        brandTitle, heroMessage, productImage
+        brandTitle, heroMessage, productImages && productImages.length > 0 ? productImages[0] : null
       );
 
     } catch (imgErr: any) {

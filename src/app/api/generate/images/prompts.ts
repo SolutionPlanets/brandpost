@@ -41,7 +41,8 @@ export const getImageExpansionPrompt = (
   ctaPosition?: string,
   brandTitle?: string,
   heroMessage?: string,
-  productImage?: string,
+  productImages?: string[],
+  productNames?: string[],
   placementCategory?: string,
   layoutStyle?: string
 ) => {
@@ -116,21 +117,22 @@ Instead of painting these elements, RESERVE clean quiet space at the listed posi
 ` : '';
 
   // ── Subject-Conditioned Generation Block ────────────────────────────
-  // When the user has uploaded a real product photo, the prompt shifts
+  // When the user has uploaded real product photos, the prompt shifts
   // from "describe the product" to "describe the backdrop/scene for the
-  // product". The actual product cutout will be composited into the scene.
-  const productPhotoBlock = productImage ? `
+  // products". The actual product cutouts will be composited into the scene.
+  const namesStr = productNames && productNames.length > 0 ? ` (Specifically DO NOT DRAW: ${productNames.join(', ')})` : '';
+  const productPhotoBlock = productImages && productImages.length > 0 ? `
 
 ╔══════════════════════════════════════════════════════════════════╗
-║ SUBJECT-CONDITIONED GENERATION — REAL PRODUCT PHOTO PROVIDED    ║
+║ SUBJECT-CONDITIONED GENERATION — REAL PRODUCT PHOTO(S) PROVIDED ║
 ╚══════════════════════════════════════════════════════════════════╝
-The user has uploaded their REAL product photo. This exact product will appear in the final advertisement.
+The user has selected ${productImages.length} REAL product photo(s). These exact products will be composited perfectly in the final advertisement.
 CRITICAL INSTRUCTIONS:
-• DO NOT describe, draw, or invent the product/item itself — the real product photo will be composited into the scene after generation.
-• Instead, describe ONLY the perfect BACKDROP, ENVIRONMENT, SURFACE, LIGHTING, and ATMOSPHERIC SETTING where this product should be placed.
-• Think like a professional product photographer: describe the table surface, background gradient, scattered decorative props, lighting direction, camera angle, depth of field, and mood.
-• Example: "A premium dark marble countertop with dramatic side lighting, scattered fresh herbs and spices, warm bokeh lights in the background, cinematic shallow depth of field, 8k product photography"
-• The product will be placed in the CENTER of this scene, so leave the central area relatively clear and uncluttered for the product cutout.
+• ABSOLUTELY DO NOT describe, draw, or invent the product(s), bottle(s), package(s), or item(s) in your generated prompt!
+• If the Post Description mentions a specific product or quantity (e.g., "Buy 2 Diapers", "Fresh Fruits", "Lahori Zeera bottle"), DO NOT include those product names, generic nouns, or quantities in the image prompt! The image generator will hallucinate fake products.
+• Your image prompt MUST describe ONLY the BACKGROUND SCENE (e.g., "A wet dark marble table with splashing water", "A bright sunny picnic blanket", "A clean clinical podium").
+• DO NOT mention bottles, drinks, boxes, packaging, or the product names anywhere in your final image prompt!
+• The real products will be placed in the CENTER of this scene by a separate pixel-perfect system. Leave the central area uncluttered.
 
 ` : '';
 
@@ -140,7 +142,7 @@ You are an Elite Creative Strategist and Graphic Designer specialising in high-i
 YOUR TASK: Produce ONE detailed, production-ready image generation prompt for a marketing poster.
 
 OUTPUT FORMAT — return ONLY a JSON object in this exact shape (no markdown fences, no commentary):
-{"expandedPrompts": ["<single rich paragraph describing the poster>"], "negativePrompt": "<comma-separated things to avoid in THIS image>", "design_rationale": "<2-3 sentence reasoning>"}
+{"expandedPrompts": ["<single rich paragraph describing the poster>"], "negativePrompt": "<comma-separated things to avoid in THIS image>", "design_rationale": "<2-3 sentence reasoning>", "productQuantities": {"<productName1>": 1, "<productName2>": 2}}
 ${antiPaintBlock}${productPhotoBlock}
 DYNAMIC REASONING PIPELINE — work through these silently before writing the final prompt. Every decision must be derived from the user's actual inputs, not from generic defaults:
 
@@ -150,6 +152,11 @@ Read the Topic string and decide what kind of subject it names:
   (b) A seasonal or weather event (summer sale, monsoon, autumn, winter) — translate to atmospheric cues.
   (c) A product launch, milestone, announcement, or generic theme — derive imagery from Industry + Post Description.
 If the Topic is sparse or one-word, expand it using the Post Description and Industry. Never produce a literal one-word interpretation when richer context is available.
+
+STEP 1b — PRODUCT QUANTITY DEDUCTION
+Read the Topic and Post Description to deduce the promotional mechanics (e.g. "Buy 2 Get 1 Free").
+  - If a specific quantity is mentioned for a product (e.g. "Buy 2 Lahori Zeera and get 1 Lahori Shikanji"), output that mapping in the \`productQuantities\` JSON field: \`{"Lahori Zeera": 2, "Lahori Shikanji": 1}\`.
+  - If no specific quantities are mentioned, default to 1 for each product.
 
 STEP 2 — BRAND TONE INTERPRETATION
 Treat the Brand Tone keywords as free-form descriptors and translate them semantically into concrete artistic choices:
@@ -177,16 +184,16 @@ Always name the chosen treatment in the final paragraph and describe its colour 
 
 STEP 4 — SCENE INVENTORY (CRITICAL — most failures happen here)
 List every visible element the final image MUST contain, in priority order:
-  1. PRIMARY HERO SUBJECT — the focal point: ${productImage ? `"The user's REAL uploaded product photo will be composited here — DO NOT draw the product. Instead, leave a clear central area for the product cutout and describe ONLY the surrounding scene."${heroObjects && heroObjects !== 'Using Product Image' ? `\n   IMPORTANT: Also feature these surrounding elements: "${heroObjects}"` : ''}` : heroObjects ? `"${heroObjects}"` : '(derive from Topic + Post Description)'}
+  1. PRIMARY HERO SUBJECT — the focal point: ${productImages && productImages.length > 0 ? `"The user's REAL uploaded product photo will be composited here. DO NOT MENTION BOTTLES OR PRODUCTS. Describe ONLY the background/surface setting."` : heroObjects ? `"${heroObjects}"` : '(derive from Topic + Post Description)'}
   2. REQUIRED SUPPORTING SCENE ELEMENTS — these are MANDATORY, not optional flavour:
-       • Every element described in the Post Description (people, objects, mood, action)
+       • Every atmospheric element described in the Post Description (mood, weather, background objects). ${productImages && productImages.length > 0 ? 'CRITICAL: DO NOT INCLUDE THE PRODUCT ITSELF IN THIS LIST!' : ''}
        • Every cultural / contextual motif you identified in Step 1
        • Atmospheric backdrop appropriate to the tone
-     Render these supporting elements visibly somewhere in the composition (foreground, midground, atmospheric background or soft bokeh). DO NOT strip them out to "simplify" the composition. Stripping them is the most common failure mode of poster generation — explicitly resist it.
+     Render these supporting elements visibly somewhere in the composition (foreground, midground, atmospheric background or soft bokeh).
   3. TYPOGRAPHY:
        • Main Headline: ${graphicHeadline ? `"${graphicHeadline}"` : '(generate a short punchy headline)'} rendered using the chosen treatment recipe from Step 3b.
-       • Brand Title: ${brandTitle ? `"${brandTitle}"` : '(none)'} rendered elegantly as a high-quality, professional brand name / signature text, placed cleanly (e.g., at the top or near the logo corner, but outside the quiet zones).
-       • Hero Message: ${heroMessage ? `"${heroMessage}"` : '(none)'} rendered as a beautifully styled subtitle or core value/tagline statement (e.g., "Discipline, Consistency, Focus") positioned in perfect visual balance near the headline.
+       • Brand Title: ${brandTitle ? (productImages && productImages.length > 0 ? `"${brandTitle}" (CRITICAL: Do NOT paint this text onto hallucinated bottles, boxes or products! Render it floating in the background or gracefully on the surface/wall.)` : `"${brandTitle}" rendered elegantly as a high-quality, professional brand name / signature text.`) : '(none)'}
+       • Hero Message: ${heroMessage ? `"${heroMessage}"` : '(none)'} rendered as a beautifully styled subtitle.
        • Rules: ${mentionBrandLogo && brandDetails?.logo ? 'DO NOT paint a brand wordmark, monogram or logo at the logo corner (the real logo will be pasted there post-generation)' : 'plus a discreet brand wordmark integrated into the artwork'}${hasUrlChip ? '. DO NOT paint the website URL or any browser-style address bar anywhere on the image (a real URL chip will be pasted post-generation)' : ''}${hasCtaButton ? '. DO NOT paint any CTA button, "Click Here", "Shop Now" or similar chip (the real CTA will be pasted post-generation)' : ''}.
 
 STEP 5 — COLOUR & LAYOUT
@@ -215,8 +222,8 @@ USER INPUTS:
 - Brand Title (must print on image as elegant brand signature text): "${brandTitle || ''}"
 - Hero Message (must print on image as a prominent subtitle/supporting statement): "${heroMessage || ''}"
 - Placement Category (structural environment): "${placementCategory || 'physical'}" -> ${placementCategory === 'physical' ? 'Physical Product (Packaged Goods, Food, Bottles) - render a concrete physical surface countertop/table, matching perspective shadows, and studio lighting.' : ''}${placementCategory === 'digital' ? 'Digital Service / Software Solution - DO NOT render a concrete table or floor, default to abstract neon compositions, data waves, clean isometric mockups, or realistic device screens.' : ''}${placementCategory === 'institutional' ? 'Institutional / Informational - focus heavily on typography hierarchies, geometric presentation boxes, and corporate-safe banner spacing.' : ''}
-- Visual Layout Style (composition baseline): "${layoutStyle || 'commercial'}" -> ${layoutStyle === 'commercial' ? 'Commercial Showcase - High-impact central focus, dramatic lighting spotlighting the product photo.' : ''}${layoutStyle === 'minimalist' ? 'Minimalist Modern / Corporate - Heavy use of negative brand color space, elegant text alignment, clean geometric shapes.' : ''}${layoutStyle === 'editorial' ? 'Editorial / Magazine Style - Split presentation with large typography blocks framing a subject illustration or a clean educational background asset.' : ''}
-- Product Photo: ${productImage ? 'YES — the user has uploaded their real product photo. This exact product will appear in the final ad. Your prompt should describe the SETTING, BACKDROP, ENVIRONMENT and COMPOSITION AROUND the product — NOT the product itself. Describe a premium advertising scene where this product would be placed (e.g., "on a polished marble countertop with dramatic rim lighting, scattered rose petals, premium matte backdrop, cinematic bokeh"). The product cutout will be composited into the scene by the generation system.' : 'No product photo — describe the product/subject as part of the scene.'}
+- Visual Layout Style (composition baseline): "${layoutStyle || 'commercial'}" -> ${layoutStyle === 'commercial' ? 'Commercial Showcase (Ultra-Bold Retail / Direct Response) - Guarantee HUGE, dominating painted typography layout at the top or sides. The typography MUST use high-contrast retail treatments (e.g., highly textured brush strokes, bold marker fonts, dynamic angled text, or vibrant highlight boxes). For physical products, ALWAYS render a distinct hyper-realistic surface (e.g., wooden table, dark glossy marble, or wet counter) occupying the bottom third for the items to sit on. Flood the scene with dramatic immersive environment details (like splashing water, flying ice cubes, or intense rim lighting) that match the theme.' : ''}${layoutStyle === 'minimalist' ? 'Minimalist Modern / Corporate - Heavy use of negative brand color space, elegant text alignment, clean geometric shapes.' : ''}${layoutStyle === 'editorial' ? 'Editorial / Magazine Style - Split presentation with large typography blocks framing a subject illustration or a clean educational background asset.' : ''}
+- Product Photo: ${productImages && productImages.length > 0 ? 'YES — the user has selected their real product photo(s). These exact products will appear in the final ad. Your prompt should describe the SETTING, BACKDROP, ENVIRONMENT and COMPOSITION AROUND the products — NOT the products themselves. Describe a premium advertising scene where these products would be placed (e.g., "on a polished marble countertop with dramatic rim lighting, scattered rose petals, premium matte backdrop, cinematic bokeh"). The product cutouts will be composited into the scene by the generation system.' : 'No product photo — describe the product/subject as part of the scene.'}
 - Brand logo overlay (pasted post-generation): ${mentionBrandLogo && brandDetails?.logo ? `yes, at [${brandLogoPosition || 'Bottom Right'}]` : 'no'}
 - Website URL chip overlay (pasted post-generation): ${hasUrlChip ? `yes, "${brandDetails?.websiteUrl || ''}" at [${brandLinkPosition || 'Bottom Center'}]` : 'no'}
 - CTA button overlay (pasted post-generation): ${hasCtaButton ? `yes, "${ctaText}" at [${ctaPosition || 'Bottom Center'}]` : 'no'}

@@ -14,6 +14,14 @@ if (typeof window !== "undefined") {
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 
+export interface BrandKitProduct {
+  id: string;
+  brand_kit_id: string;
+  product_name: string | null;
+  image_url: string;
+  display_order: number;
+}
+
 export interface BrandKit {
   id: string;
   workspace_id: string;
@@ -36,6 +44,7 @@ export interface BrandKit {
   website_url?: string;
   phrases_to_include?: string;
   phrases_to_avoid?: string;
+  products?: BrandKitProduct[];
 }
 
 interface BrandContextType {
@@ -328,7 +337,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
         timezone,
         business_timing,
         posts_used_this_cycle,
-        brand_kits (*),
+        brand_kits (*, brand_kit_products(*)),
         social_connections (*)
       `)
       .eq('owner_id', user.id)
@@ -339,7 +348,14 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
       const bKits = workspace.brand_kits;
       const brandKitsArray = bKits ? (Array.isArray(bKits) ? bKits : [bKits]) : [];
       brandKitsArray.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      setBrandKits(brandKitsArray as BrandKit[]);
+      // Map brand_kit_products into a 'products' field on each kit
+      const kitsWithProducts = brandKitsArray.map((kit: any) => ({
+        ...kit,
+        products: (kit.brand_kit_products || []).sort((a: any, b: any) => (a.display_order || 0) - (b.display_order || 0)),
+      }));
+      // Remove the raw join key
+      kitsWithProducts.forEach((kit: any) => { delete kit.brand_kit_products; });
+      setBrandKits(kitsWithProducts as BrandKit[]);
       const brandKit = brandKitsArray[0] || undefined;
       setHasBrandKit(!!brandKit);
       const rawBName = workspace.business_name || '';
