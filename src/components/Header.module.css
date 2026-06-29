@@ -49,21 +49,164 @@
   position: relative;
   color: var(--text-muted);
   transition: color 0.2s ease;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .iconBtn:hover {
   color: var(--primary);
 }
 
-.badge {
+/* Notifications */
+.notiContainer {
+  position: relative;
+}
+
+.badgeCount {
   position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 8px;
-  height: 8px;
-  background-color: var(--error);
-  border-radius: 50%;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  background-color: #ef4444;
+  color: white;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 2px solid var(--surface);
+}
+
+.notiDropdown {
+  position: absolute;
+  top: calc(100% + 1rem);
+  right: -80px;
+  width: 320px;
+  background-color: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+  animation: slideDown 0.2s ease;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.notiHeader {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #f8fafc;
+}
+
+.notiHeader h3 {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.markReadBtn {
+  font-size: 0.75rem;
+  color: var(--primary);
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.notiList {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.notiItem {
+  padding: 1rem 1.25rem;
+  display: flex;
+  gap: 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  position: relative;
+  text-align: left;
+}
+
+.notiItem:hover {
+  background-color: #f8fafc;
+}
+
+.notiItem.unread {
+  background-color: #f0f4ff;
+}
+
+.notiItem.unread::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: var(--primary);
+}
+
+.notiIconWrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.notiContent {
+  flex: 1;
+}
+
+.notiTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 2px 0;
+}
+
+.notiDesc {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.notiTime {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+  display: block;
+}
+
+.notiEmpty {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.notiEmpty p {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+/* Profile Dropdown */
+.profileContainer {
+  position: relative;
 }
 
 .profile {
@@ -72,6 +215,12 @@
   gap: 0.875rem;
   padding-left: 1.5rem;
   border-left: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.profile:hover {
+  opacity: 0.8;
 }
 
 .userInfo {
@@ -100,10 +249,166 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+
+.avatarFallback {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--primary);
+}
+
+.profileImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chevron {
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.chevronUp {
+  transform: rotate(180deg);
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 1rem);
+  right: 0;
+  width: 300px;
+  background-color: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  animation: slideDown 0.2s ease;
+  z-index: 100;
+  overflow: hidden;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdownHeader {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.dropdownLogo {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  object-fit: contain;
+  background-color: white;
+  border: 1px solid var(--border);
+  padding: 4px;
+}
+
+.dropdownAvatar {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background-color: var(--primary-light);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dropdownHeader h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+  text-align: left;
+}
+
+.dropdownHeader p {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 2px 0 0 0;
+  text-align: left;
+}
+
+.dropdownContent {
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.detailItem, .socialLink {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.detailItem span, .socialLink span {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.divider {
+  height: 1px;
+  background-color: var(--border);
+  margin: 0.25rem 0;
+}
+
+.socialLink {
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.dropdownFooter {
+  padding: 1rem;
+  background-color: #f8fafc;
+  border-top: 1px solid var(--border);
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+.dropdownBizName {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.logoutBtn {
+  width: 100%;
+  padding: 0.625rem;
+  background-color: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: #ef4444;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.logoutBtn:hover {
+  background-color: #fef2f2;
+  border-color: #fecaca;
 }
 
 @media (max-width: 640px) {
   .searchContainer {
     display: none;
+  }
+  .notiDropdown {
+    right: -120px;
+    width: 280px;
   }
 }

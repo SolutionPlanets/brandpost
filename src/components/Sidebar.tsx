@@ -3,13 +3,16 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, 
   Palette, 
-  FileText, 
-  Calendar, 
+  PenSquare,
+  Clock,
+  CalendarDays, 
   Settings, 
   LogOut,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  CreditCard
 } from 'lucide-react';
+import { createClient } from '@/utils/supabase/client';
 import styles from './Sidebar.module.css';
 
 interface SidebarProps {
@@ -19,14 +22,28 @@ interface SidebarProps {
 
 const menuItems = [
   { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
+  { name: 'Composer', icon: PenSquare, href: '/dashboard/composer' },
   { name: 'Brand Kit', icon: Palette, href: '/dashboard/brand-kit' },
-  { name: 'Posts', icon: FileText, href: '/dashboard/posts' },
-  { name: 'Calendar', icon: Calendar, href: '/dashboard/calendar' },
+  { name: 'Calendar', icon: CalendarDays, href: '/dashboard/calendar' },
+  { name: 'History', icon: Clock, href: '/dashboard/posts' },
+  { name: 'Plans', icon: CreditCard, href: '/pricing?from=dashboard' },
   { name: 'Settings', icon: Settings, href: '/dashboard/settings' },
 ];
 
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   const pathname = usePathname();
+  const supabase = createClient();
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      localStorage.removeItem('brandpost_user_data');
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error during logout:', error);
+      window.location.href = '/';
+    }
+  };
 
   return (
     <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''}`}>
@@ -52,7 +69,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
       </nav>
 
       <div className={styles.footer}>
-        <button className={styles.navItem}>
+        <button className={styles.navItem} onClick={handleLogout}>
           <LogOut size={22} />
           {!collapsed && <span>Logout</span>}
         </button>
