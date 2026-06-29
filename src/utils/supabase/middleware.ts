@@ -12,9 +12,24 @@ export const createClient = (request: NextRequest) => {
     },
   });
 
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn("⚠️ Warning: Supabase URL or Key is missing in middleware. Using placeholder client.");
+    const supabase = createServerClient(
+      supabaseUrl || "https://placeholder-url.supabase.co",
+      supabaseKey || "placeholder-key",
+      {
+        cookies: {
+          getAll() { return []; },
+          setAll() {},
+        },
+      }
+    );
+    return { supabase, supabaseResponse };
+  }
+
   const supabase = createServerClient(
-    supabaseUrl!,
-    supabaseKey!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         getAll() {

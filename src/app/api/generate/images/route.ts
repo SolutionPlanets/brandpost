@@ -558,14 +558,13 @@ async function buildProductsOverlay(
   
   if (!productUrls || productUrls.length === 0) return descriptors;
   
-  // ── Adaptive sizing: products should be HERO-sized, dominating the frame ──
-  // Use 95% of width so products fill edge-to-edge
-  const containerW = Math.round(baseW * 0.95);
-  // Use 80% of height — products are the star of the show
-  const containerH = Math.round(baseH * 0.80);
+  // Total container for all products: 85% of base width for bolder impact
+  const containerW = Math.round(Math.min(baseW, baseH) * 0.85);
+  // Allow products to be taller
+  const containerH = Math.round(baseH * 0.75);
   
-  // Tighter gap between products so they feel like a cohesive group
-  const gap = productUrls.length > 1 ? Math.round(baseW * 0.03) : 0;
+  // Gap between multiple products
+  const gap = productUrls.length > 1 ? Math.round(baseW * 0.05) : 0;
   
   // Width allocated to each individual product
   const targetW = Math.round((containerW - (gap * (productUrls.length - 1))) / productUrls.length);
@@ -621,11 +620,10 @@ async function buildProductsOverlay(
   // Add gaps to total width
   totalActualW += gap * (processedProducts.length - 1);
   
-  // Start left so that the whole group is centered horizontally
+  // Start left so that the whole group is centered
   let currentLeft = Math.round((baseW - totalActualW) / 2);
-  // Place products in the lower 60% of the frame, leaving top 25% for headlines
-  // Center of the product zone = 60% down from the top
-  const centerTop = Math.round(baseH * 0.58);
+  // Push them slightly down to leave room for top headlines
+  const centerTop = Math.round(baseH * 0.55);
   
   for (let i = 0; i < processedProducts.length; i++) {
     const p = processedProducts[i];
@@ -934,7 +932,7 @@ export async function POST(req: Request) {
           campaign_expiry: campaignExpiry || null,
           brand_title: brandTitle || null,
           hero_message: heroMessage || null,
-          product_image_url: productImages && productImages.length > 0 ? productImages[0] : null,
+          product_image_url: productImages && productImages.length > 0 ? productImages[0] : null, // Store first product URL for backward compat
           word_count: wordCount,
           hashtag_count: hashtagCount,
           placement_category: placementCategory || 'physical',
