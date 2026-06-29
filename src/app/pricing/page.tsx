@@ -133,7 +133,7 @@ function PricingPageContent() {
   const { plans: dbPlans } = useBrand();
 
   const handleBack = () => {
-    if (from === 'home') {
+    if (from === 'home' || from === 'trial_expired') {
       router.push('/');
     } else if (from === 'dashboard' || from === 'limit_reached') {
       router.push('/dashboard');
@@ -177,7 +177,7 @@ function PricingPageContent() {
   return (
     <div className={styles.container}>
       <button onClick={handleBack} className={styles.backLink}>
-        <ArrowLeft size={20} /> Back to {from === 'home' ? 'Home' : 'Dashboard'}
+        <ArrowLeft size={20} /> Back to {from === 'home' || from === 'trial_expired' ? 'Home' : 'Dashboard'}
       </button>
 
       <header className={styles.header}>
