@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   User,
@@ -48,7 +48,7 @@ const TABS = [
   { id: 'notifications' as SettingsTab, label: 'Notifications', icon: Bell },
 ];
 
-export default function SettingsPage() {
+function SettingsPageContent() {
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get('tab') as SettingsTab) || 'profile';
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
@@ -625,5 +625,13 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className={styles.container} style={{ padding: '2rem', color: 'var(--text-muted)' }}>Loading Settings...</div>}>
+      <SettingsPageContent />
+    </Suspense>
   );
 }

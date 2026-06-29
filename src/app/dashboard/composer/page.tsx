@@ -187,6 +187,13 @@ function ComposerPageContent() {
   // ── Product Image Selection State ─────────────────────────────────────
   const [useProductAsHero, setUseProductAsHero] = useState(true);
 
+  // Cache resolved product data at generation time so regeneration always has context
+  const cachedProductDataRef = useRef<{
+    productImages: string[];
+    productNames: string[];
+    selectedProductIds: string[];
+  } | null>(null);
+
   // Update form if brandKits load later
   useEffect(() => {
     if (brandKits.length > 0 && form.brandKit === 'main-brand') {
@@ -218,12 +225,6 @@ function ComposerPageContent() {
     });
   };
 
-  // Update form if brandKits load later
-  useEffect(() => {
-    if (brandKits.length > 0 && form.brandKit === 'main-brand') {
-      setForm(prev => ({ ...prev, brandKit: brandKits[0].id }));
-    }
-  }, [brandKits]);
 
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
   const [generatedPostIds, setGeneratedPostIds] = useState<number[]>([]);
@@ -334,7 +335,11 @@ function ComposerPageContent() {
         hashtag_count: currentForm.hashtagCount,
         brand_title: currentForm.brandTitle || null,
         hero_message: currentForm.heroMessage || null,
-        product_image_url: currentForm.selectedProductIds.length > 0 ? currentForm.selectedProductIds[0] : null,
+        product_image_url: currentForm.selectedProductIds.length > 0 
+          ? JSON.stringify(currentForm.selectedProductIds) 
+          : (cachedProductDataRef.current?.selectedProductIds?.length 
+            ? JSON.stringify(cachedProductDataRef.current.selectedProductIds) 
+            : null),
         placement_category: currentForm.placementCategory || 'physical',
         layout_style: currentForm.layoutStyle || null,
       };
@@ -440,7 +445,17 @@ function ComposerPageContent() {
             ctaPosition: data.cta_position || 'Bottom Center',
             brandTitle: data.brand_title || '',
             heroMessage: data.hero_message || '',
-            selectedProductIds: data.product_image_url ? [data.product_image_url] : [],
+            selectedProductIds: (() => {
+              if (!data.product_image_url) return [];
+              try {
+                // New format: JSON array of product IDs
+                const parsed = JSON.parse(data.product_image_url);
+                return Array.isArray(parsed) ? parsed : [data.product_image_url];
+              } catch {
+                // Legacy format: single product ID string
+                return [data.product_image_url];
+              }
+            })(),
             placementCategory: data.placement_category || 'physical',
             layoutStyle: data.layout_style || null,
           });
@@ -617,12 +632,12 @@ function ComposerPageContent() {
             phrasesToAvoid: selectedKit?.phrases_to_avoid || phrasesToAvoid,
           },
           mentionWebsiteInCaption: form.brandKit !== 'none' ? form.mentionWebsiteInCaption : false,
-          productImages: form.selectedProductIds.length > 0 
+          productImages: form.selectedProductIds.length > 0 && availableProducts.length > 0
             ? availableProducts.filter(p => form.selectedProductIds.includes(p.id)).map(p => p.image_url) 
-            : [],
-          productNames: form.selectedProductIds.length > 0
-            ? availableProducts.filter(p => form.selectedProductIds.includes(p.id)).map(p => p.product_name)
-            : [],
+            : (postId && cachedProductDataRef.current ? cachedProductDataRef.current.productImages : []),
+          productNames: form.selectedProductIds.length > 0 && availableProducts.length > 0
+            ? availableProducts.filter(p => form.selectedProductIds.includes(p.id)).map(p => p.product_name || 'Product')
+            : (postId && cachedProductDataRef.current ? cachedProductDataRef.current.productNames : []),
           ...(postId ? { postId } : {}),
         }),
       });
@@ -643,6 +658,43 @@ function ComposerPageContent() {
     setIsGeneratingImages(true);
     try {
       const selectedKit = brandKits.find(k => k.id === form.brandKit) || brandKits[0];
+
+      // ── Resolve product data: form state first, fall back to cached data ──
+      // During regeneration, form.selectedProductIds might have been cleared
+      // (e.g. by a re-render cycle or brand kit refresh). Use cached data as fallback.
+      let resolvedProductImages: string[] = [];
+      let resolvedProductNames: string[] = [];
+
+      if (form.selectedProductIds.length > 0 && availableProducts.length > 0) {
+        // Primary path: resolve from current form state + available products
+        const matchedProducts = availableProducts.filter(p => form.selectedProductIds.includes(p.id));
+        resolvedProductImages = matchedProducts.map(p => p.image_url);
+        resolvedProductNames = matchedProducts.map(p => p.product_name || 'Product');
+      } else if (postId && cachedProductDataRef.current && cachedProductDataRef.current.productImages.length > 0) {
+        // Fallback for regeneration: use cached product data from initial generation
+        console.log('⚡ Using cached product data for regeneration:', cachedProductDataRef.current);
+        resolvedProductImages = cachedProductDataRef.current.productImages;
+        resolvedProductNames = cachedProductDataRef.current.productNames;
+        // Also restore the form's selectedProductIds so UI stays in sync
+        if (cachedProductDataRef.current.selectedProductIds.length > 0) {
+          setForm(prev => ({
+            ...prev,
+            selectedProductIds: cachedProductDataRef.current!.selectedProductIds,
+          }));
+        }
+      }
+
+      // Cache the resolved product data for future regenerations
+      if (resolvedProductImages.length > 0) {
+        cachedProductDataRef.current = {
+          productImages: resolvedProductImages,
+          productNames: resolvedProductNames,
+          selectedProductIds: form.selectedProductIds.length > 0
+            ? [...form.selectedProductIds]
+            : (cachedProductDataRef.current?.selectedProductIds || []),
+        };
+      }
+
       const res = await fetch('/api/generate/images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -686,12 +738,8 @@ function ComposerPageContent() {
           ctaPosition: form.ctaPosition,
           brandTitle: form.brandTitle,
           heroMessage: form.heroMessage,
-          productImages: form.selectedProductIds.length > 0 
-            ? availableProducts.filter(p => form.selectedProductIds.includes(p.id)).map(p => p.image_url) 
-            : [],
-          productNames: form.selectedProductIds.length > 0
-            ? availableProducts.filter(p => form.selectedProductIds.includes(p.id)).map(p => p.product_name)
-            : [],
+          productImages: resolvedProductImages,
+          productNames: resolvedProductNames,
           placementCategory: form.placementCategory || 'physical',
           layoutStyle: form.layoutStyle || null,
           ...(postId ? { postId, currentCaption: editedCaption || generated?.captions[selectedCaption] } : {}),
@@ -758,7 +806,11 @@ function ComposerPageContent() {
           hashtag_count: form.hashtagCount,
           brand_title: form.brandTitle || null,
           hero_message: form.heroMessage || null,
-          product_image_url: form.selectedProductIds.length > 0 ? form.selectedProductIds[0] : null,
+          product_image_url: form.selectedProductIds.length > 0 
+            ? JSON.stringify(form.selectedProductIds) 
+            : (cachedProductDataRef.current?.selectedProductIds?.length 
+              ? JSON.stringify(cachedProductDataRef.current.selectedProductIds) 
+              : null),
         }));
         await supabase.from('posts').insert(draftsToInsert);
         refreshBrandData(true); // Reflect credits immediately on dashboard
